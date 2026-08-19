@@ -354,6 +354,8 @@ Cross-platform jobs run formatting, linting, type-checking, unit tests, integrat
 
 Browser end-to-end tests run once in the official Playwright container with Chromium and its Linux system dependencies preinstalled. The container version must match the resolved `@playwright/test` version in `pnpm-lock.yaml`. This avoids downloading browsers and repeatedly installing operating-system packages on every matrix runner.
 
+CI uses a workflow-and-PR concurrency group with `cancel-in-progress: true`. When a new commit is pushed to a pull request, any older in-progress CI run for that pull request is cancelled automatically. Runs for other pull requests continue independently.
+
 Linux-only audio, packaging, and hardware checks must remain separate from the cross-platform development workflow.
 
 ## 10. Planned Integration Technologies
