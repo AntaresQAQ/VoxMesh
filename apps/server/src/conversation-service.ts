@@ -8,7 +8,8 @@ import {
 import type {
   AudioData,
   SpeechToTextProvider,
-  TextToSpeechProvider
+  TextToSpeechProvider,
+  TranscriptionResult
 } from "@voxmesh/audio";
 import type {
   StoredVoicePipelineConfiguration,
@@ -54,8 +55,30 @@ export class ConversationService {
     if (pipeline.mode === "native-multimodal") {
       return this.runNativeVoice(audio, pipeline);
     }
-    const transcription = await this.createStt().transcribe(audio);
-    const conversationId = this.store.createConversation(transcription.text);
+    const conversationId =
+      this.store.createPendingConversation("Voice request");
+    let transcription: TranscriptionResult;
+    try {
+      transcription = await this.createStt().transcribe(audio);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "STT transcription failed";
+      this.store.addLog({
+        category: "ERROR",
+        level: "ERROR",
+        message,
+        conversationId
+      });
+      this.store.addPipelineEvent({
+        conversationId,
+        stage: "STT",
+        status: "failed",
+        message
+      });
+      throw error;
+    }
+    this.store.addMessage(conversationId, "user", transcription.text);
+    this.store.updateConversationTitle(conversationId, transcription.text);
     this.store.addPipelineEvent({
       conversationId,
       stage: "STT",

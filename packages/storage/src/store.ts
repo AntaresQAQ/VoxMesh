@@ -356,19 +356,33 @@ export class VoxMeshStore {
   }
 
   public createConversation(userMessage: string): string {
-    const id = randomUUID();
-    const now = new Date().toISOString();
-    const title =
-      userMessage.length > 64 ? `${userMessage.slice(0, 61)}...` : userMessage;
+    let id = "";
     this.database.transaction(() => {
-      this.database
-        .prepare(
-          "INSERT INTO conversations (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)"
-        )
-        .run(id, title, now, now);
+      id = this.createPendingConversation(conversationTitle(userMessage));
       this.addMessage(id, "user", userMessage);
     })();
     return id;
+  }
+
+  /** Creates a conversation record before a provider produces user text. */
+  public createPendingConversation(title: string): string {
+    const id = randomUUID();
+    const now = new Date().toISOString();
+    this.database
+      .prepare(
+        "INSERT INTO conversations (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)"
+      )
+      .run(id, title, now, now);
+    return id;
+  }
+
+  public updateConversationTitle(
+    conversationId: string,
+    userMessage: string
+  ): void {
+    this.database
+      .prepare("UPDATE conversations SET title = ? WHERE id = ?")
+      .run(conversationTitle(userMessage), conversationId);
   }
 
   public addMessage(
@@ -584,6 +598,10 @@ function mapPipelineEvent(row: PipelineEventRow): PipelineEvent {
     message: row.message,
     createdAt: row.created_at
   };
+}
+
+function conversationTitle(message: string): string {
+  return message.length > 64 ? `${message.slice(0, 61)}...` : message;
 }
 
 function providerMode(value: string | undefined): SpeechProviderMode {

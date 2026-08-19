@@ -101,7 +101,7 @@ describe("VoxMeshStore", () => {
     expect(updated.ttsApiKey).toBe("tts-secret");
   });
 
-  it("stores Alibaba Model Studio speech provider selections", () => {
+  it("migrates the obsolete Plus voice default without changing other settings", () => {
     store = new VoxMeshStore(":memory:");
 
     const updated = store.updateSpeechConfiguration({
