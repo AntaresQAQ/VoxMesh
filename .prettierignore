@@ -1,0 +1,7 @@
+dist
+coverage
+docs/MVP.md
+node_modules
+playwright-report
+test-results
+pnpm-lock.yaml
