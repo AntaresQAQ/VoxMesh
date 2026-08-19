@@ -81,12 +81,39 @@ export const ConversationListSchema = Type.Object({
   conversations: Type.Array(ConversationSummarySchema)
 });
 
+export const PipelineEventSchema = Type.Object({
+  id: Type.String(),
+  stage: Type.Union([
+    Type.Literal("STT"),
+    Type.Literal("AGENT"),
+    Type.Literal("MCP"),
+    Type.Literal("TTS")
+  ]),
+  status: Type.Union([Type.Literal("completed"), Type.Literal("failed")]),
+  message: Type.String(),
+  createdAt: Type.String({ format: "date-time" })
+});
+
 export const ConversationDetailSchema = Type.Intersect([
   ConversationSummarySchema,
   Type.Object({
-    messages: Type.Array(MessageSchema)
+    messages: Type.Array(MessageSchema),
+    events: Type.Array(PipelineEventSchema)
   })
 ]);
+
+export const VoiceResponseSchema = Type.Object({
+  conversationId: Type.String(),
+  transcript: Type.String(),
+  response: Type.String(),
+  usedTools: Type.Array(Type.String()),
+  audio: Type.Object({
+    base64: Type.String(),
+    mimeType: Type.String(),
+    sampleRate: Type.Optional(Type.Integer({ minimum: 1 })),
+    channels: Type.Optional(Type.Integer({ minimum: 1 }))
+  })
+});
 
 export const LogEntrySchema = Type.Object({
   id: Type.String(),
@@ -150,6 +177,8 @@ export type ChatResponse = Static<typeof ChatResponseSchema>;
 export type Message = Static<typeof MessageSchema>;
 export type ConversationSummary = Static<typeof ConversationSummarySchema>;
 export type ConversationDetail = Static<typeof ConversationDetailSchema>;
+export type PipelineEvent = Static<typeof PipelineEventSchema>;
+export type VoiceResponse = Static<typeof VoiceResponseSchema>;
 export type LogEntry = Static<typeof LogEntrySchema>;
 export type LlmMode = Static<typeof LlmModeSchema>;
 export type LlmConfiguration = Static<typeof LlmConfigurationSchema>;

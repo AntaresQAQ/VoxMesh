@@ -7,6 +7,7 @@ export default defineConfig({
   noExternal: [
     "@voxmesh/agent-core",
     "@voxmesh/ai",
+    "@voxmesh/audio",
     "@voxmesh/shared",
     "@voxmesh/storage"
   ],

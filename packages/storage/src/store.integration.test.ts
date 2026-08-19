@@ -31,9 +31,16 @@ describe("VoxMeshStore", () => {
       message: "Completed",
       conversationId: id
     });
+    store.addPipelineEvent({
+      conversationId: id,
+      stage: "AGENT",
+      status: "completed",
+      message: "Agent completed"
+    });
 
     expect(store.listConversations()).toHaveLength(1);
     expect(store.getConversation(id)?.messages).toHaveLength(3);
+    expect(store.getConversation(id)?.events).toHaveLength(1);
     expect(store.listLogs()[0]?.conversationId).toBe(id);
   });
 

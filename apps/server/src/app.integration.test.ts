@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 
+import type { ConversationDetail, VoiceResponse } from "@voxmesh/shared";
 import { VoxMeshStore } from "@voxmesh/storage";
 
 import { buildServer } from "./app.js";
@@ -148,6 +149,65 @@ describe("server API", () => {
       payload: { password: "replacement administrator password" }
     });
     expect(newLogin.statusCode).toBe(200);
+    await app.close();
+  });
+
+  it("runs the complete Mock Voice pipeline", async () => {
+    store = new VoxMeshStore(":memory:");
+    const app = await buildServer({ config, store });
+    await app.inject({
+      method: "POST",
+      url: "/api/setup",
+      payload: { password: "voice administrator password" }
+    });
+    const login = await app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      payload: { password: "voice administrator password" }
+    });
+    const setCookie = login.headers["set-cookie"];
+    const cookie = (Array.isArray(setCookie) ? setCookie[0] : setCookie)?.split(
+      ";"
+    )[0];
+
+    const voice = await app.inject({
+      method: "POST",
+      url: "/api/voice",
+      headers: {
+        cookie,
+        "content-type": "audio/webm"
+      },
+      payload: Buffer.from("mock audio")
+    });
+
+    expect(voice.statusCode).toBe(200);
+    const voiceBody = JSON.parse(voice.body) as VoiceResponse;
+    expect(voiceBody).toMatchObject({
+      transcript: "Check the light status",
+      usedTools: ["mock.get_device_status"],
+      audio: {
+        mimeType: "audio/wav"
+      }
+    });
+    expect(voiceBody.audio.base64).toMatch(/^UklGR/);
+
+    const detail = await app.inject({
+      method: "GET",
+      url: `/api/conversations/${voiceBody.conversationId}`,
+      headers: { cookie }
+    });
+    expect(detail.statusCode).toBe(200);
+    const detailBody = JSON.parse(detail.body) as ConversationDetail;
+    expect(
+      detailBody.events.map((event) => `${event.stage}:${event.status}`)
+    ).toEqual(
+      expect.arrayContaining([
+        "STT:completed",
+        "AGENT:completed",
+        "MCP:completed",
+        "TTS:completed"
+      ])
+    );
     await app.close();
   });
 

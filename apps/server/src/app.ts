@@ -11,12 +11,15 @@ import Fastify, {
 } from "fastify";
 
 import {
-  AgentRuntime,
   MockLlmProvider,
   MockMcpServer,
   type LlmProvider
 } from "@voxmesh/agent-core";
 import { AzureOpenAiProvider } from "@voxmesh/ai";
+import {
+  MockSpeechToTextProvider,
+  MockTextToSpeechProvider
+} from "@voxmesh/audio";
 import {
   ApiErrorSchema,
   ChatRequestSchema,
@@ -32,11 +35,13 @@ import {
   PasswordChangeSchema,
   PasswordSchema,
   SessionSchema,
-  SetupStatusSchema
+  SetupStatusSchema,
+  VoiceResponseSchema
 } from "@voxmesh/shared";
 import { VoxMeshStore, type StoredLlmConfiguration } from "@voxmesh/storage";
 
 import type { ServerConfig } from "./config.js";
+import { ConversationService } from "./conversation-service.js";
 import { LoginRateLimiter } from "./login-rate-limiter.js";
 import {
   createSessionToken,
@@ -64,10 +69,27 @@ export async function buildServer(
   const store =
     dependencies.store ?? new VoxMeshStore(dependencies.config.databasePath);
   const mcp = new MockMcpServer();
+  const conversationService = new ConversationService(
+    store,
+    mcp,
+    () => createLlmProvider(store.getLlmConfiguration()),
+    new MockSpeechToTextProvider(),
+    new MockTextToSpeechProvider()
+  );
   const loginRateLimiter = new LoginRateLimiter();
   const startedAt = Date.now();
 
   await app.register(fastifyCookie);
+  app.addContentTypeParser(
+    /^audio\/.+/,
+    { parseAs: "buffer", bodyLimit: 5 * 1024 * 1024 },
+    (_request, body, done) => done(null, body)
+  );
+  app.addContentTypeParser(
+    "application/octet-stream",
+    { parseAs: "buffer", bodyLimit: 5 * 1024 * 1024 },
+    (_request, body, done) => done(null, body)
+  );
 
   app.addHook("onClose", async () => {
     if (!dependencies.store) {
@@ -463,39 +485,54 @@ export async function buildServer(
         }
       }
     },
-    async (request) => {
-      const conversationId = store.createConversation(request.body.message);
-      try {
-        const agent = new AgentRuntime(
-          createLlmProvider(store.getLlmConfiguration()),
-          mcp
-        );
-        const result = await agent.run(request.body.message);
-        for (const message of result.transcript
-          .slice(1)
-          .filter((entry) => !entry.toolCall)) {
-          store.addMessage(conversationId, message.role, message.content);
+    async (request) => conversationService.runText(request.body.message)
+  );
+
+  app.post(
+    "/api/voice",
+    {
+      preHandler: authenticate,
+      schema: {
+        response: {
+          200: VoiceResponseSchema,
+          400: ApiErrorSchema,
+          401: ApiErrorSchema
         }
-        for (const event of result.events) {
-          store.addLog({
-            ...event,
-            conversationId
-          });
-        }
-        return {
-          conversationId,
-          response: result.response,
-          usedTools: result.usedTools
-        };
-      } catch (error) {
-        store.addLog({
-          category: "ERROR",
-          level: "ERROR",
-          message: error instanceof Error ? error.message : "Agent run failed",
-          conversationId
-        });
-        throw error;
       }
+    },
+    async (request, reply) => {
+      if (!Buffer.isBuffer(request.body)) {
+        return reply.status(400).send({
+          error: {
+            code: "INVALID_AUDIO_BODY",
+            message: "Voice requests require a binary audio body",
+            requestId: request.id
+          }
+        });
+      }
+      const mimeType =
+        request.headers["content-type"]?.split(";")[0] ??
+        "application/octet-stream";
+      const result = await conversationService.runVoice({
+        data: new Uint8Array(request.body),
+        mimeType
+      });
+      return {
+        conversationId: result.conversationId,
+        transcript: result.transcript,
+        response: result.response,
+        usedTools: result.usedTools,
+        audio: {
+          base64: Buffer.from(result.audio.data).toString("base64"),
+          mimeType: result.audio.mimeType,
+          ...(result.audio.sampleRate === undefined
+            ? {}
+            : { sampleRate: result.audio.sampleRate }),
+          ...(result.audio.channels === undefined
+            ? {}
+            : { channels: result.audio.channels })
+        }
+      };
     }
   );
 

@@ -11,7 +11,10 @@ import type {
   LogEntry,
   LogLevel,
   LlmMode,
-  MessageRole
+  MessageRole,
+  PipelineEvent,
+  PipelineStage,
+  PipelineStatus
 } from "@voxmesh/shared";
 
 interface CountRow {
@@ -53,6 +56,14 @@ interface LogRow {
 interface SettingRow {
   key: string;
   value: string;
+}
+
+interface PipelineEventRow {
+  id: string;
+  stage: PipelineStage;
+  status: PipelineStatus;
+  message: string;
+  created_at: string;
 }
 
 export interface StoredLlmConfiguration {
@@ -252,6 +263,11 @@ export class VoxMeshStore {
         "SELECT id, role, content, created_at FROM messages WHERE conversation_id = ? ORDER BY created_at, rowid"
       )
       .all(id) as MessageRow[];
+    const events = this.database
+      .prepare(
+        "SELECT id, stage, status, message, created_at FROM conversation_events WHERE conversation_id = ? ORDER BY created_at, rowid"
+      )
+      .all(id) as PipelineEventRow[];
     return {
       ...mapConversation(row),
       messages: messages.map((message) => ({
@@ -259,8 +275,29 @@ export class VoxMeshStore {
         role: message.role,
         content: message.content,
         createdAt: message.created_at
-      }))
+      })),
+      events: events.map(mapPipelineEvent)
     };
+  }
+
+  public addPipelineEvent(input: {
+    conversationId: string;
+    stage: PipelineStage;
+    status: PipelineStatus;
+    message: string;
+  }): void {
+    this.database
+      .prepare(
+        "INSERT INTO conversation_events (id, conversation_id, stage, status, message, created_at) VALUES (?, ?, ?, ?, ?, ?)"
+      )
+      .run(
+        randomUUID(),
+        input.conversationId,
+        input.stage,
+        input.status,
+        input.message,
+        new Date().toISOString()
+      );
   }
 
   public addLog(input: {
@@ -349,6 +386,15 @@ export class VoxMeshStore {
         value TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS conversation_events (
+        id TEXT PRIMARY KEY,
+        conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+        stage TEXT NOT NULL CHECK (stage IN ('STT', 'AGENT', 'MCP', 'TTS')),
+        status TEXT NOT NULL CHECK (status IN ('completed', 'failed')),
+        message TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
     `);
   }
 
@@ -370,5 +416,15 @@ function mapConversation(row: ConversationRow): ConversationSummary {
     messageCount: row.message_count,
     createdAt: row.created_at,
     updatedAt: row.updated_at
+  };
+}
+
+function mapPipelineEvent(row: PipelineEventRow): PipelineEvent {
+  return {
+    id: row.id,
+    stage: row.stage,
+    status: row.status,
+    message: row.message,
+    createdAt: row.created_at
   };
 }
