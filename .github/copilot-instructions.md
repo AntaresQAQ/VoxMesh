@@ -20,7 +20,13 @@ The linked documents are authoritative and mandatory.
 - Do not introduce unrelated refactoring, cleanup, dependency updates, or features.
 - Preserve the platform-independent Agent Core and adapter boundaries defined in the MVP specification.
 - Use strict TypeScript and explicit validation and error handling. Do not bypass type safety.
+- Provide thorough English developer documentation for implemented features, APIs, configuration, architecture boundaries, failures, operations, and extension points.
+- Add concise JSDoc and reasoning comments for public contracts, security-sensitive logic, invariants, state machines, workarounds, and non-obvious trade-offs; do not restate obvious code.
+- Keep Web Console components small, cohesive, and single-purpose; split pages into focused components, hooks, and feature boundaries.
 - Add complete unit, integration where applicable, and end-to-end coverage for every functional change.
+- Add focused behavioral unit tests for every new or changed Web Console component.
+- Meet WCAG 2.2 AA and verify keyboard access, visible focus, semantic HTML, form status, responsive zoom, and contrast in English/Chinese and Light/Dark themes.
+- Run jsx-a11y linting and representative Playwright axe scans; do not suppress accessibility failures without explicit approval and tracking.
 - Run applicable format, lint, type-check, test, and production-build checks before declaring completion.
 - Never reveal or commit secrets or sensitive data.
 - Never commit, amend, rebase, tag, push, force-push, create or merge a pull request, or release without explicit user confirmation for that specific operation.

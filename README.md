@@ -6,20 +6,126 @@ The project is designed to connect speech input, speech-to-text, an AI agent, MC
 
 ## Project Status
 
-VoxMesh is currently in the specification and implementation-planning stage. Application code and runtime setup have not started.
+VoxMesh has an initial Mock Mode vertical slice for development and architecture validation. It includes:
 
-The first deployment target is NanoPi R2S with a standard USB Audio Class speakerphone, but the architecture is designed for:
+- a pnpm and TypeScript monorepo
+- a Fastify server and React Web Console
+- first-run administrator password setup and session authentication
+- SQLite conversation and log persistence
+- provider-independent Agent Core contracts
+- deterministic Mock LLM and Mock MCP tool execution
+- Dashboard, Chat, Conversations, and Logs pages
+- Settings page for password rotation and Mock/Azure OpenAI configuration
+- write-only Azure OpenAI API key handling and connection testing
+- English and Simplified Chinese Web Console localization
+- browser-language detection and persisted language selection
+- Light, Dark, and System appearance modes
+- persisted appearance selection with live operating-system synchronization
+- feature-oriented, single-purpose React components
+- React Testing Library behavioral tests for every current UI component
+- TanStack Router with Browser History and deep-linkable pages
+- TanStack Query for remote server state and cache invalidation
+- TanStack Form for complex Settings workflows
+- unit, integration, and Playwright end-to-end tests
+
+Azure Speech, generic external MCP transports, physical audio, and deployment packaging remain planned work.
+
+The architecture is designed for:
 
 - macOS, Linux, and Windows development
 - Linux amd64 and arm64 deployment
 - Docker Compose and native systemd deployment
 - Mock Mode without hardware or external service credentials
 
+## Requirements
+
+- Node.js 22.12 or later
+- pnpm 10.27
+
+## Quick Start
+
+```bash
+pnpm install
+pnpm build
+pnpm --filter @voxmesh/server start
+```
+
+Open <http://127.0.0.1:3000>, create the first administrator password, sign in, and use Chat. Enter `Check the light status` to exercise the Mock LLM -> Mock MCP -> Mock LLM flow.
+
+Use **Settings** to change the administrator password or switch Chat between Mock and Azure OpenAI. Azure OpenAI requires an HTTPS endpoint, deployment name, API version, and API key. The API key is stored in the local SQLite database, is never returned to the browser, and is protected by host filesystem permissions.
+
+Use the language selector on setup, login, or Settings to switch between English and Simplified Chinese. The preference is stored in the browser and applies immediately.
+
+Use the appearance selector in Settings to choose Light, Dark, or System. System is the default and follows live operating-system theme changes.
+
+For frontend and backend development with automatic reload:
+
+```bash
+pnpm dev
+```
+
+The Web Console is available at <http://127.0.0.1:5173> and proxies API requests to the server on port `3000`.
+
+Web Console pages use stable URLs such as `/dashboard`, `/chat`, `/conversations`, `/conversations/<id>`, `/logs`, and `/settings`. Direct loading, refresh, and browser back or forward navigation are supported.
+
+## Configuration
+
+Copy `.env.example` values into your environment or process manager:
+
+| Variable                      | Default                 | Description                          |
+| ----------------------------- | ----------------------- | ------------------------------------ |
+| `VOXMESH_HOST`                | `127.0.0.1`             | Server listen address                |
+| `VOXMESH_PORT`                | `3000`                  | Server listen port                   |
+| `VOXMESH_DATABASE_PATH`       | `./data/voxmesh.sqlite` | SQLite database path                 |
+| `VOXMESH_SESSION_TTL_SECONDS` | `86400`                 | Administrator session lifetime       |
+| `VOXMESH_COOKIE_SECURE`       | `false`                 | Require HTTPS for the session cookie |
+
+The first administrator password must contain at least 10 characters. Passwords are stored as salted scrypt hashes. Session cookies are `HttpOnly` and `SameSite=Strict`.
+
+Changing the administrator password revokes every active session. Azure OpenAI settings take effect on the next Chat request. The connection-test action sends a small request to the configured deployment and may incur provider usage costs.
+
+## Validation
+
+```bash
+pnpm format:check
+pnpm lint
+pnpm typecheck
+pnpm test:unit
+pnpm test:integration
+pnpm build
+pnpm test:e2e
+```
+
+Run every required check with:
+
+```bash
+pnpm validate
+```
+
+Default tests and Mock Mode require no AI credentials, external MCP servers, or audio hardware.
+
+## Workspace
+
+```text
+apps/server           Fastify API, authentication, and composition root
+apps/web              React and Vite Web Console
+apps/web/src/features Feature-oriented pages, forms, and settings components
+apps/web/src/components Shared layout components
+apps/web/src/router.tsx Typed TanStack Router route tree and guards
+apps/web/src/query.ts Typed TanStack Query keys and query options
+packages/agent-core   Provider-independent agent runtime and mocks
+packages/shared       Runtime schemas and shared contracts
+packages/storage      SQLite storage adapter
+tests/e2e             Browser end-to-end tests
+```
+
 ## Documentation
 
 - [MVP Development Specification](docs/MVP.md)
 - [Implementation Plan](docs/IMPLEMENTATION_PLAN.md)
 - [Mandatory Development Rules](docs/DEVELOPMENT_RULES.md)
+- [Technology Stack and Development Guide](docs/TECHNOLOGY_STACK.md)
+- [Accessibility Standard and Audit](docs/ACCESSIBILITY.md)
 
 ## Coding Agent Instructions
 
@@ -35,8 +141,9 @@ Before implementing a functional change:
 2. Create a dedicated branch from the latest `main`; never edit or push directly to `main`.
 3. Keep all repository content and code comments in English.
 4. Add complete unit, integration where applicable, and end-to-end tests.
-5. Run all applicable format, lint, type-check, test, and production-build checks.
-6. Use Conventional Commit-style commit messages and PR titles, and split unrelated changes into focused commits.
-7. Obtain separate explicit approval before committing, pushing, creating a pull request, merging, or releasing.
+5. Add English developer documentation and useful JSDoc or reasoning comments for public contracts, configuration, architecture, security constraints, and non-obvious behavior.
+6. Run all applicable format, lint, type-check, test, and production-build checks.
+7. Use Conventional Commit-style commit messages and PR titles, and split unrelated changes into focused commits.
+8. Obtain separate explicit approval before committing, pushing, creating a pull request, merging, or releasing.
 
 See [Development Rules](docs/DEVELOPMENT_RULES.md) for the complete mandatory policy.
