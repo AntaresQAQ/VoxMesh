@@ -32,9 +32,11 @@ The first deployment target is NanoPi R2S with a standard USB Audio Class speake
 Before implementing a functional change:
 
 1. Discuss and confirm its behavior, scope, risks, acceptance criteria, and testing requirements.
-2. Keep all repository content and code comments in English.
-3. Add complete unit, integration where applicable, and end-to-end tests.
-4. Run all applicable format, lint, type-check, test, and production-build checks.
-5. Obtain separate explicit approval before committing, pushing, creating a pull request, merging, or releasing.
+2. Create a dedicated branch from the latest `main`; never edit or push directly to `main`.
+3. Keep all repository content and code comments in English.
+4. Add complete unit, integration where applicable, and end-to-end tests.
+5. Run all applicable format, lint, type-check, test, and production-build checks.
+6. Use Conventional Commit-style commit messages and PR titles, and split unrelated changes into focused commits.
+7. Obtain separate explicit approval before committing, pushing, creating a pull request, merging, or releasing.
 
 See [Development Rules](docs/DEVELOPMENT_RULES.md) for the complete mandatory policy.

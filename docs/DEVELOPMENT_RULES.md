@@ -46,12 +46,36 @@ Before requesting confirmation, the proposed change SHOULD state:
 
 ## 4. Git and Remote Operations
 
+- Work MUST NOT be performed directly on `main`.
+- Before editing repository files, create or switch to a dedicated branch based on the latest `main`.
+- Branch names MUST use a clear lowercase pattern such as `<type>/<short-description>`, for example `feat/agent-runtime`, `fix/session-expiry`, or `docs/git-workflow`.
+- Every change to `main` MUST be delivered through a pull request. Direct pushes to `main` are prohibited.
+- Pull requests MUST be reviewed and all required CI checks MUST pass before merge.
 - Changes MUST NOT be committed, amended, rebased, tagged, pushed, force-pushed, or submitted as a pull request without explicit user confirmation for that specific operation.
 - Approval to edit files is not approval to commit.
 - Approval to commit is not approval to push.
 - Approval to push is not approval to create or merge a pull request.
 - Force-pushes, history rewrites, branch deletion, and tag deletion MUST require explicit confirmation immediately before execution.
-- Commits, when approved, MUST be focused and MUST use an accurate English commit message.
+- Commit messages and pull request titles MUST use an English Conventional Commit-style prefix:
+
+  ```text
+  feat: add agent tool execution
+  fix: prevent expired session reuse
+  docs: document the Git workflow
+  test: cover MCP reconnect failures
+  refactor: separate provider adapters
+  chore: update repository tooling
+  build: add arm64 image build
+  ci: validate Windows development
+  perf: reduce conversation query latency
+  ```
+
+- The prefix MUST accurately describe the primary change. Vague titles such as `update`, `changes`, `fix stuff`, or `misc` are prohibited.
+- Commits MUST be focused, independently understandable, and limited to one logical concern.
+- Different change types or unrelated concerns MUST be split into separate commits whenever practical. For example, a feature, unrelated refactor, documentation update, and dependency upgrade MUST NOT be combined into one catch-all commit.
+- Large changes MUST be decomposed into reviewable commits that preserve a valid repository state where practical.
+- Formatting-only changes MUST be isolated from behavior changes unless the formatter modifies only the lines already required by the behavior change.
+- Pull request titles MUST describe the overall change using the same prefix format. A pull request MAY contain multiple focused commits when they contribute to one coherent objective.
 - Secrets, credentials, private keys, tokens, personal data, and machine-specific configuration MUST never be committed.
 
 ## 5. Architecture and Design
@@ -186,6 +210,7 @@ production build
 ## 14. CI, Review, and Release Gates
 
 - Required validation MUST run in CI for pull requests and protected branches.
+- The `main` branch MUST be protected against direct pushes and merges that bypass required review or CI.
 - A change MUST NOT be merged when required CI checks fail.
 - Functional changes MUST receive review from someone other than the author before merge.
 - Security-sensitive, data-destructive, authentication, authorization, secret-handling, and migration changes MUST receive explicit focused review.
