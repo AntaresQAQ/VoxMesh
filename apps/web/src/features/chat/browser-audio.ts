@@ -1,3 +1,7 @@
+import { encodePcm16Wav } from "@voxmesh/audio/pcm-wav";
+
+const TARGET_SAMPLE_RATE = 16_000;
+
 export interface AudioRecorder {
   start(): Promise<void>;
   stop(): Promise<Blob>;
@@ -46,7 +50,7 @@ export class BrowserAudioRecorder implements AudioRecorder {
             reject(new Error("Audio recording is empty"));
             return;
           }
-          resolve(blob);
+          void normalizeBrowserRecording(blob).then(resolve, reject);
         },
         { once: true }
       );
@@ -68,6 +72,107 @@ export class BrowserAudioRecorder implements AudioRecorder {
     this.stream = null;
     this.recorder = null;
   }
+}
+
+interface DecodedAudio {
+  numberOfChannels: number;
+  sampleRate: number;
+  length: number;
+  getChannelData(channel: number): Float32Array;
+}
+
+interface BrowserAudioContext {
+  decodeAudioData(data: ArrayBuffer): Promise<DecodedAudio>;
+  close(): Promise<void>;
+}
+
+type AudioContextFactory = () => BrowserAudioContext;
+
+/** Converts browser-specific recording containers into mono 16 kHz PCM WAV. */
+export async function normalizeBrowserRecording(
+  blob: Blob,
+  createAudioContext: AudioContextFactory = () => new AudioContext()
+): Promise<Blob> {
+  const context = createAudioContext();
+  try {
+    const decoded = await context.decodeAudioData(await readBlob(blob));
+    const pcm = resampleMonoPcm16(decoded, TARGET_SAMPLE_RATE);
+    const wav = encodePcm16Wav({
+      channels: 1,
+      sampleRate: TARGET_SAMPLE_RATE,
+      pcm
+    });
+    const buffer = new ArrayBuffer(wav.byteLength);
+    new Uint8Array(buffer).set(wav);
+    return new Blob([buffer], { type: "audio/wav" });
+  } catch (error) {
+    throw new Error(
+      `Browser audio normalization failed: ${
+        error instanceof Error ? error.message : "unknown error"
+      }`
+    );
+  } finally {
+    await context.close();
+  }
+}
+
+function readBlob(blob: Blob): Promise<ArrayBuffer> {
+  if (typeof blob.arrayBuffer === "function") {
+    return blob.arrayBuffer();
+  }
+  return new Promise<ArrayBuffer>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => {
+      if (reader.result instanceof ArrayBuffer) {
+        resolve(reader.result);
+      } else {
+        reject(new Error("Browser returned an invalid recording buffer"));
+      }
+    });
+    reader.addEventListener("error", () => {
+      reject(reader.error ?? new Error("Browser recording could not be read"));
+    });
+    reader.readAsArrayBuffer(blob);
+  });
+}
+
+function resampleMonoPcm16(
+  audio: DecodedAudio,
+  targetSampleRate: number
+): Uint8Array {
+  if (audio.numberOfChannels < 1 || audio.sampleRate < 1 || audio.length < 1) {
+    throw new Error("Decoded audio is empty or invalid");
+  }
+  const channelData = Array.from(
+    { length: audio.numberOfChannels },
+    (_, channel) => audio.getChannelData(channel)
+  );
+  const outputLength = Math.max(
+    1,
+    Math.round((audio.length * targetSampleRate) / audio.sampleRate)
+  );
+  const pcm = new Uint8Array(outputLength * 2);
+  const view = new DataView(pcm.buffer);
+
+  for (let index = 0; index < outputLength; index += 1) {
+    const sourcePosition = (index * audio.sampleRate) / targetSampleRate;
+    const leftIndex = Math.min(audio.length - 1, Math.floor(sourcePosition));
+    const rightIndex = Math.min(audio.length - 1, leftIndex + 1);
+    const fraction = sourcePosition - leftIndex;
+    let sample = 0;
+    for (const channel of channelData) {
+      const left = channel[leftIndex] ?? 0;
+      const right = channel[rightIndex] ?? left;
+      sample += left + (right - left) * fraction;
+    }
+    sample = Math.max(-1, Math.min(1, sample / audio.numberOfChannels));
+    view.setInt16(
+      index * 2,
+      sample < 0 ? Math.round(sample * 32_768) : Math.round(sample * 32_767),
+      true
+    );
+  }
+  return pcm;
 }
 
 export async function playBase64Audio(input: {

@@ -14,7 +14,9 @@ import type {
   MessageRole,
   PipelineEvent,
   PipelineStage,
-  PipelineStatus
+  PipelineStatus,
+  SpeechProviderMode,
+  VoicePipelineMode
 } from "@voxmesh/shared";
 
 interface CountRow {
@@ -71,7 +73,32 @@ export interface StoredLlmConfiguration {
   endpoint: string;
   deployment: string;
   apiVersion: string;
+  baseUrl: string;
+  model: string;
+  timeoutMs: number;
+  maxOutputTokens: number;
   apiKey: string | null;
+}
+
+export interface StoredSpeechConfiguration {
+  sttMode: SpeechProviderMode;
+  ttsMode: SpeechProviderMode;
+  sttEndpoint: string;
+  sttDeployment: string;
+  sttApiVersion: string;
+  sttLanguage: string;
+  sttApiKey: string | null;
+  ttsEndpoint: string;
+  ttsDeployment: string;
+  ttsApiVersion: string;
+  ttsVoice: string;
+  ttsInstructions: string;
+  ttsApiKey: string | null;
+}
+
+export interface StoredVoicePipelineConfiguration {
+  mode: VoicePipelineMode;
+  nativeProviderId: string;
 }
 
 export class VoxMeshStore {
@@ -164,12 +191,18 @@ export class VoxMeshStore {
       )
       .all() as SettingRow[];
     const settings = new Map(rows.map((row) => [row.key, row.value]));
-    const mode = settings.get("llm.mode");
     return {
-      mode: mode === "azure-openai" ? "azure-openai" : "mock",
+      mode: llmMode(settings.get("llm.mode")),
       endpoint: settings.get("llm.endpoint") ?? "",
       deployment: settings.get("llm.deployment") ?? "",
       apiVersion: settings.get("llm.apiVersion") ?? "2024-10-21",
+      baseUrl: settings.get("llm.baseUrl") ?? "",
+      model: settings.get("llm.model") ?? "qwen-plus",
+      timeoutMs: positiveInteger(settings.get("llm.timeoutMs"), 30_000),
+      maxOutputTokens: positiveInteger(
+        settings.get("llm.maxOutputTokens"),
+        1_024
+      ),
       apiKey: settings.get("llm.apiKey") ?? null
     };
   }
@@ -179,6 +212,10 @@ export class VoxMeshStore {
     endpoint: string;
     deployment: string;
     apiVersion: string;
+    baseUrl: string;
+    model: string;
+    timeoutMs: number;
+    maxOutputTokens: number;
     apiKey?: string;
     clearApiKey?: boolean;
   }): StoredLlmConfiguration {
@@ -187,6 +224,10 @@ export class VoxMeshStore {
       this.setSetting("llm.endpoint", input.endpoint);
       this.setSetting("llm.deployment", input.deployment);
       this.setSetting("llm.apiVersion", input.apiVersion);
+      this.setSetting("llm.baseUrl", input.baseUrl);
+      this.setSetting("llm.model", input.model);
+      this.setSetting("llm.timeoutMs", String(input.timeoutMs));
+      this.setSetting("llm.maxOutputTokens", String(input.maxOutputTokens));
       if (input.clearApiKey) {
         this.database
           .prepare("DELETE FROM app_settings WHERE key = 'llm.apiKey'")
@@ -196,6 +237,122 @@ export class VoxMeshStore {
       }
     })();
     return this.getLlmConfiguration();
+  }
+
+  public getSpeechConfiguration(): StoredSpeechConfiguration {
+    const rows = this.database
+      .prepare(
+        "SELECT key, value FROM app_settings WHERE key LIKE 'speech.%' ORDER BY key"
+      )
+      .all() as SettingRow[];
+    const settings = new Map(rows.map((row) => [row.key, row.value]));
+    // Legacy shared values remain readable so existing installations can
+    // migrate without losing configured credentials.
+    const legacyEndpoint = settings.get("speech.endpoint") ?? "";
+    const legacyApiKey = settings.get("speech.apiKey") ?? null;
+    const ttsMode = providerMode(settings.get("speech.ttsMode"));
+    const ttsDeployment = settings.get("speech.ttsDeployment") ?? "";
+    const configuredTtsVoice = settings.get("speech.ttsVoice") ?? "coral";
+    // VoxMesh briefly suggested a Flash-only voice for the Plus model.
+    // Preserve other custom voices while correcting that exact invalid pair.
+    const ttsVoice =
+      ttsMode === "alibaba-model-studio" &&
+      ttsDeployment === "qwen-audio-3.0-tts-plus" &&
+      configuredTtsVoice === "longanlingxi"
+        ? "longanlingxin"
+        : configuredTtsVoice;
+    return {
+      sttMode: providerMode(settings.get("speech.sttMode")),
+      ttsMode,
+      sttEndpoint: settings.get("speech.sttEndpoint") ?? legacyEndpoint,
+      sttDeployment: settings.get("speech.sttDeployment") ?? "",
+      sttApiVersion:
+        settings.get("speech.sttApiVersion") ?? "2025-04-01-preview",
+      sttLanguage: settings.get("speech.sttLanguage") ?? "zh",
+      sttApiKey: settings.get("speech.sttApiKey") ?? legacyApiKey,
+      ttsEndpoint: settings.get("speech.ttsEndpoint") ?? legacyEndpoint,
+      ttsDeployment,
+      ttsApiVersion:
+        settings.get("speech.ttsApiVersion") ?? "2025-03-01-preview",
+      ttsVoice,
+      ttsInstructions:
+        settings.get("speech.ttsInstructions") ??
+        "Speak clearly and naturally.",
+      ttsApiKey: settings.get("speech.ttsApiKey") ?? legacyApiKey
+    };
+  }
+
+  public updateSpeechConfiguration(input: {
+    sttMode: SpeechProviderMode;
+    ttsMode: SpeechProviderMode;
+    sttEndpoint: string;
+    sttDeployment: string;
+    sttApiVersion: string;
+    sttLanguage: string;
+    sttApiKey?: string;
+    clearSttApiKey?: boolean;
+    ttsEndpoint: string;
+    ttsDeployment: string;
+    ttsApiVersion: string;
+    ttsVoice: string;
+    ttsInstructions: string;
+    ttsApiKey?: string;
+    clearTtsApiKey?: boolean;
+  }): StoredSpeechConfiguration {
+    this.database.transaction(() => {
+      this.setSetting("speech.sttMode", input.sttMode);
+      this.setSetting("speech.ttsMode", input.ttsMode);
+      this.setSetting("speech.sttEndpoint", input.sttEndpoint);
+      this.setSetting("speech.sttDeployment", input.sttDeployment);
+      this.setSetting("speech.sttApiVersion", input.sttApiVersion);
+      this.setSetting("speech.sttLanguage", input.sttLanguage);
+      if (input.clearSttApiKey) {
+        this.database
+          .prepare("DELETE FROM app_settings WHERE key = 'speech.sttApiKey'")
+          .run();
+      } else if (input.sttApiKey !== undefined) {
+        this.setSetting("speech.sttApiKey", input.sttApiKey);
+      }
+      this.setSetting("speech.ttsEndpoint", input.ttsEndpoint);
+      this.setSetting("speech.ttsDeployment", input.ttsDeployment);
+      this.setSetting("speech.ttsApiVersion", input.ttsApiVersion);
+      this.setSetting("speech.ttsVoice", input.ttsVoice);
+      this.setSetting("speech.ttsInstructions", input.ttsInstructions);
+      if (input.clearTtsApiKey) {
+        this.database
+          .prepare("DELETE FROM app_settings WHERE key = 'speech.ttsApiKey'")
+          .run();
+      } else if (input.ttsApiKey !== undefined) {
+        this.setSetting("speech.ttsApiKey", input.ttsApiKey);
+      }
+    })();
+    return this.getSpeechConfiguration();
+  }
+
+  public getVoicePipelineConfiguration(): StoredVoicePipelineConfiguration {
+    const rows = this.database
+      .prepare(
+        "SELECT key, value FROM app_settings WHERE key LIKE 'voice.%' ORDER BY key"
+      )
+      .all() as SettingRow[];
+    const settings = new Map(rows.map((row) => [row.key, row.value]));
+    return {
+      mode:
+        settings.get("voice.mode") === "native-multimodal"
+          ? "native-multimodal"
+          : "composed",
+      nativeProviderId: settings.get("voice.nativeProviderId") ?? "mock-native"
+    };
+  }
+
+  public updateVoicePipelineConfiguration(
+    input: StoredVoicePipelineConfiguration
+  ): StoredVoicePipelineConfiguration {
+    this.database.transaction(() => {
+      this.setSetting("voice.mode", input.mode);
+      this.setSetting("voice.nativeProviderId", input.nativeProviderId);
+    })();
+    return this.getVoicePipelineConfiguration();
   }
 
   public createConversation(userMessage: string): string {
@@ -427,4 +584,27 @@ function mapPipelineEvent(row: PipelineEventRow): PipelineEvent {
     message: row.message,
     createdAt: row.created_at
   };
+}
+
+function providerMode(value: string | undefined): SpeechProviderMode {
+  if (
+    value === "azure-openai" ||
+    value === "openai-compatible" ||
+    value === "alibaba-model-studio"
+  ) {
+    return value;
+  }
+  return "mock";
+}
+
+function llmMode(value: string | undefined): LlmMode {
+  if (value === "azure-openai" || value === "openai-compatible") {
+    return value;
+  }
+  return "mock";
+}
+
+function positiveInteger(value: string | undefined, fallback: number): number {
+  const parsed = value === undefined ? Number.NaN : Number.parseInt(value, 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }

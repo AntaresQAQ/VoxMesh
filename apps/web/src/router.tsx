@@ -22,6 +22,7 @@ import { ConversationsPage } from "./features/conversations/ConversationsPage.js
 import { DashboardPage } from "./features/dashboard/DashboardPage.js";
 import { LogsPage } from "./features/logs/LogsPage.js";
 import { SettingsPage } from "./features/settings/SettingsPage.js";
+import type { SettingsSection } from "./features/settings/SettingsSectionNav.js";
 import { useI18n } from "./i18n/i18n.js";
 import { queryKeys, sessionQueryOptions, setupQueryOptions } from "./query.js";
 
@@ -142,6 +143,9 @@ const logsRoute = createRoute({
 const settingsRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: "/settings",
+  validateSearch: (search: Record<string, unknown>) => ({
+    section: settingsSection(search.section)
+  }),
   component: SettingsRoute
 });
 
@@ -229,8 +233,10 @@ function LoginRoute() {
 
 function SettingsRoute() {
   const navigate = useNavigate();
+  const { section } = settingsRoute.useSearch();
   return (
     <SettingsPage
+      section={section}
       onSessionEnded={() => {
         void navigate({
           to: "/login",
@@ -289,6 +295,10 @@ function safeReturnTo(value: string): string {
     value !== "/setup"
     ? value
     : "/dashboard";
+}
+
+function settingsSection(value: unknown): SettingsSection {
+  return value === "providers" || value === "security" ? value : "general";
 }
 
 function routeTitle(pathname: string, t: ReturnType<typeof useI18n>["t"]) {

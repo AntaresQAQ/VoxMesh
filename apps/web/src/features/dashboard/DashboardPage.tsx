@@ -34,7 +34,29 @@ export function DashboardPage() {
             value={
               dashboard.data.providers.llm === "mock"
                 ? t("common.mock")
-                : t("common.azureOpenAI")
+                : dashboard.data.providers.llm === "azure-openai"
+                  ? t("common.azureOpenAI")
+                  : t("common.openAiCompatible")
+            }
+          />
+          <Metric
+            label={t("dashboard.stt")}
+            value={
+              dashboard.data.providers.stt === "mock"
+                ? t("common.mock")
+                : dashboard.data.providers.stt === "azure-openai"
+                  ? t("common.azureOpenAI")
+                  : t("common.openAiCompatible")
+            }
+          />
+          <Metric
+            label={t("dashboard.tts")}
+            value={
+              dashboard.data.providers.tts === "mock"
+                ? t("common.mock")
+                : dashboard.data.providers.tts === "azure-openai"
+                  ? t("common.azureOpenAI")
+                  : t("common.openAiCompatible")
             }
           />
           <Metric

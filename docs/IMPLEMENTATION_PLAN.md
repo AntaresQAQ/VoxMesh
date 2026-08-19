@@ -51,17 +51,44 @@ The first confirmed Mock Mode vertical slice is implemented and validated on mac
 - [x] authenticated binary Mock Voice API and persisted STT/Agent/MCP/TTS events
 - [x] browser record, stop, transcript, response, and playback controls
 - [x] Mock Voice component, provider, API integration, and fake MediaRecorder e2e tests
+- [x] configurable Azure OpenAI `gpt-4o-mini-transcribe` STT adapter
+- [x] configurable Azure OpenAI `gpt-4o-mini-tts` WAV adapter
+- [x] independent Mock/Azure STT and TTS selection with write-only speech credentials
+- [x] independent STT and TTS endpoints and API keys with legacy shared-setting migration
+- [x] speech connection test and dynamic next-request provider activation
+- [x] generic Provider Registry used by LLM, STT, and TTS factories
+- [x] capability-based Provider Catalog API shared by LLM, STT, and TTS Settings selectors
+- [x] provider metadata merged by ID with `llm`, `stt`, and `tts` capabilities
+- [x] URL-backed General, AI Providers, and Security Settings sections
+- [x] LLM, STT, and TTS grouped in one AI Providers section
+- [x] persisted Composed and Native Multimodal voice mode selector
+- [x] provider-independent Native Voice contract and bounded MCP tool loop
+- [x] Mock Native Multimodal provider with audio input, tool calls, text, and audio output
+- [x] mode-specific Settings visibility and browser e2e coverage
+- [x] generic OpenAI-compatible Chat Completions adapter
+- [x] generic OpenAI-compatible STT and TTS adapters for standard Audio API endpoints
+- [x] OpenAI-compatible provider registered with `llm`, `stt`, and `tts` capabilities
+- [x] Alibaba Cloud Model Studio base URL, API key, model, timeout, and output-limit configuration
+- [x] dedicated Alibaba Cloud Model Studio Fun-ASR WebSocket STT provider
+- [x] dedicated Alibaba Cloud Model Studio Qwen-Audio-TTS/CosyVoice WebSocket TTS provider
+- [x] mono 16 kHz PCM16 WAV browser recording normalization
+- [x] Alibaba WebSocket endpoint allowlist, task lifecycle, binary audio, and failure tests
+- [x] OpenAI-compatible text, tool-call, error, registry, API, and Settings tests
 - [x] unit, integration, and Playwright tests for the implemented vertical slice
 - [x] format, lint, strict type-check, production build, and browser e2e validation on macOS
 
 The following planned capabilities are not complete:
 
 - [ ] physical voice flow
+- [ ] Provider Connections, Model Deployments, and Runtime Routes data model
+- [ ] real Native Multimodal provider adapter and verified capability routing
+- [ ] opt-in live OpenAI-compatible LLM/STT/TTS provider smoke tests
+- [ ] true streaming browser microphone to Alibaba Fun-ASR
 - [ ] complete WCAG 2.2 AA audit evidence for every future Web Console route
 - [ ] WebSocket real-time logs and events
 - [ ] full MCP configuration and inspection console
 - [ ] STT, TTS, audio, MCP server, and advanced runtime configuration UI
-- [ ] Azure Speech, external MCP transports, ALSA audio, and deployment phases
+- [ ] optional Azure AI Speech Service adapter, external MCP transports, ALSA audio, and deployment phases
 
 ## 1. Current State and Approach
 
@@ -85,8 +112,14 @@ The implementation will follow the seven phases defined in the MVP specification
 - First startup requires administrator password setup before protected features are available.
 - Authentication uses an opaque server-side session with an `HttpOnly` and `SameSite` cookie. The cookie uses the `Secure` attribute whenever HTTPS is enabled.
 - Direct public-internet exposure and HTTPS termination are outside the MVP scope. The application must remain compatible with future HTTPS deployment.
-- The first real AI integration is non-streaming Azure OpenAI with Azure Speech STT and TTS.
-- Azure endpoints, deployment, API version, region, languages, voices, audio settings, and limits are configurable.
+- The first real AI integration is non-streaming Azure OpenAI for LLM, STT, and TTS.
+- Alibaba Cloud Model Studio is the first supported OpenAI-compatible third-party LLM provider.
+- Bailian migration must require only API key, base URL, and model name changes for compatible Chat Completions behavior.
+- Voice supports two explicit non-streaming pipeline modes: Native Multimodal and Composed.
+- Native Multimodal uses one audio-capable model for audio input, reasoning/tools, and audio output.
+- Composed uses independent STT, Chat LLM, and TTS model assignments.
+- Provider endpoints and credentials belong to reusable Connections; pipeline roles reference Model Deployments.
+- LLM, STT, and TTS endpoints, credentials, deployments, API versions, regions, languages, voices, audio settings, and limits are independently configurable.
 - Azure and MCP secrets are write-only in the API and Web Console and are stored in SQLite as plaintext protected by restrictive host filesystem permissions.
 - The MVP provides generic third-party MCP integration rather than a required Home Assistant integration.
 - MCP supports Streamable HTTP and stdio. OAuth is deferred.
@@ -206,6 +239,28 @@ TanStack frontend architecture:
 - TanStack Table and TanStack Virtual SHOULD be used only when real table or large-list requirements justify them.
 - TanStack Devtools MAY be enabled in development but MUST NOT be exposed in production.
 - Router, query, form, localization, and theme providers must remain independently testable.
+
+OpenAI-compatible provider rules:
+
+- Implement one generic OpenAI-compatible LLM adapter rather than one adapter per compatible vendor.
+- Configure API key, base URL, model name, timeout, and output limits.
+- Keep Azure OpenAI in its existing adapter because Azure deployment URLs and API versions have different semantics.
+- Treat model tool support as a capability that must be verified, not assumed.
+- Preserve generic Agent Core messages, tool calls, tool results, finish reasons, and normalized errors.
+- Keep provider credentials write-only and redacted.
+- Add offline contract fixtures and opt-in credentialed smoke tests.
+
+Voice pipeline rules:
+
+- Support `native-multimodal` and `composed` runtime modes.
+- Never silently change voice pipeline mode or activate a fallback.
+- Native Multimodal requires verified audio-input and audio-output capabilities.
+- Native Multimodal routes using MCP also require verified tool-calling support.
+- Composed routes independently assign STT, Chat LLM, and TTS model deployments.
+- Credentials and endpoints belong to Provider Connections rather than pipeline roles.
+- Model Deployments declare and verify capabilities separately.
+- Persist the selected route and safe model metadata in every conversation.
+- Keep raw audio ephemeral by default.
 
 Cross-platform development rules:
 
@@ -486,6 +541,7 @@ Phase 3 implementation requires a new explicit user confirmation after Phase 2 a
 - Ensure valid nested routes are served by the Fastify SPA fallback.
 - Keep navigation labels localized while route paths remain stable and language-neutral.
 - Use validated search parameters for restorable filters and view state.
+- Store the active Settings section in the validated `section` search parameter.
 
 Acceptance gate:
 
@@ -559,7 +615,7 @@ Phase 4 requires explicit confirmation after Phase 3 acceptance.
 ### 8.1 Configuration and Secrets
 
 - Add write-only Azure OpenAI endpoint, deployment, API version, and API key settings.
-- Add write-only Azure Speech region or endpoint and API key settings.
+- Add write-only Azure OpenAI speech endpoint and API key settings.
 - Configure STT language, TTS voice, output format, timeouts, retries, payload limits, and provider enablement.
 - Persist secrets in SQLite under the confirmed host-filesystem trust model.
 - Restrict permissions for databases, configuration, backups, and exports containing secrets.
@@ -574,7 +630,18 @@ Phase 4 requires explicit confirmation after Phase 3 acceptance.
 - Normalize authentication, throttling, timeout, content-filter, invalid-request, unavailable-service, malformed-response, and cancellation errors.
 - Never add Azure-specific imports or branches to Agent Core.
 
-### 8.3 Azure Speech STT
+### 8.3 OpenAI-Compatible LLM Adapter
+
+- Implement configurable Chat Completions support using base URL, API key, and model name.
+- Use Alibaba Cloud Model Studio as the first compatibility target.
+- Support models such as `qwen-plus` when available in the configured region.
+- Map generic messages, tools, tool calls, tool results, finish reasons, usage, and errors.
+- Validate base URLs and prevent credentials from appearing in logs or errors.
+- Keep the adapter vendor-neutral so other OpenAI-compatible providers can reuse it.
+- Add configuration, mapping, tool-calling, error, timeout, and malformed-response tests.
+- Add an opt-in Model Studio live smoke test outside default CI.
+
+### 8.4 Azure OpenAI Audio STT
 
 - Implement complete-buffer speech recognition behind the generic STT interface.
 - Default to validated 16 kHz mono PCM or WAV while allowing supported configured formats.
@@ -583,7 +650,7 @@ Phase 4 requires explicit confirmation after Phase 3 acceptance.
 - Normalize no-speech, rejected recognition, invalid audio, quota, authentication, timeout, cancellation, and service failures.
 - Do not retain uploaded audio after the operation unless a future diagnostic feature is separately approved.
 
-### 8.4 Azure Speech TTS
+### 8.5 Azure OpenAI Audio TTS
 
 - Implement complete-response synthesis behind the generic TTS interface.
 - Configure voice, language, format, sample rate, timeout, and text limits.
@@ -591,10 +658,10 @@ Phase 4 requires explicit confirmation after Phase 3 acceptance.
 - Normalize invalid voice, unsupported format, quota, authentication, timeout, cancellation, and service failures.
 - Never silently switch voice or format.
 
-### 8.5 Selection, Health, Tests, and Documentation
+### 8.6 Selection, Health, Tests, and Documentation
 
-- Allow Mock and Azure providers to be selected independently for STT, LLM, and TTS.
-- Validate required Azure settings before adapter activation.
+- Allow Mock, Azure, and OpenAI-compatible LLM providers to be selected independently from STT and TTS.
+- Validate required Azure and OpenAI-compatible settings before adapter activation.
 - Expose safe readiness and last-error status.
 - Keep Mock Mode as the offline deterministic default; fallback must be explicit.
 - Unit-test configuration, mapping, limits, retries, cancellation, normalization, and redaction.
@@ -604,8 +671,9 @@ Phase 4 requires explicit confirmation after Phase 3 acceptance.
 
 Phase 4 acceptance:
 
-- The non-streaming Azure STT -> Agent Core -> Azure TTS flow works.
+- The non-streaming Azure OpenAI STT -> Agent Core -> Azure OpenAI TTS flow works.
 - Direct and MCP-assisted Azure OpenAI responses work without Agent Core changes.
+- Direct and MCP-assisted Alibaba Cloud Model Studio responses work through the generic OpenAI-compatible adapter.
 - Azure failures are diagnosable without secret exposure.
 - Default CI remains offline and deterministic.
 
@@ -691,7 +759,7 @@ Phase 6 requires explicit confirmation after Phase 5 acceptance and access to re
 - Configure sample rate, channels, sample format, and buffering.
 - Default capture to 16 kHz mono, 16-bit PCM.
 - Validate settings against device capabilities before use.
-- Convert supported ALSA, Azure Speech, WAV, and PCM formats at adapter boundaries.
+- Convert supported ALSA, Azure OpenAI Audio, WAV, and PCM formats at adapter boundaries.
 - Preserve audio metadata and reject unapproved lossy conversion.
 - Implement capture and playback start, stop, cancellation, timeout, duration limits, queue policy, cleanup, and graceful shutdown.
 - Release handles after success, failure, cancellation, shutdown, or removal.
@@ -785,6 +853,9 @@ docs/IMPLEMENTATION_PLAN.md
 docs/TECHNOLOGY_STACK.md
 docs/ACCESSIBILITY.md
 docs/MOCK_MODE.md
+docs/AZURE_OPENAI.md
+docs/ALIBABA_CLOUD_MODEL_STUDIO.md
+docs/VOICE_PIPELINES.md
 docs/ARCHITECTURE.md
 docs/CONFIGURATION.md
 docs/TESTING.md
@@ -792,7 +863,6 @@ docs/SECURITY.md
 docs/OPERATIONS.md
 docs/API.md
 docs/WEBSOCKET.md
-docs/MOCK_MODE.md
 docs/adr/
 deployments/*/README.md
 ```
@@ -821,7 +891,7 @@ The MVP is complete only when:
 2. First-run administrator setup and session authentication protect all non-public features.
 3. The Web Console supports dashboard, text chat, browser voice testing, conversation inspection, MCP inspection and manual execution, logs, and configuration.
 4. The platform-independent Agent Core supports direct and MCP-assisted responses.
-5. Azure OpenAI and Azure Speech STT/TTS work without Agent Core changes.
+5. Azure OpenAI LLM and Audio STT/TTS work without Agent Core changes.
 6. Generic MCP works through Streamable HTTP and stdio with explicit server and tool enablement.
 7. Linux USB audio works through a platform adapter.
 8. NanoPi R2S deployment is reproducible and documented.

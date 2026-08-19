@@ -8,6 +8,7 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@voxmesh/audio": "workspace:*",
     "@voxmesh/shared": "workspace:*"
   }
 }

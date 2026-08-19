@@ -7,9 +7,15 @@ import type {
   LlmConfigurationUpdate,
   LlmConnectionTest,
   LogEntry,
+  ProviderCatalog,
   Session,
+  SpeechConfiguration,
+  SpeechConfigurationUpdate,
+  SpeechConnectionTest,
   SetupStatus,
-  VoiceResponse
+  VoiceResponse,
+  VoicePipelineConfiguration,
+  VoicePipelineConfigurationUpdate
 } from "@voxmesh/shared";
 
 interface ApiFailure {
@@ -79,6 +85,24 @@ export const apiClient = {
     }),
   testLlmConnection: () =>
     api<LlmConnectionTest>("/api/config/llm/test", { method: "POST" }),
+  speechConfiguration: () => api<SpeechConfiguration>("/api/config/speech"),
+  updateSpeechConfiguration: (configuration: SpeechConfigurationUpdate) =>
+    api<SpeechConfiguration>("/api/config/speech", {
+      method: "PUT",
+      body: JSON.stringify(configuration)
+    }),
+  testSpeechConnection: () =>
+    api<SpeechConnectionTest>("/api/config/speech/test", { method: "POST" }),
+  providerCatalog: () => api<ProviderCatalog>("/api/providers"),
+  voicePipelineConfiguration: () =>
+    api<VoicePipelineConfiguration>("/api/config/voice-pipeline"),
+  updateVoicePipelineConfiguration: (
+    configuration: VoicePipelineConfigurationUpdate
+  ) =>
+    api<VoicePipelineConfiguration>("/api/config/voice-pipeline", {
+      method: "PUT",
+      body: JSON.stringify(configuration)
+    }),
   dashboard: () => api<Dashboard>("/api/dashboard"),
   chat: (message: string) =>
     api<ChatResponse>("/api/chat", {

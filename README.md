@@ -15,9 +15,11 @@ VoxMesh has an initial Mock Mode vertical slice for development and architecture
 - provider-independent Agent Core contracts
 - deterministic Mock LLM and Mock MCP tool execution
 - browser Mock Voice recording with Mock STT and generated WAV response
+- selectable Composed and Mock Native Multimodal voice pipeline modes
 - Dashboard, Chat, Conversations, and Logs pages
 - Settings page for password rotation and Mock/Azure OpenAI configuration
 - write-only Azure OpenAI API key handling and connection testing
+- generic OpenAI-compatible LLM configuration, including Alibaba Cloud Model Studio
 - English and Simplified Chinese Web Console localization
 - browser-language detection and persisted language selection
 - Light, Dark, and System appearance modes
@@ -56,6 +58,13 @@ Open <http://127.0.0.1:3000>, create the first administrator password, sign in, 
 The Chat page also provides **Start recording**, **Stop recording**, and **Play response** controls. In Mock Mode, recorded audio is validated, transcribed to a deterministic test phrase, processed through Agent Core and Mock MCP, and returned with a generated test WAV.
 
 Use **Settings** to change the administrator password or switch Chat between Mock and Azure OpenAI. Azure OpenAI requires an HTTPS endpoint, deployment name, API version, and API key. The API key is stored in the local SQLite database, is never returned to the browser, and is protected by host filesystem permissions.
+
+The LLM provider can also use an OpenAI-compatible API. For Alibaba Cloud Model Studio, configure the region/workspace base URL, API key, and model name such as `qwen-plus`.
+
+Alibaba Cloud speech uses the dedicated **Alibaba Cloud Model Studio** STT/TTS
+provider, not the OpenAI-compatible Audio API. Configure the workspace
+WebSocket endpoint, API key, realtime ASR or TTS model, language, and voice
+independently for STT and TTS.
 
 Use the language selector on setup, login, or Settings to switch between English and Simplified Chinese. The preference is stored in the browser and applies immediately.
 
@@ -105,6 +114,17 @@ Run every required check with:
 pnpm validate
 ```
 
+### Playwright MCP
+
+The repository-level [`.mcp.json`](./.mcp.json) configures Playwright MCP for
+browser investigation through structured accessibility snapshots. Copilot CLI
+and Claude Code discover this file from the repository root after workspace
+trust is approved.
+
+The server uses the latest official package release and isolated browser
+sessions so cookies and login state are not retained between MCP sessions.
+Restart the MCP client after changing the configuration.
+
 Default tests and Mock Mode require no AI credentials, external MCP servers, or audio hardware.
 
 ## Workspace
@@ -130,6 +150,9 @@ tests/e2e             Browser end-to-end tests
 - [Technology Stack and Development Guide](docs/TECHNOLOGY_STACK.md)
 - [Accessibility Standard and Audit](docs/ACCESSIBILITY.md)
 - [Mock Mode Development Guide](docs/MOCK_MODE.md)
+- [Azure OpenAI Configuration Guide](docs/AZURE_OPENAI.md)
+- [Alibaba Cloud Model Studio Provider Plan](docs/ALIBABA_CLOUD_MODEL_STUDIO.md)
+- [Voice Pipeline Architecture](docs/VOICE_PIPELINES.md)
 
 ## Coding Agent Instructions
 

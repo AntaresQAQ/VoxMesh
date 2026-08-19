@@ -178,7 +178,19 @@ The current API key is write-only through the Web Console but is stored as plain
 
 ### Planned Azure Speech
 
-Azure Speech STT and TTS are planned but not implemented.
+Azure OpenAI Audio STT and TTS are implemented through the provider-independent `packages/audio` contracts.
+
+Current Azure OpenAI Audio adapters support:
+
+- multipart non-streaming transcription requests
+- non-streaming WAV speech synthesis
+- independent Mock/Azure selection for STT and TTS
+- independent STT/TTS endpoints and write-only API keys
+- language, voice, instructions, deployment, and API version configuration
+
+Configuration and troubleshooting are documented in [AZURE_OPENAI.md](./AZURE_OPENAI.md).
+
+Azure AI Speech Service remains planned as an optional future adapter.
 
 Future adapters must:
 
@@ -200,6 +212,10 @@ Current Mock Mode implementations:
 - generate a valid mono 16 kHz PCM WAV tone
 
 The Mock Voice API and browser controls are documented in [MOCK_MODE.md](./MOCK_MODE.md).
+
+VoxMesh defines two voice pipeline modes: Native Multimodal and Composed. The planned connection, model capability, routing, fallback, and observability architecture is documented in [VOICE_PIPELINES.md](./VOICE_PIPELINES.md).
+
+The runtime currently implements both modes with deterministic Mock providers. Native Multimodal has a provider-independent audio/tool loop and a Mock provider; a real native multimodal model adapter is not yet implemented.
 
 ## 7. Web Console Stack
 
@@ -251,6 +267,16 @@ Current routes:
 /logs
 /settings
 ```
+
+Settings uses a validated `section` search parameter:
+
+```text
+/settings?section=general
+/settings?section=providers
+/settings?section=security
+```
+
+LLM, STT, and TTS configuration is grouped in the AI Providers section.
 
 New user-addressable features require stable routes. Use validated search parameters for filters, pagination, tabs, and other shareable state. Never put secrets or unsaved password values in the URL.
 
@@ -375,15 +401,25 @@ Linux-only audio, packaging, and hardware checks must remain separate from the c
 
 The following areas are planned but their final implementation dependency must be confirmed immediately before development:
 
-| Area             | Planned direction                                                    |
-| ---------------- | -------------------------------------------------------------------- |
-| MCP              | Maintained official or compatible SDK; Streamable HTTP and stdio     |
-| STT/TTS          | Azure Speech adapters                                                |
-| Linux audio      | ALSA adapter for standard USB Audio Class devices                    |
-| Deployment       | Multi-architecture Docker Compose, systemd, Debian packages, scripts |
-| Real-time events | Authenticated WebSocket protocol with versioned envelopes            |
+| Area                  | Planned direction                                                           |
+| --------------------- | --------------------------------------------------------------------------- |
+| MCP                   | Maintained official or compatible SDK; Streamable HTTP and stdio            |
+| STT/TTS               | Azure OpenAI and dedicated Alibaba Model Studio adapters                    |
+| OpenAI-compatible LLM | Generic adapter; Alibaba Cloud Model Studio is the first supported provider |
+| Linux audio           | ALSA adapter for standard USB Audio Class devices                           |
+| Deployment            | Multi-architecture Docker Compose, systemd, Debian packages, scripts        |
+| Real-time events      | Authenticated WebSocket protocol with versioned envelopes                   |
 
 Do not select an SDK solely because it is popular. Confirm maintenance status, license, platform support, security posture, bundle impact, and compatibility with project boundaries.
+
+Alibaba Cloud Model Studio exposes an OpenAI-compatible Chat interface, but its
+Fun-ASR and Qwen-Audio-TTS/CosyVoice services use a dedicated WebSocket task
+protocol. VoxMesh therefore uses the generic compatible adapter for Chat and a
+dedicated Alibaba provider for STT/TTS. Browser recordings are normalized to
+mono PCM16 WAV before entering the provider-independent audio boundary. See
+[ALIBABA_CLOUD_MODEL_STUDIO.md](./ALIBABA_CLOUD_MODEL_STUDIO.md).
+
+Provider registrations include a stable ID, display name, capabilities, validation, and factory. The server merges registry metadata into one authenticated Provider Catalog API. Web Console LLM, STT, and TTS selectors filter the same catalog by `llm`, `stt`, or `tts` capability instead of hard-coding separate provider lists. A provider may expose only the capabilities its API actually supports.
 
 ## 11. Adding a Feature
 

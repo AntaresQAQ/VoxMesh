@@ -1,14 +1,19 @@
 import {
   AgentRuntime,
+  NativeVoiceRuntime,
   type LlmProvider,
-  type McpServer
+  type McpServer,
+  type NativeVoiceProvider
 } from "@voxmesh/agent-core";
 import type {
   AudioData,
   SpeechToTextProvider,
   TextToSpeechProvider
 } from "@voxmesh/audio";
-import type { VoxMeshStore } from "@voxmesh/storage";
+import type {
+  StoredVoicePipelineConfiguration,
+  VoxMeshStore
+} from "@voxmesh/storage";
 
 export interface ConversationResult {
   conversationId: string;
@@ -32,8 +37,11 @@ export class ConversationService {
     private readonly store: VoxMeshStore,
     private readonly mcp: McpServer,
     private readonly createLlm: () => LlmProvider,
-    private readonly stt: SpeechToTextProvider,
-    private readonly tts: TextToSpeechProvider
+    private readonly createStt: () => SpeechToTextProvider,
+    private readonly createTts: () => TextToSpeechProvider,
+    private readonly createNativeVoice: (
+      config: StoredVoicePipelineConfiguration
+    ) => NativeVoiceProvider
   ) {}
 
   public async runText(message: string): Promise<ConversationResult> {
@@ -42,7 +50,11 @@ export class ConversationService {
   }
 
   public async runVoice(audio: AudioData): Promise<VoiceConversationResult> {
-    const transcription = await this.stt.transcribe(audio);
+    const pipeline = this.store.getVoicePipelineConfiguration();
+    if (pipeline.mode === "native-multimodal") {
+      return this.runNativeVoice(audio, pipeline);
+    }
+    const transcription = await this.createStt().transcribe(audio);
     const conversationId = this.store.createConversation(transcription.text);
     this.store.addPipelineEvent({
       conversationId,
@@ -53,7 +65,9 @@ export class ConversationService {
 
     const agentResult = await this.runAgent(conversationId, transcription.text);
     try {
-      const synthesized = await this.tts.synthesize(agentResult.response);
+      const synthesized = await this.createTts().synthesize(
+        agentResult.response
+      );
       this.store.addPipelineEvent({
         conversationId,
         stage: "TTS",
@@ -74,6 +88,51 @@ export class ConversationService {
       });
       throw error;
     }
+  }
+
+  private async runNativeVoice(
+    audio: AudioData,
+    pipeline: StoredVoicePipelineConfiguration
+  ): Promise<VoiceConversationResult> {
+    const runtime = new NativeVoiceRuntime(
+      this.createNativeVoice(pipeline),
+      this.mcp
+    );
+    const result = await runtime.run(audio);
+    const conversationId = this.store.createConversation(result.transcript);
+    this.store.addPipelineEvent({
+      conversationId,
+      stage: "AGENT",
+      status: "completed",
+      message: `Native multimodal input accepted by ${pipeline.nativeProviderId}`
+    });
+    for (const message of result.transcriptMessages.filter(
+      (entry) => entry.role !== "user" && !entry.toolCall
+    )) {
+      this.store.addMessage(conversationId, message.role, message.content);
+    }
+    for (const event of result.events) {
+      this.store.addLog({ ...event, conversationId });
+      this.store.addPipelineEvent({
+        conversationId,
+        stage: event.category === "MCP" ? "MCP" : "AGENT",
+        status: "completed",
+        message: event.message
+      });
+    }
+    this.store.addPipelineEvent({
+      conversationId,
+      stage: "AGENT",
+      status: "completed",
+      message: `Native multimodal audio output produced by ${pipeline.nativeProviderId}`
+    });
+    return {
+      conversationId,
+      transcript: result.transcript,
+      response: result.response,
+      usedTools: result.usedTools,
+      audio: result.audio
+    };
   }
 
   private async runAgent(

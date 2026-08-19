@@ -1,88 +1,15 @@
-import { useEffect, useState, type FormEvent } from "react";
-import { useForm } from "@tanstack/react-form";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { FormEvent } from "react";
 
-import type { LlmMode } from "@voxmesh/shared";
-
-import { apiClient } from "../../api.js";
 import { useI18n } from "../../i18n/i18n.js";
-import { llmConfigurationQueryOptions, queryKeys } from "../../query.js";
-import { localizedError } from "../../utils/errors.js";
-import { LlmConfigurationFields } from "./LlmConfigurationFields.js";
-
-const defaultValues: {
-  mode: LlmMode;
-  endpoint: string;
-  deployment: string;
-  apiVersion: string;
-  apiKey: string;
-} = {
-  mode: "mock",
-  endpoint: "",
-  deployment: "",
-  apiVersion: "2024-10-21",
-  apiKey: ""
-};
+import { AzureLlmFields } from "./AzureLlmFields.js";
+import { LlmProviderFields } from "./LlmProviderFields.js";
+import { OpenAiCompatibleFields } from "./OpenAiCompatibleFields.js";
+import { useLlmSettings } from "./useLlmSettings.js";
 
 export function LlmSettingsCard() {
   const { t } = useI18n();
-  const queryClient = useQueryClient();
-  const configuration = useQuery(llmConfigurationQueryOptions());
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
-  const saveConfiguration = useMutation({
-    mutationFn: apiClient.updateLlmConfiguration,
-    onSuccess: (updated) => {
-      queryClient.setQueryData(queryKeys.llmConfiguration, updated);
-    }
-  });
-  const testConnection = useMutation({
-    mutationFn: apiClient.testLlmConnection
-  });
-  const form = useForm({
-    defaultValues,
-    onSubmit: async ({ value }) => {
-      setError("");
-      setMessage("");
-      try {
-        await saveConfiguration.mutateAsync({
-          mode: value.mode,
-          endpoint: value.endpoint,
-          deployment: value.deployment,
-          apiVersion: value.apiVersion,
-          ...(value.apiKey ? { apiKey: value.apiKey } : {})
-        });
-        form.setFieldValue("apiKey", "");
-        setMessage(t("settings.llmSaved"));
-      } catch (caught) {
-        setError(localizedError(caught, t, "settings.saveFailed"));
-      }
-    }
-  });
-
-  useEffect(() => {
-    if (configuration.data) {
-      form.reset({
-        mode: configuration.data.mode,
-        endpoint: configuration.data.endpoint,
-        deployment: configuration.data.deployment,
-        apiVersion: configuration.data.apiVersion,
-        apiKey: ""
-      });
-    }
-  }, [configuration.data, form]);
-
-  const test = async () => {
-    setError("");
-    setMessage("");
-    try {
-      const result = await testConnection.mutateAsync();
-      setMessage(t("settings.connectionResult", { response: result.response }));
-    } catch (caught) {
-      setError(localizedError(caught, t, "settings.connectionFailed"));
-    }
-  };
-
+  const { form, configuration, message, error, testing, test } =
+    useLlmSettings();
   const submit = (event: FormEvent) => {
     event.preventDefault();
     event.stopPropagation();
@@ -98,28 +25,62 @@ export function LlmSettingsCard() {
           selector={(state) => [state.values, state.isSubmitting] as const}
         >
           {([values, isSubmitting]) => (
-            <LlmConfigurationFields
-              mode={values.mode}
-              endpoint={values.endpoint}
-              deployment={values.deployment}
-              apiVersion={values.apiVersion}
-              apiKey={values.apiKey}
-              apiKeyConfigured={configuration.data?.apiKeyConfigured ?? false}
-              busy={isSubmitting || testConnection.isPending}
-              describedBy={error ? "llm-settings-error" : undefined}
-              onModeChange={(value) => form.setFieldValue("mode", value)}
-              onEndpointChange={(value) =>
-                form.setFieldValue("endpoint", value)
-              }
-              onDeploymentChange={(value) =>
-                form.setFieldValue("deployment", value)
-              }
-              onApiVersionChange={(value) =>
-                form.setFieldValue("apiVersion", value)
-              }
-              onApiKeyChange={(value) => form.setFieldValue("apiKey", value)}
-              onTestConnection={() => void test()}
-            />
+            <>
+              <LlmProviderFields
+                mode={values.mode}
+                apiKey={values.apiKey}
+                apiKeyConfigured={configuration?.apiKeyConfigured ?? false}
+                onModeChange={(value) => form.setFieldValue("mode", value)}
+                onApiKeyChange={(value) => form.setFieldValue("apiKey", value)}
+              />
+              {values.mode === "azure-openai" ? (
+                <AzureLlmFields
+                  endpoint={values.endpoint}
+                  deployment={values.deployment}
+                  apiVersion={values.apiVersion}
+                  onEndpointChange={(value) =>
+                    form.setFieldValue("endpoint", value)
+                  }
+                  onDeploymentChange={(value) =>
+                    form.setFieldValue("deployment", value)
+                  }
+                  onApiVersionChange={(value) =>
+                    form.setFieldValue("apiVersion", value)
+                  }
+                />
+              ) : null}
+              {values.mode === "openai-compatible" ? (
+                <OpenAiCompatibleFields
+                  baseUrl={values.baseUrl}
+                  model={values.model}
+                  timeoutMs={values.timeoutMs}
+                  maxOutputTokens={values.maxOutputTokens}
+                  onBaseUrlChange={(value) =>
+                    form.setFieldValue("baseUrl", value)
+                  }
+                  onModelChange={(value) => form.setFieldValue("model", value)}
+                  onTimeoutChange={(value) =>
+                    form.setFieldValue("timeoutMs", value)
+                  }
+                  onMaxOutputTokensChange={(value) =>
+                    form.setFieldValue("maxOutputTokens", value)
+                  }
+                />
+              ) : null}
+              <div className="button-row">
+                <button disabled={isSubmitting || testing}>
+                  {t("settings.saveLlm")}
+                </button>
+                <button
+                  className="secondary"
+                  type="button"
+                  disabled={isSubmitting || testing}
+                  onClick={() => void test()}
+                >
+                  {t("settings.testConnection")}
+                </button>
+              </div>
+            </>
           )}
         </form.Subscribe>
       </form>

@@ -9,8 +9,7 @@ const pages = [
   { to: "/dashboard", key: "nav.dashboard" },
   { to: "/chat", key: "nav.chat" },
   { to: "/conversations", key: "nav.conversations" },
-  { to: "/logs", key: "nav.logs" },
-  { to: "/settings", key: "nav.settings" }
+  { to: "/logs", key: "nav.logs" }
 ] as const;
 
 export function Console() {
@@ -49,6 +48,14 @@ export function Console() {
               {t(page.key)}
             </Link>
           ))}
+          <Link
+            to="/settings"
+            search={{ section: "general" }}
+            activeOptions={{ includeSearch: false }}
+            activeProps={{ className: "active" }}
+          >
+            {t("nav.settings")}
+          </Link>
         </nav>
         <button className="secondary" onClick={() => logout.mutate()}>
           {t("auth.signOut")}

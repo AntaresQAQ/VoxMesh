@@ -69,7 +69,64 @@ describe("authenticated routing", () => {
       endpoint: "",
       deployment: "",
       apiVersion: "2024-10-21",
+      baseUrl: "",
+      model: "qwen-plus",
+      timeoutMs: 30_000,
+      maxOutputTokens: 1_024,
       apiKeyConfigured: false
+    });
+    vi.spyOn(apiClient, "providerCatalog").mockResolvedValue({
+      providers: [
+        {
+          id: "mock",
+          displayName: "Mock",
+          capabilities: ["llm", "stt", "tts"]
+        },
+        {
+          id: "azure-openai",
+          displayName: "Azure OpenAI",
+          capabilities: ["llm", "stt", "tts"]
+        },
+        {
+          id: "openai-compatible",
+          displayName: "OpenAI-compatible",
+          capabilities: ["llm", "stt", "tts"]
+        },
+        {
+          id: "alibaba-model-studio",
+          displayName: "Alibaba Cloud Model Studio",
+          capabilities: ["stt", "tts"]
+        },
+        {
+          id: "mock-native",
+          displayName: "Mock Native Multimodal",
+          capabilities: [
+            "native-multimodal",
+            "audio-input",
+            "audio-output",
+            "tool-calling"
+          ]
+        }
+      ]
+    });
+    vi.spyOn(apiClient, "speechConfiguration").mockResolvedValue({
+      sttMode: "mock",
+      ttsMode: "mock",
+      sttEndpoint: "",
+      sttDeployment: "",
+      sttApiVersion: "2025-04-01-preview",
+      sttLanguage: "zh",
+      sttApiKeyConfigured: false,
+      ttsEndpoint: "",
+      ttsDeployment: "",
+      ttsApiVersion: "2025-03-01-preview",
+      ttsVoice: "coral",
+      ttsInstructions: "Speak clearly and naturally.",
+      ttsApiKeyConfigured: false
+    });
+    vi.spyOn(apiClient, "voicePipelineConfiguration").mockResolvedValue({
+      mode: "composed",
+      nativeProviderId: "mock-native"
     });
     const onLogout = vi.fn(async () => undefined);
     vi.spyOn(apiClient, "logout").mockImplementation(onLogout);
