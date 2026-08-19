@@ -12,6 +12,10 @@ The linked documents are authoritative. In particular:
 - User conversation may be in English or Chinese.
 - Functional behavior must be discussed and explicitly confirmed before implementation.
 - Changes must remain within the confirmed scope.
+- Never modify `main` directly; work on a dedicated `<type>/<short-description>` branch created from the latest `main`.
+- All changes must reach `main` through a reviewed pull request with passing required CI.
+- Commit messages and PR titles must use an English prefix such as `feat:`, `fix:`, or `docs:`.
+- Split unrelated concerns and different change types into focused commits.
 - Complete unit, integration where applicable, and end-to-end tests are required for every functional change.
 - Applicable format, lint, type-check, test, and production-build checks must pass.
 - Never commit, push, create or merge a pull request, or perform any other Git remote operation without explicit confirmation for that exact operation.

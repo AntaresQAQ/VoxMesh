@@ -13,6 +13,10 @@ The linked documents are authoritative and mandatory.
 - Use English for all repository content, documentation, code comments, tests, logs, errors, configuration descriptions, and user-facing copy.
 - Conversation with the user may be in English or Chinese.
 - Discuss and explicitly confirm behavior, scope, risks, acceptance criteria, and testing before implementing any functional change.
+- Never edit directly on `main`; use a dedicated `<type>/<short-description>` branch based on the latest `main`.
+- Deliver changes through a reviewed pull request with passing required CI.
+- Use English Conventional Commit-style commit messages and PR titles such as `feat: ...`, `fix: ...`, and `docs: ...`.
+- Split unrelated concerns and different change types into focused, reviewable commits.
 - Do not introduce unrelated refactoring, cleanup, dependency updates, or features.
 - Preserve the platform-independent Agent Core and adapter boundaries defined in the MVP specification.
 - Use strict TypeScript and explicit validation and error handling. Do not bypass type safety.

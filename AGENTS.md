@@ -17,6 +17,10 @@ Before planning or changing this repository, read:
 - Write all repository content, documentation, comments, test names, logs, and user-facing text in English.
 - Discuss requirements, behavior, scope, risks, acceptance criteria, and testing before implementing a functional change.
 - Do not write behavior-changing code until the user explicitly confirms the proposed functional change.
+- Never edit directly on `main`; create a dedicated `<type>/<short-description>` branch from the latest `main`.
+- Deliver every change to `main` through a reviewed pull request with passing required CI.
+- Use English Conventional Commit-style commit messages and PR titles such as `feat: ...`, `fix: ...`, or `docs: ...`.
+- Split unrelated concerns and different change types into focused, reviewable commits instead of one catch-all commit.
 - Keep changes strictly within the confirmed scope and preserve existing user changes.
 - Do not commit, amend, rebase, tag, push, force-push, create a pull request, merge, or release without explicit confirmation for that specific operation.
 - Every functional change must include complete unit, integration where applicable, and end-to-end tests.
