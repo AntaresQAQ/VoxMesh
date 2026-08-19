@@ -24,6 +24,12 @@ Before planning or changing this repository, read:
 - Keep changes strictly within the confirmed scope and preserve existing user changes.
 - Do not commit, amend, rebase, tag, push, force-push, create a pull request, merge, or release without explicit confirmation for that specific operation.
 - Every functional change must include complete unit, integration where applicable, and end-to-end tests.
+- Add thorough English developer documentation for features, packages, APIs, configuration, architecture boundaries, failure behavior, and extension points.
+- Add concise JSDoc and reasoning comments for public contracts, security-sensitive behavior, state machines, invariants, workarounds, and non-obvious decisions; never add comments that merely restate code.
+- Keep Web Console components small and single-purpose; decompose pages into focused feature and shared components.
+- Add focused behavioral unit tests for every new or changed Web Console component.
+- Meet WCAG 2.2 AA; verify keyboard navigation, visible focus, semantic HTML, form announcements, responsive zoom, and required contrast in English/Chinese and Light/Dark themes.
+- Run jsx-a11y linting and representative Playwright axe scans; never suppress accessibility failures without explicit approval and tracking.
 - Run all applicable formatting, linting, type-checking, testing, and production-build checks before reporting work as complete.
 - Never expose or commit secrets, credentials, tokens, personal data, or machine-specific configuration.
 - Preserve the platform-independent architecture and dependency direction defined in `docs/MVP.md`.

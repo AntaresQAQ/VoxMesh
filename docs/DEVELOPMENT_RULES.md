@@ -103,6 +103,69 @@ Before requesting confirmation, the proposed change SHOULD state:
 - Dependency versions MUST be pinned through the lockfile. Unrelated dependency updates MUST NOT be included.
 - Dead code, commented-out code, placeholder implementations, and unresolved TODOs MUST NOT be merged unless explicitly approved and tracked.
 
+### 6.1 Implementation Documentation and Code Comments
+
+- Implementation changes MUST include enough English documentation for another contributor to understand the feature, architecture boundary, configuration, expected behavior, failure behavior, and validation without reverse-engineering the code.
+- New packages, applications, major features, adapters, protocols, deployment paths, and operational workflows MUST have an appropriate README, guide, architecture section, or ADR.
+- Exported interfaces, classes, functions, hooks, schemas, configuration types, and extension points MUST have concise JSDoc when their purpose, contract, constraints, errors, lifecycle, security implications, or usage are not completely obvious from the type and name.
+- Provider, storage, MCP, audio, platform, authentication, routing, migration, and protocol boundaries MUST document:
+  - responsibility and dependency direction
+  - input and output contracts
+  - validation and trust boundaries
+  - expected errors and recovery behavior
+  - timeout, cancellation, retry, and resource-lifecycle expectations
+  - security, privacy, and secret-handling constraints
+- Complex algorithms, state machines, concurrency behavior, transaction boundaries, compatibility workarounds, and non-obvious performance decisions MUST include comments that explain the reasoning and invariants.
+- Security-sensitive code MUST document the threat or failure being prevented, not merely state that the code is secure.
+- Workarounds MUST explain why they are required, what upstream or platform behavior they address, and the condition under which they may be removed.
+- Public configuration options MUST be documented with purpose, type, default, examples, validation rules, restart requirements, and security considerations.
+- API and event examples SHOULD be included when they materially improve integration or debugging.
+- Tests SHOULD include descriptive names and focused setup that make the intended contract clear. Tests are supporting documentation but MUST NOT replace feature or API documentation.
+- Comments and documentation MUST be updated or removed in the same change when behavior changes. Stale or misleading documentation is a defect.
+- Contributors SHOULD document decisions while implementing rather than postponing all explanation until the end of the change.
+- Documentation and comments MUST remain concise, accurate, and useful. Line-by-line narration, comments that restate syntax, redundant JSDoc, and comments that compensate for unclear naming or poor decomposition MUST NOT be added.
+
+### 6.2 Web Component Design
+
+- Web Console components MUST be small, cohesive, and responsible for one clearly named UI concern.
+- Page components MUST primarily compose feature and shared components. They MUST NOT contain unrelated forms, panels, data-loading workflows, and presentation details in one monolithic component.
+- Independent visual sections, forms, dialogs, tables, lists, navigation elements, selectors, status cards, and repeated patterns MUST be extracted into focused components.
+- Stateful business or orchestration logic SHOULD be extracted into typed hooks or application services when doing so keeps rendering components easier to understand and test.
+- Network requests, persistence, browser APIs, timers, and subscriptions MUST be isolated behind explicit hooks, clients, or providers rather than hidden throughout presentation markup.
+- Shared components MUST have explicit, minimal, strongly typed props and MUST NOT depend on unrelated global state.
+- Feature-specific components SHOULD remain inside their feature boundary. Components MUST NOT be promoted to shared abstractions until at least two real use cases demonstrate a stable common contract.
+- A component or page file approaching 150 lines, containing multiple independent state machines, or rendering multiple independently testable sections MUST trigger a decomposition review. The line count is a review signal, not permission to keep an incohesive component below the limit.
+- Large conditional render trees MUST be decomposed into named components instead of nested inline branches.
+- Component names MUST describe user-facing responsibility rather than implementation detail.
+- Component decomposition MUST preserve accessibility relationships, error boundaries, localization, theme behavior, and type safety.
+
+### 6.3 Accessibility
+
+- Every user-facing Web Console feature MUST meet WCAG 2.2 Level AA.
+- Text contrast MUST be at least 4.5:1 for normal text and 3:1 for large text.
+- User-interface components, meaningful graphics, borders required to understand a control, and focus indicators MUST have at least 3:1 contrast against adjacent colors.
+- Light, Dark, and System themes MUST each satisfy the required contrast ratios.
+- English, Simplified Chinese, longer translations, and responsive layouts MUST preserve readability, control labels, focus order, and accessible names.
+- Every interactive function MUST be usable with a keyboard without requiring a pointer.
+- Focus MUST be visible, logical, and restored or moved intentionally after route changes, dialogs, destructive actions, and major asynchronous transitions.
+- Browser-history navigation and direct routes MUST expose a meaningful page heading and announce or focus the new route content.
+- Use native semantic HTML before ARIA. ARIA MUST NOT duplicate, override, or repair semantics that can be expressed natively.
+- Pages MUST have appropriate landmarks, heading hierarchy, form labels, button names, link purpose, table semantics, and list semantics.
+- Form instructions, validation, errors, and success status MUST be programmatically associated with the relevant controls and announced when necessary.
+- Color MUST NOT be the only way to communicate state, severity, selection, validation, or availability.
+- Content MUST remain usable at 200% browser zoom and under narrow responsive layouts without loss of information or functionality.
+- Motion and animation MUST respect `prefers-reduced-motion`. Essential behavior MUST NOT depend on animation.
+- Images, icons, audio controls, and future waveform or device visualizations MUST provide appropriate text alternatives or accessible names.
+- Automated accessibility validation MUST include:
+  - `eslint-plugin-jsx-a11y` or an approved equivalent
+  - component tests using accessible queries
+  - browser axe scans for representative routes in English and Simplified Chinese
+  - browser axe scans in Light and Dark themes
+  - Playwright keyboard, focus, routing, and form behavior where applicable
+- Automated tools do not replace manual review. Every significant UI change MUST include a keyboard and visual contrast review.
+- Accessibility rules MUST NOT be disabled, excluded, or suppressed merely to make CI pass. Any unavoidable exception requires explicit approval, a documented reason, and a tracking issue.
+- An accessibility regression is a functional defect and MUST block completion.
+
 ## 7. Testing Requirements
 
 Every functional change MUST include complete automated tests.
@@ -114,13 +177,34 @@ Every functional change MUST include complete automated tests.
 - Test doubles MUST model meaningful behavior and failure modes rather than only returning successful responses.
 - Bug fixes MUST include a regression test that fails before the fix and passes after it.
 
-### 7.2 Integration Tests
+### 7.2 Component Unit Tests
+
+- Every Web Console component MUST have automated unit tests unless it is a trivial type-only or style-only module with no rendered behavior.
+- Page components MUST have tests for composition and page-level state. Extracted child components MUST have their own focused tests.
+- Component tests MUST cover, where applicable:
+  - required rendering and accessible names
+  - prop variants and conditional content
+  - user interactions and emitted callbacks
+  - loading, empty, success, disabled, and error states
+  - form validation and submission behavior
+  - keyboard interaction and essential accessibility behavior
+  - English and Simplified Chinese rendering
+  - Light and Dark theme-compatible states when behavior or structure differs
+  - hooks, providers, timers, subscriptions, and browser API integration
+- Tests MUST exercise observable behavior through accessible queries rather than component internals, private functions, CSS implementation details, or brittle snapshots.
+- Snapshot-only coverage is insufficient. Snapshots MAY supplement explicit behavioral assertions but MUST NOT replace them.
+- Network and storage dependencies MUST be replaced with deterministic test doubles at the component boundary.
+- Component tests MUST run in the standard unit-test command and in required CI.
+- A new or changed component is incomplete when its component unit tests are missing, skipped, or weaker than the behavior introduced.
+- Component tests MUST prefer queries by role, label, and accessible name so missing semantics are exposed as test failures.
+
+### 7.3 Integration Tests
 
 - Boundaries between packages, adapters, storage, HTTP APIs, WebSocket events, MCP clients, and provider implementations MUST have integration tests where unit tests cannot prove the contract.
 - Database tests MUST verify migrations, constraints, transactions, rollback behavior, and compatibility with existing data.
 - API tests MUST verify status codes, response schemas, validation errors, authorization behavior, and failure responses.
 
-### 7.3 End-to-End Tests
+### 7.4 End-to-End Tests
 
 - Every user-visible feature MUST have end-to-end coverage for its primary successful flow.
 - End-to-end tests MUST also cover critical failure and recovery flows.
@@ -128,7 +212,7 @@ Every functional change MUST include complete automated tests.
 - Mock Mode MUST support reliable end-to-end testing without real hardware, Home Assistant, or paid external services.
 - Platform-specific behavior MUST be tested on the relevant platform or in a representative CI environment before release.
 
-### 7.4 Test Integrity
+### 7.5 Test Integrity
 
 - Tests MUST NOT be skipped, disabled, focused, quarantined, or weakened to make a change pass without explicit approval and a documented tracking issue.
 - Assertions MUST verify observable behavior, not implementation details, unless the implementation detail is itself a required contract.
@@ -201,6 +285,8 @@ production build
 ## 13. Documentation
 
 - Documentation MUST be updated in the same change as the behavior it describes.
+- Feature implementation MUST include developer-facing documentation in addition to user-facing instructions when architecture, extension, debugging, or maintenance knowledge is required.
+- Public and extension-facing code contracts MUST be documented close to the code and linked from higher-level guides where appropriate.
 - Setup instructions MUST be reproducible from a clean environment.
 - Configuration documentation MUST include purpose, type, default, required status, security considerations, and examples with non-secret placeholder values.
 - Architecture decisions with long-term impact SHOULD be recorded as Architecture Decision Records under `docs/adr/`.
@@ -210,6 +296,7 @@ production build
 ## 14. CI, Review, and Release Gates
 
 - Required validation MUST run in CI for pull requests and protected branches.
+- Accessibility linting and browser axe scans MUST run in required CI.
 - The `main` branch MUST be protected against direct pushes and merges that bypass required review or CI.
 - A change MUST NOT be merged when required CI checks fail.
 - Functional changes MUST receive review from someone other than the author before merge.
@@ -228,8 +315,10 @@ A feature or fix is complete only when all of the following are true:
 4. Unit, integration, and end-to-end tests were added or updated as required.
 5. All applicable validation passes.
 6. Documentation and configuration examples are current and written in English.
-7. No secrets, debug artifacts, disabled tests, or unrelated changes are included.
-8. Any migration, deployment, observability, and rollback requirements are complete.
-9. The user has reviewed the result before any commit, push, pull request, merge, or release operation.
+7. Public contracts, non-obvious implementation decisions, security constraints, and extension points have accurate JSDoc or code comments.
+8. WCAG 2.2 AA, keyboard, focus, contrast, localization, theme, and responsive accessibility checks pass.
+9. No secrets, debug artifacts, disabled tests, or unrelated changes are included.
+10. Any migration, deployment, observability, and rollback requirements are complete.
+11. The user has reviewed the result before any commit, push, pull request, merge, or release operation.
 
 If any item is missing, the work MUST be reported as incomplete.

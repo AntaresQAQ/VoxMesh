@@ -1,0 +1,93 @@
+import type {
+  ChatResponse,
+  ConversationDetail,
+  ConversationSummary,
+  Dashboard,
+  LlmConfiguration,
+  LlmConfigurationUpdate,
+  LlmConnectionTest,
+  LogEntry,
+  Session,
+  SetupStatus
+} from "@voxmesh/shared";
+
+interface ApiFailure {
+  error?: {
+    code?: string;
+    message?: string;
+  };
+}
+
+export class ApiClientError extends Error {
+  public constructor(
+    public readonly code: string | undefined,
+    message: string
+  ) {
+    super(message);
+    this.name = "ApiClientError";
+  }
+}
+
+export async function api<T>(path: string, options?: RequestInit): Promise<T> {
+  const headers = new Headers(options?.headers);
+  if (options?.body !== undefined && !headers.has("content-type")) {
+    headers.set("content-type", "application/json");
+  }
+  const response = await fetch(path, {
+    ...options,
+    credentials: "same-origin",
+    headers
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as ApiFailure;
+    throw new ApiClientError(
+      body.error?.code,
+      body.error?.message ?? `Request failed (${response.status})`
+    );
+  }
+  if (response.status === 204) {
+    return undefined as T;
+  }
+  return (await response.json()) as T;
+}
+
+export const apiClient = {
+  setupStatus: () => api<SetupStatus>("/api/setup/status"),
+  setup: (password: string) =>
+    api<SetupStatus>("/api/setup", {
+      method: "POST",
+      body: JSON.stringify({ password })
+    }),
+  login: (password: string) =>
+    api<Session>("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ password })
+    }),
+  session: () => api<Session>("/api/auth/session"),
+  logout: () => api<void>("/api/auth/logout", { method: "POST" }),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    api<void>("/api/auth/password", {
+      method: "POST",
+      body: JSON.stringify({ currentPassword, newPassword })
+    }),
+  llmConfiguration: () => api<LlmConfiguration>("/api/config/llm"),
+  updateLlmConfiguration: (configuration: LlmConfigurationUpdate) =>
+    api<LlmConfiguration>("/api/config/llm", {
+      method: "PUT",
+      body: JSON.stringify(configuration)
+    }),
+  testLlmConnection: () =>
+    api<LlmConnectionTest>("/api/config/llm/test", { method: "POST" }),
+  dashboard: () => api<Dashboard>("/api/dashboard"),
+  chat: (message: string) =>
+    api<ChatResponse>("/api/chat", {
+      method: "POST",
+      body: JSON.stringify({ message })
+    }),
+  conversations: async () =>
+    (await api<{ conversations: ConversationSummary[] }>("/api/conversations"))
+      .conversations,
+  conversation: (id: string) =>
+    api<ConversationDetail>(`/api/conversations/${id}`),
+  logs: async () => (await api<{ logs: LogEntry[] }>("/api/logs")).logs
+};
