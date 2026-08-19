@@ -318,6 +318,23 @@ main > header {
   margin-top: 1.5rem;
 }
 
+.voice-controls {
+  max-width: 760px;
+  margin-top: 1.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  padding: 1.25rem;
+  background: var(--color-surface);
+}
+
+.voice-result {
+  margin-top: 1rem;
+}
+
+.voice-result p:last-child {
+  margin-bottom: 0;
+}
+
 .split {
   display: grid;
   grid-template-columns: minmax(250px, 0.8fr) minmax(320px, 1.2fr);
@@ -360,6 +377,39 @@ main > header {
   overflow-wrap: anywhere;
 }
 
+.pipeline {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0;
+  list-style: none;
+}
+
+.pipeline li {
+  border-left: 4px solid var(--color-accent);
+  border-radius: 8px;
+  padding: 0.9rem 1rem;
+  background: var(--color-surface);
+}
+
+.pipeline li > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.pipeline li p {
+  margin: 0.5rem 0;
+}
+
+.pipeline-status {
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+}
+
+.pipeline-status.failed {
+  color: var(--color-error);
+}
+
 .logs article {
   display: grid;
   grid-template-columns: 90px 80px 70px 1fr;
@@ -374,7 +424,39 @@ main > header {
 .settings-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  align-items: start;
   gap: 1.5rem;
+}
+
+.settings-section-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: 0.75rem;
+}
+
+.settings-section-nav a {
+  border-radius: 10px;
+  padding: 0.7rem 1rem;
+  color: var(--color-text-muted);
+  text-decoration: none;
+}
+
+.settings-section-nav a:hover,
+.settings-section-nav a.active {
+  color: var(--color-active-text);
+  background: var(--color-active);
+}
+
+.settings-provider-stack {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.settings-provider-stack > .settings-card {
+  width: 100%;
 }
 
 .settings-card {
@@ -382,6 +464,32 @@ main > header {
   border-radius: 14px;
   padding: 1.5rem;
   background: var(--color-surface);
+}
+
+.settings-card-wide {
+  grid-column: 1 / -1;
+}
+
+.settings-card fieldset {
+  display: grid;
+  gap: 1rem;
+  margin: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 1rem;
+}
+
+.settings-card legend {
+  padding: 0 0.4rem;
+  color: var(--color-text-strong);
+  font-weight: 700;
+}
+
+.speech-provider-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 1rem;
 }
 
 .button-row {
@@ -425,6 +533,10 @@ main > header {
 
   .settings-card {
     min-width: 0;
+  }
+
+  .speech-provider-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .logs article {

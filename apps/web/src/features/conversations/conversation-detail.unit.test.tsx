@@ -34,6 +34,15 @@ describe("ConversationDetailPage", () => {
           content: "Loaded from route parameter",
           createdAt: "2026-08-19T00:00:01.000Z"
         }
+      ],
+      events: [
+        {
+          id: "event-1",
+          stage: "AGENT",
+          status: "completed",
+          message: "Agent completed",
+          createdAt: "2026-08-19T00:00:01.000Z"
+        }
       ]
     });
     renderWithProviders(<ConversationDetailPage />);
@@ -42,6 +51,7 @@ describe("ConversationDetailPage", () => {
       await screen.findByRole("heading", { name: "Deep-linked conversation" })
     ).toBeVisible();
     expect(screen.getByText("Loaded from route parameter")).toBeVisible();
+    expect(screen.getByText("Agent completed")).toBeVisible();
     expect(screen.getByRole("link", { name: "Conversations" })).toHaveAttribute(
       "href",
       "/conversations"

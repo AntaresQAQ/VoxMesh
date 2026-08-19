@@ -10,13 +10,7 @@ import Fastify, {
   type FastifyRequest
 } from "fastify";
 
-import {
-  AgentRuntime,
-  MockLlmProvider,
-  MockMcpServer,
-  type LlmProvider
-} from "@voxmesh/agent-core";
-import { AzureOpenAiProvider } from "@voxmesh/ai";
+import { MockMcpServer } from "@voxmesh/agent-core";
 import {
   ApiErrorSchema,
   ChatRequestSchema,
@@ -31,19 +25,44 @@ import {
   LogListSchema,
   PasswordChangeSchema,
   PasswordSchema,
+  ProviderCatalogSchema,
   SessionSchema,
-  SetupStatusSchema
+  SpeechConfigurationSchema,
+  SpeechConfigurationUpdateSchema,
+  SpeechConnectionTestSchema,
+  SetupStatusSchema,
+  VoiceResponseSchema,
+  VoicePipelineConfigurationSchema,
+  VoicePipelineConfigurationUpdateSchema
 } from "@voxmesh/shared";
-import { VoxMeshStore, type StoredLlmConfiguration } from "@voxmesh/storage";
+import { VoxMeshStore } from "@voxmesh/storage";
 
 import type { ServerConfig } from "./config.js";
+import { ConversationService } from "./conversation-service.js";
+import {
+  createLlmProvider,
+  publicLlmConfiguration,
+  validateLlmConfiguration
+} from "./llm-providers.js";
 import { LoginRateLimiter } from "./login-rate-limiter.js";
+import {
+  createNativeVoiceProvider,
+  validateNativeVoiceConfiguration
+} from "./native-voice-providers.js";
+import { providerCatalog } from "./provider-catalog.js";
 import {
   createSessionToken,
   hashPassword,
   hashSessionToken,
   verifyPassword
 } from "./security.js";
+import {
+  createSpeechToTextProvider,
+  createTextToSpeechProvider,
+  publicSpeechConfiguration,
+  testSpeechProviders,
+  validateSpeechConfiguration
+} from "./speech-providers.js";
 
 const SESSION_COOKIE = "voxmesh_session";
 
@@ -64,10 +83,28 @@ export async function buildServer(
   const store =
     dependencies.store ?? new VoxMeshStore(dependencies.config.databasePath);
   const mcp = new MockMcpServer();
+  const conversationService = new ConversationService(
+    store,
+    mcp,
+    () => createLlmProvider(store.getLlmConfiguration()),
+    () => createSpeechToTextProvider(store.getSpeechConfiguration()),
+    () => createTextToSpeechProvider(store.getSpeechConfiguration()),
+    createNativeVoiceProvider
+  );
   const loginRateLimiter = new LoginRateLimiter();
   const startedAt = Date.now();
 
   await app.register(fastifyCookie);
+  app.addContentTypeParser(
+    /^audio\/.+/,
+    { parseAs: "buffer", bodyLimit: 5 * 1024 * 1024 },
+    (_request, body, done) => done(null, body)
+  );
+  app.addContentTypeParser(
+    "application/octet-stream",
+    { parseAs: "buffer", bodyLimit: 5 * 1024 * 1024 },
+    (_request, body, done) => done(null, body)
+  );
 
   app.addHook("onClose", async () => {
     if (!dependencies.store) {
@@ -374,6 +411,10 @@ export async function buildServer(
         endpoint: request.body.endpoint,
         deployment: request.body.deployment,
         apiVersion: request.body.apiVersion,
+        baseUrl: request.body.baseUrl,
+        model: request.body.model,
+        timeoutMs: request.body.timeoutMs,
+        maxOutputTokens: request.body.maxOutputTokens,
         apiKey:
           request.body.apiKey ??
           (request.body.clearApiKey ? null : current.apiKey)
@@ -423,6 +464,118 @@ export async function buildServer(
   );
 
   app.get(
+    "/api/config/speech",
+    {
+      preHandler: authenticate,
+      schema: {
+        response: {
+          200: SpeechConfigurationSchema,
+          401: ApiErrorSchema
+        }
+      }
+    },
+    async () => publicSpeechConfiguration(store.getSpeechConfiguration())
+  );
+
+  app.put(
+    "/api/config/speech",
+    {
+      preHandler: authenticate,
+      schema: {
+        body: SpeechConfigurationUpdateSchema,
+        response: {
+          200: SpeechConfigurationSchema,
+          400: ApiErrorSchema,
+          401: ApiErrorSchema
+        }
+      }
+    },
+    async (request) => {
+      const current = store.getSpeechConfiguration();
+      validateSpeechConfiguration({
+        sttMode: request.body.sttMode,
+        ttsMode: request.body.ttsMode,
+        sttEndpoint: request.body.sttEndpoint,
+        sttDeployment: request.body.sttDeployment,
+        sttApiVersion: request.body.sttApiVersion,
+        sttLanguage: request.body.sttLanguage,
+        sttApiKey:
+          request.body.sttApiKey ??
+          (request.body.clearSttApiKey ? null : current.sttApiKey),
+        ttsEndpoint: request.body.ttsEndpoint,
+        ttsDeployment: request.body.ttsDeployment,
+        ttsApiVersion: request.body.ttsApiVersion,
+        ttsVoice: request.body.ttsVoice,
+        ttsInstructions: request.body.ttsInstructions,
+        ttsApiKey:
+          request.body.ttsApiKey ??
+          (request.body.clearTtsApiKey ? null : current.ttsApiKey)
+      });
+      const updated = store.updateSpeechConfiguration(request.body);
+      store.addLog({
+        category: "SYSTEM",
+        level: "INFO",
+        message: `Speech providers configured as STT=${updated.sttMode}, TTS=${updated.ttsMode}`
+      });
+      return publicSpeechConfiguration(updated);
+    }
+  );
+
+  app.post(
+    "/api/config/speech/test",
+    {
+      preHandler: authenticate,
+      schema: {
+        response: {
+          200: SpeechConnectionTestSchema,
+          400: ApiErrorSchema,
+          401: ApiErrorSchema
+        }
+      }
+    },
+    async () => testSpeechProviders(store.getSpeechConfiguration())
+  );
+
+  app.get(
+    "/api/config/voice-pipeline",
+    {
+      preHandler: authenticate,
+      schema: {
+        response: {
+          200: VoicePipelineConfigurationSchema,
+          401: ApiErrorSchema
+        }
+      }
+    },
+    async () => store.getVoicePipelineConfiguration()
+  );
+
+  app.put(
+    "/api/config/voice-pipeline",
+    {
+      preHandler: authenticate,
+      schema: {
+        body: VoicePipelineConfigurationUpdateSchema,
+        response: {
+          200: VoicePipelineConfigurationSchema,
+          400: ApiErrorSchema,
+          401: ApiErrorSchema
+        }
+      }
+    },
+    async (request) => {
+      validateNativeVoiceConfiguration(request.body);
+      const updated = store.updateVoicePipelineConfiguration(request.body);
+      store.addLog({
+        category: "SYSTEM",
+        level: "INFO",
+        message: `Voice pipeline configured as ${updated.mode}`
+      });
+      return updated;
+    }
+  );
+
+  app.get(
     "/api/dashboard",
     {
       preHandler: authenticate,
@@ -445,10 +598,24 @@ export async function buildServer(
       },
       providers: {
         llm: store.getLlmConfiguration().mode,
-        stt: "mock" as const,
-        tts: "mock" as const
+        stt: store.getSpeechConfiguration().sttMode,
+        tts: store.getSpeechConfiguration().ttsMode
       }
     })
+  );
+
+  app.get(
+    "/api/providers",
+    {
+      preHandler: authenticate,
+      schema: {
+        response: {
+          200: ProviderCatalogSchema,
+          401: ApiErrorSchema
+        }
+      }
+    },
+    async () => ({ providers: providerCatalog() })
   );
 
   app.post(
@@ -463,39 +630,54 @@ export async function buildServer(
         }
       }
     },
-    async (request) => {
-      const conversationId = store.createConversation(request.body.message);
-      try {
-        const agent = new AgentRuntime(
-          createLlmProvider(store.getLlmConfiguration()),
-          mcp
-        );
-        const result = await agent.run(request.body.message);
-        for (const message of result.transcript
-          .slice(1)
-          .filter((entry) => !entry.toolCall)) {
-          store.addMessage(conversationId, message.role, message.content);
+    async (request) => conversationService.runText(request.body.message)
+  );
+
+  app.post(
+    "/api/voice",
+    {
+      preHandler: authenticate,
+      schema: {
+        response: {
+          200: VoiceResponseSchema,
+          400: ApiErrorSchema,
+          401: ApiErrorSchema
         }
-        for (const event of result.events) {
-          store.addLog({
-            ...event,
-            conversationId
-          });
-        }
-        return {
-          conversationId,
-          response: result.response,
-          usedTools: result.usedTools
-        };
-      } catch (error) {
-        store.addLog({
-          category: "ERROR",
-          level: "ERROR",
-          message: error instanceof Error ? error.message : "Agent run failed",
-          conversationId
-        });
-        throw error;
       }
+    },
+    async (request, reply) => {
+      if (!Buffer.isBuffer(request.body)) {
+        return reply.status(400).send({
+          error: {
+            code: "INVALID_AUDIO_BODY",
+            message: "Voice requests require a binary audio body",
+            requestId: request.id
+          }
+        });
+      }
+      const mimeType =
+        request.headers["content-type"]?.split(";")[0] ??
+        "application/octet-stream";
+      const result = await conversationService.runVoice({
+        data: new Uint8Array(request.body),
+        mimeType
+      });
+      return {
+        conversationId: result.conversationId,
+        transcript: result.transcript,
+        response: result.response,
+        usedTools: result.usedTools,
+        audio: {
+          base64: Buffer.from(result.audio.data).toString("base64"),
+          mimeType: result.audio.mimeType,
+          ...(result.audio.sampleRate === undefined
+            ? {}
+            : { sampleRate: result.audio.sampleRate }),
+          ...(result.audio.channels === undefined
+            ? {}
+            : { channels: result.audio.channels })
+        }
+      };
     }
   );
 
@@ -575,56 +757,4 @@ export async function buildServer(
   }
 
   return app;
-}
-
-function createLlmProvider(config: StoredLlmConfiguration): LlmProvider {
-  validateLlmConfiguration(config);
-  if (config.mode === "mock") {
-    return new MockLlmProvider();
-  }
-  return new AzureOpenAiProvider({
-    endpoint: config.endpoint,
-    deployment: config.deployment,
-    apiVersion: config.apiVersion,
-    apiKey: config.apiKey ?? ""
-  });
-}
-
-function validateLlmConfiguration(config: StoredLlmConfiguration): void {
-  if (config.mode === "mock") {
-    return;
-  }
-  if (
-    !config.endpoint ||
-    !config.deployment ||
-    !config.apiVersion ||
-    !config.apiKey
-  ) {
-    throw badRequest(
-      "Azure OpenAI requires endpoint, deployment, API version, and API key"
-    );
-  }
-  let endpoint: URL;
-  try {
-    endpoint = new URL(config.endpoint);
-  } catch {
-    throw badRequest("Azure OpenAI endpoint must be a valid URL");
-  }
-  if (endpoint.protocol !== "https:") {
-    throw badRequest("Azure OpenAI endpoint must use HTTPS");
-  }
-}
-
-function publicLlmConfiguration(config: StoredLlmConfiguration) {
-  return {
-    mode: config.mode,
-    endpoint: config.endpoint,
-    deployment: config.deployment,
-    apiVersion: config.apiVersion,
-    apiKeyConfigured: config.apiKey !== null
-  };
-}
-
-function badRequest(message: string): Error & { statusCode: number } {
-  return Object.assign(new Error(message), { statusCode: 400 });
 }

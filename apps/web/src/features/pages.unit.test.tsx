@@ -43,12 +43,18 @@ describe("feature pages", () => {
         status: "connected",
         enabledTools: ["mock.get_device_status"]
       },
-      providers: { llm: "mock", stt: "mock", tts: "mock" }
+      providers: {
+        llm: "openai-compatible",
+        stt: "alibaba-model-studio",
+        tts: "alibaba-model-studio"
+      }
     });
     renderWithProviders(<DashboardPage />);
 
     expect(await screen.findByText("mock.get_device_status")).toBeVisible();
     expect(screen.getByText("2")).toBeVisible();
+    expect(screen.getByText("OpenAI-compatible")).toBeVisible();
+    expect(screen.getAllByText("Alibaba Cloud Model Studio")).toHaveLength(2);
   });
 
   it("submits chat and renders tool-assisted output", async () => {

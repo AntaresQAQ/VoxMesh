@@ -1,5 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 
+import type { Dashboard } from "@voxmesh/shared";
+
 import { Metric } from "../../components/layout/Metric.js";
 import { PageHeader } from "../../components/layout/PageHeader.js";
 import { useI18n } from "../../i18n/i18n.js";
@@ -31,11 +33,15 @@ export function DashboardPage() {
           <Metric label={t("dashboard.mcp")} value={t("common.connected")} />
           <Metric
             label={t("dashboard.llm")}
-            value={
-              dashboard.data.providers.llm === "mock"
-                ? t("common.mock")
-                : t("common.azureOpenAI")
-            }
+            value={providerLabel(dashboard.data.providers.llm, t)}
+          />
+          <Metric
+            label={t("dashboard.stt")}
+            value={providerLabel(dashboard.data.providers.stt, t)}
+          />
+          <Metric
+            label={t("dashboard.tts")}
+            value={providerLabel(dashboard.data.providers.tts, t)}
           />
           <Metric
             label={t("dashboard.enabledTool")}
@@ -47,4 +53,20 @@ export function DashboardPage() {
       )}
     </PageHeader>
   );
+}
+
+function providerLabel(
+  provider: Dashboard["providers"][keyof Dashboard["providers"]],
+  t: ReturnType<typeof useI18n>["t"]
+): string {
+  switch (provider) {
+    case "mock":
+      return t("common.mock");
+    case "azure-openai":
+      return t("common.azureOpenAI");
+    case "openai-compatible":
+      return t("common.openAiCompatible");
+    case "alibaba-model-studio":
+      return t("common.alibabaModelStudio");
+  }
 }

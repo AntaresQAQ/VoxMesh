@@ -7,8 +7,15 @@ import type {
   LlmConfigurationUpdate,
   LlmConnectionTest,
   LogEntry,
+  ProviderCatalog,
   Session,
-  SetupStatus
+  SpeechConfiguration,
+  SpeechConfigurationUpdate,
+  SpeechConnectionTest,
+  SetupStatus,
+  VoiceResponse,
+  VoicePipelineConfiguration,
+  VoicePipelineConfigurationUpdate
 } from "@voxmesh/shared";
 
 interface ApiFailure {
@@ -78,11 +85,37 @@ export const apiClient = {
     }),
   testLlmConnection: () =>
     api<LlmConnectionTest>("/api/config/llm/test", { method: "POST" }),
+  speechConfiguration: () => api<SpeechConfiguration>("/api/config/speech"),
+  updateSpeechConfiguration: (configuration: SpeechConfigurationUpdate) =>
+    api<SpeechConfiguration>("/api/config/speech", {
+      method: "PUT",
+      body: JSON.stringify(configuration)
+    }),
+  testSpeechConnection: () =>
+    api<SpeechConnectionTest>("/api/config/speech/test", { method: "POST" }),
+  providerCatalog: () => api<ProviderCatalog>("/api/providers"),
+  voicePipelineConfiguration: () =>
+    api<VoicePipelineConfiguration>("/api/config/voice-pipeline"),
+  updateVoicePipelineConfiguration: (
+    configuration: VoicePipelineConfigurationUpdate
+  ) =>
+    api<VoicePipelineConfiguration>("/api/config/voice-pipeline", {
+      method: "PUT",
+      body: JSON.stringify(configuration)
+    }),
   dashboard: () => api<Dashboard>("/api/dashboard"),
   chat: (message: string) =>
     api<ChatResponse>("/api/chat", {
       method: "POST",
       body: JSON.stringify({ message })
+    }),
+  voice: (audio: Blob) =>
+    api<VoiceResponse>("/api/voice", {
+      method: "POST",
+      headers: {
+        "content-type": audio.type || "application/octet-stream"
+      },
+      body: audio
     }),
   conversations: async () =>
     (await api<{ conversations: ConversationSummary[] }>("/api/conversations"))
