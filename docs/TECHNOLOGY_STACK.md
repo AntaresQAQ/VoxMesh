@@ -350,6 +350,10 @@ The CI matrix targets:
 - macOS
 - Windows
 
+Cross-platform jobs run formatting, linting, type-checking, unit tests, integration tests, and production builds through `pnpm validate:core`.
+
+Browser end-to-end tests run once in the official Playwright container with Chromium and its Linux system dependencies preinstalled. The container version must match the resolved `@playwright/test` version in `pnpm-lock.yaml`. This avoids downloading browsers and repeatedly installing operating-system packages on every matrix runner.
+
 Linux-only audio, packaging, and hardware checks must remain separate from the cross-platform development workflow.
 
 ## 10. Planned Integration Technologies
