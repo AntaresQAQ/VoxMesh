@@ -419,6 +419,14 @@ main > header {
     grid-template-columns: 1fr;
   }
 
+  .settings-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-card {
+    min-width: 0;
+  }
+
   .logs article {
     grid-template-columns: 1fr;
   }

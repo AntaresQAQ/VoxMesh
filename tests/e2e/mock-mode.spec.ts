@@ -113,7 +113,7 @@ test("completes setup, tool-assisted chat, inspection, and logout", async ({
   await page.getByLabel("Theme").selectOption("light");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   await expectAccessible(page, "English light settings");
-  await page.setViewportSize({ width: 375, height: 667 });
+  await page.setViewportSize({ width: 360, height: 667 });
   const responsiveWidth = await page.evaluate(() => ({
     viewport: document.documentElement.clientWidth,
     content: document.documentElement.scrollWidth
