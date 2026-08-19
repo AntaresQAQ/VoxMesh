@@ -8,6 +8,38 @@ const replacementPassword = "replacement horse battery staple";
 test("completes setup, tool-assisted chat, inspection, and logout", async ({
   page
 }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: {
+        getUserMedia: async () => ({
+          getTracks: () => [{ stop: () => undefined }]
+        })
+      }
+    });
+    class FakeMediaRecorder extends EventTarget {
+      public state: RecordingState = "inactive";
+      public readonly mimeType = "audio/webm";
+
+      public start(): void {
+        this.state = "recording";
+      }
+
+      public stop(): void {
+        const data = new Event("dataavailable");
+        Object.defineProperty(data, "data", {
+          value: new Blob(["mock audio"], { type: this.mimeType })
+        });
+        this.dispatchEvent(data);
+        this.state = "inactive";
+        this.dispatchEvent(new Event("stop"));
+      }
+    }
+    Object.defineProperty(globalThis, "MediaRecorder", {
+      configurable: true,
+      value: FakeMediaRecorder
+    });
+  });
   await page.emulateMedia({ colorScheme: "dark" });
   await page.goto("/dashboard");
   await expect(page).toHaveURL(/\/setup$/);
@@ -55,11 +87,28 @@ test("completes setup, tool-assisted chat, inspection, and logout", async ({
     page.getByText("Mock tool reports living-room-light is on.")
   ).toBeVisible();
   await expect(page.getByText("Tools: mock.get_device_status")).toBeVisible();
+  await page.getByRole("button", { name: "Start recording" }).click();
+  await expect(page.getByRole("status")).toContainText("Recording");
+  await page.getByRole("button", { name: "Stop recording" }).click();
+  await expect(
+    page.locator(".voice-result").getByText("Check the light status")
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Play response" })
+  ).toBeEnabled();
+  await expectAccessible(page, "English dark Mock Voice chat");
 
   await page.getByRole("link", { name: "Conversations" }).click();
-  await page.getByRole("link", { name: /Check the light status/ }).click();
+  await page
+    .getByRole("link", { name: /Check the light status/ })
+    .first()
+    .click();
   await expect(page).toHaveURL(/\/conversations\/[^/]+$/);
   await expect(page.getByText("living-room-light is on.")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Processing pipeline" })
+  ).toBeVisible();
+  await expect(page.getByText("Text to speech")).toBeVisible();
   await page.goBack();
   await expect(page).toHaveURL(/\/conversations$/);
   await page.goForward();
@@ -80,7 +129,7 @@ test("completes setup, tool-assisted chat, inspection, and logout", async ({
     }
   });
   await page.getByRole("link", { name: "Logs" }).click();
-  await expect(page.getByText("Calling MCP tool")).toBeVisible();
+  await expect(page.getByText("Calling MCP tool").first()).toBeVisible();
   const layout = await page.evaluate(() => {
     const sidebar = document.querySelector("aside");
     const main = document.querySelector("main");
