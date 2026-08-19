@@ -46,15 +46,18 @@ The first confirmed Mock Mode vertical slice is implemented and validated on mac
 - [x] jsx-a11y linting and representative English/Chinese Light/Dark axe scans
 - [x] visible focus, skip navigation, route focus/announcement, and async status semantics
 - [x] current automated axe audit passes with zero violations
+- [x] provider-independent audio metadata and STT/TTS contracts
+- [x] deterministic Mock STT transcript and valid Mock TTS WAV generation
+- [x] authenticated binary Mock Voice API and persisted STT/Agent/MCP/TTS events
+- [x] browser record, stop, transcript, response, and playback controls
+- [x] Mock Voice component, provider, API integration, and fake MediaRecorder e2e tests
 - [x] unit, integration, and Playwright tests for the implemented vertical slice
 - [x] format, lint, strict type-check, production build, and browser e2e validation on macOS
 
 The following planned capabilities are not complete:
 
-- [ ] Windows and Linux CI execution evidence
-- [ ] browser and physical voice flows
+- [ ] physical voice flow
 - [ ] complete WCAG 2.2 AA audit evidence for every future Web Console route
-- [ ] complete Mock STT, TTS, and audio adapters
 - [ ] WebSocket real-time logs and events
 - [ ] full MCP configuration and inspection console
 - [ ] STT, TTS, audio, MCP server, and advanced runtime configuration UI
@@ -781,6 +784,7 @@ README.md
 docs/IMPLEMENTATION_PLAN.md
 docs/TECHNOLOGY_STACK.md
 docs/ACCESSIBILITY.md
+docs/MOCK_MODE.md
 docs/ARCHITECTURE.md
 docs/CONFIGURATION.md
 docs/TESTING.md

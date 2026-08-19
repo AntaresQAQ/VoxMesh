@@ -46,6 +46,7 @@ apps/
 packages/
   agent-core/             Provider-independent agent runtime
   ai/                     AI provider adapters
+  audio/                  Audio metadata and Mock STT/TTS providers
   shared/                 Runtime schemas and cross-package contracts
   storage/                Storage interfaces and SQLite implementation
 tests/
@@ -187,6 +188,18 @@ Future adapters must:
 - return typed audio metadata
 - normalize provider errors
 - support deterministic contract tests and opt-in live smoke tests
+
+### Mock speech and audio
+
+`packages/audio` defines provider-independent audio metadata, STT, and TTS contracts.
+
+Current Mock Mode implementations:
+
+- validate browser audio input
+- return a deterministic transcript
+- generate a valid mono 16 kHz PCM WAV tone
+
+The Mock Voice API and browser controls are documented in [MOCK_MODE.md](./MOCK_MODE.md).
 
 ## 7. Web Console Stack
 

@@ -14,6 +14,7 @@ VoxMesh has an initial Mock Mode vertical slice for development and architecture
 - SQLite conversation and log persistence
 - provider-independent Agent Core contracts
 - deterministic Mock LLM and Mock MCP tool execution
+- browser Mock Voice recording with Mock STT and generated WAV response
 - Dashboard, Chat, Conversations, and Logs pages
 - Settings page for password rotation and Mock/Azure OpenAI configuration
 - write-only Azure OpenAI API key handling and connection testing
@@ -51,6 +52,8 @@ pnpm --filter @voxmesh/server start
 ```
 
 Open <http://127.0.0.1:3000>, create the first administrator password, sign in, and use Chat. Enter `Check the light status` to exercise the Mock LLM -> Mock MCP -> Mock LLM flow.
+
+The Chat page also provides **Start recording**, **Stop recording**, and **Play response** controls. In Mock Mode, recorded audio is validated, transcribed to a deterministic test phrase, processed through Agent Core and Mock MCP, and returned with a generated test WAV.
 
 Use **Settings** to change the administrator password or switch Chat between Mock and Azure OpenAI. Azure OpenAI requires an HTTPS endpoint, deployment name, API version, and API key. The API key is stored in the local SQLite database, is never returned to the browser, and is protected by host filesystem permissions.
 
@@ -126,6 +129,7 @@ tests/e2e             Browser end-to-end tests
 - [Mandatory Development Rules](docs/DEVELOPMENT_RULES.md)
 - [Technology Stack and Development Guide](docs/TECHNOLOGY_STACK.md)
 - [Accessibility Standard and Audit](docs/ACCESSIBILITY.md)
+- [Mock Mode Development Guide](docs/MOCK_MODE.md)
 
 ## Coding Agent Instructions
 
