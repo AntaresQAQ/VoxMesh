@@ -28,12 +28,15 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const resolvedTheme = resolveTheme(mode, systemDark);
 
   useEffect(() => {
+    if (mode !== "system") {
+      return;
+    }
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     const update = (event: MediaQueryListEvent) => setSystemDark(event.matches);
     setSystemDark(media.matches);
     media.addEventListener("change", update);
     return () => media.removeEventListener("change", update);
-  }, []);
+  }, [mode]);
 
   useLayoutEffect(() => {
     document.documentElement.dataset.theme = resolvedTheme;

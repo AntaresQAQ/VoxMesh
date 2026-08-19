@@ -2,7 +2,7 @@
 
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithProviders } from "../test/render.js";
 import { ThemeSelector } from "../theme/ThemeSelector.js";
@@ -11,6 +11,10 @@ import { LanguageSelector } from "./LanguageSelector.js";
 describe("preference selectors", () => {
   beforeEach(() => {
     localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it("switches and persists the language", async () => {
@@ -32,5 +36,30 @@ describe("preference selectors", () => {
 
     expect(document.documentElement.dataset.theme).toBe("light");
     expect(localStorage.getItem("voxmesh.theme")).toBe("light");
+  });
+
+  it("subscribes to system changes only in System mode", async () => {
+    const user = userEvent.setup();
+    const addEventListener = vi.fn();
+    const removeEventListener = vi.fn();
+    vi.spyOn(window, "matchMedia").mockReturnValue({
+      matches: false,
+      media: "(prefers-color-scheme: dark)",
+      onchange: null,
+      addEventListener,
+      removeEventListener,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn()
+    });
+    localStorage.setItem("voxmesh.theme", "dark");
+    renderWithProviders(<ThemeSelector />);
+
+    expect(addEventListener).not.toHaveBeenCalled();
+    await user.selectOptions(screen.getByLabelText("Theme"), "system");
+    expect(addEventListener).toHaveBeenCalledWith(
+      "change",
+      expect.any(Function)
+    );
   });
 });

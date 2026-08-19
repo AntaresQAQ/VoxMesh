@@ -37,6 +37,7 @@ import {
 import { VoxMeshStore, type StoredLlmConfiguration } from "@voxmesh/storage";
 
 import type { ServerConfig } from "./config.js";
+import { LoginRateLimiter } from "./login-rate-limiter.js";
 import {
   createSessionToken,
   hashPassword,
@@ -45,11 +46,6 @@ import {
 } from "./security.js";
 
 const SESSION_COOKIE = "voxmesh_session";
-
-interface LoginAttempt {
-  count: number;
-  windowStartedAt: number;
-}
 
 export interface AppDependencies {
   config: ServerConfig;
@@ -68,7 +64,7 @@ export async function buildServer(
   const store =
     dependencies.store ?? new VoxMeshStore(dependencies.config.databasePath);
   const mcp = new MockMcpServer();
-  const loginAttempts = new Map<string, LoginAttempt>();
+  const loginRateLimiter = new LoginRateLimiter();
   const startedAt = Date.now();
 
   await app.register(fastifyCookie);
@@ -173,13 +169,8 @@ export async function buildServer(
       }
     },
     async (request, reply) => {
-      const attempt = loginAttempts.get(request.ip);
       const now = Date.now();
-      if (
-        attempt &&
-        now - attempt.windowStartedAt < 60_000 &&
-        attempt.count >= 5
-      ) {
+      if (loginRateLimiter.isBlocked(request.ip)) {
         return reply.status(429).send({
           error: {
             code: "LOGIN_RATE_LIMITED",
@@ -194,11 +185,7 @@ export async function buildServer(
         passwordHash !== null &&
         (await verifyPassword(request.body.password, passwordHash));
       if (!valid) {
-        const nextAttempt =
-          !attempt || now - attempt.windowStartedAt >= 60_000
-            ? { count: 1, windowStartedAt: now }
-            : { ...attempt, count: attempt.count + 1 };
-        loginAttempts.set(request.ip, nextAttempt);
+        loginRateLimiter.recordFailure(request.ip);
         return reply.status(401).send({
           error: {
             code: "INVALID_CREDENTIALS",
@@ -208,7 +195,7 @@ export async function buildServer(
         });
       }
 
-      loginAttempts.delete(request.ip);
+      loginRateLimiter.reset(request.ip);
       const token = createSessionToken();
       const expiresAt = new Date(
         now + dependencies.config.sessionTtlSeconds * 1000

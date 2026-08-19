@@ -83,7 +83,12 @@ export class AzureOpenAiProvider implements LlmProvider {
       ) {
         throw new Error("Azure OpenAI returned a malformed tool call");
       }
-      const parsedArguments = JSON.parse(argumentsValue) as unknown;
+      let parsedArguments: unknown;
+      try {
+        parsedArguments = JSON.parse(argumentsValue) as unknown;
+      } catch {
+        throw new Error("Azure OpenAI returned invalid JSON tool arguments");
+      }
       if (!isRecord(parsedArguments)) {
         throw new Error("Azure OpenAI tool arguments must be an object");
       }

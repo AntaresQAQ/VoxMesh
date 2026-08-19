@@ -72,4 +72,36 @@ describe("AzureOpenAiProvider", () => {
       }
     });
   });
+
+  it("normalizes malformed tool argument JSON", async () => {
+    const provider = new AzureOpenAiProvider(
+      config,
+      vi.fn(async () =>
+        Response.json({
+          choices: [
+            {
+              message: {
+                tool_calls: [
+                  {
+                    id: "call-1",
+                    function: {
+                      name: "mock.get_device_status",
+                      arguments: "{invalid"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        })
+      )
+    );
+
+    await expect(
+      provider.complete({
+        messages: [{ role: "user", content: "Check the light" }],
+        tools: []
+      })
+    ).rejects.toThrow("Azure OpenAI returned invalid JSON tool arguments");
+  });
 });
