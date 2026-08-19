@@ -8,7 +8,8 @@ import type {
   LlmConnectionTest,
   LogEntry,
   Session,
-  SetupStatus
+  SetupStatus,
+  VoiceResponse
 } from "@voxmesh/shared";
 
 interface ApiFailure {
@@ -83,6 +84,14 @@ export const apiClient = {
     api<ChatResponse>("/api/chat", {
       method: "POST",
       body: JSON.stringify({ message })
+    }),
+  voice: (audio: Blob) =>
+    api<VoiceResponse>("/api/voice", {
+      method: "POST",
+      headers: {
+        "content-type": audio.type || "application/octet-stream"
+      },
+      body: audio
     }),
   conversations: async () =>
     (await api<{ conversations: ConversationSummary[] }>("/api/conversations"))

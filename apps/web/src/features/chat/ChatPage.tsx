@@ -6,6 +6,7 @@ import { PageHeader } from "../../components/layout/PageHeader.js";
 import { useI18n } from "../../i18n/i18n.js";
 import { queryKeys } from "../../query.js";
 import { localizedError } from "../../utils/errors.js";
+import { VoiceControls } from "./VoiceControls.js";
 
 export function ChatPage() {
   const { t } = useI18n();
@@ -65,6 +66,7 @@ export function ChatPage() {
           ) : null}
         </section>
       ) : null}
+      <VoiceControls />
     </PageHeader>
   );
 }

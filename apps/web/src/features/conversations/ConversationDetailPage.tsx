@@ -7,6 +7,7 @@ import { PageHeader } from "../../components/layout/PageHeader.js";
 import { useI18n } from "../../i18n/i18n.js";
 import { conversationQueryOptions } from "../../query.js";
 import { localizedError, type Translator } from "../../utils/errors.js";
+import { PipelineTimeline } from "./PipelineTimeline.js";
 
 export function ConversationDetailPage() {
   const { t } = useI18n();
@@ -36,6 +37,7 @@ export function ConversationDetailPage() {
           </article>
         ))}
       </div>
+      <PipelineTimeline events={conversation.data?.events ?? []} />
     </PageHeader>
   );
 }

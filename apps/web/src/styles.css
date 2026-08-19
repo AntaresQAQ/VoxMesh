@@ -318,6 +318,23 @@ main > header {
   margin-top: 1.5rem;
 }
 
+.voice-controls {
+  max-width: 760px;
+  margin-top: 1.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  padding: 1.25rem;
+  background: var(--color-surface);
+}
+
+.voice-result {
+  margin-top: 1rem;
+}
+
+.voice-result p:last-child {
+  margin-bottom: 0;
+}
+
 .split {
   display: grid;
   grid-template-columns: minmax(250px, 0.8fr) minmax(320px, 1.2fr);
@@ -358,6 +375,39 @@ main > header {
 
 .timeline article p:last-child {
   overflow-wrap: anywhere;
+}
+
+.pipeline {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0;
+  list-style: none;
+}
+
+.pipeline li {
+  border-left: 4px solid var(--color-accent);
+  border-radius: 8px;
+  padding: 0.9rem 1rem;
+  background: var(--color-surface);
+}
+
+.pipeline li > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.pipeline li p {
+  margin: 0.5rem 0;
+}
+
+.pipeline-status {
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+}
+
+.pipeline-status.failed {
+  color: var(--color-error);
 }
 
 .logs article {
