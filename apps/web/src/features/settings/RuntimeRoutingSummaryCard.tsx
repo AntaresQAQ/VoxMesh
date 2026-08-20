@@ -9,8 +9,9 @@ import { localizedError } from "../../utils/errors.js";
 export function RuntimeRoutingSummaryCard() {
   const { t } = useI18n();
   const routing = useQuery(runtimeRoutingQueryOptions());
-  const activeRoute = routing.data?.routes.find(
-    (route) => route.id === routing.data.activeRouteId
+  const routingData = routing.data;
+  const activeRoute = routingData?.routes.find(
+    (route) => route.id === routingData.activeRouteId
   );
 
   return (
@@ -23,7 +24,7 @@ export function RuntimeRoutingSummaryCard() {
           {localizedError(routing.error, t, "common.requestFailed")}
         </p>
       ) : null}
-      {routing.data && activeRoute ? (
+      {routingData && activeRoute ? (
         <div className="routing-summary-grid">
           <section>
             <h4>{t("settings.activeRoute")}</h4>
@@ -38,17 +39,19 @@ export function RuntimeRoutingSummaryCard() {
           <section>
             <h4>{t("settings.connections")}</h4>
             <ul className="routing-summary-list">
-              {routing.data.connections.map((connection) => (
+              {routingData.connections.map((connection) => (
                 <li key={connection.id}>
                   <strong>{connection.displayName}</strong>
                   <span>
                     {connection.endpoint || t("settings.localProvider")}
                   </span>
-                  <span>
-                    {connection.apiKeyConfigured
-                      ? t("settings.apiKeyConfiguredShort")
-                      : t("settings.apiKeyMissing")}
-                  </span>
+                  {connection.endpoint ? (
+                    <span>
+                      {connection.apiKeyConfigured
+                        ? t("settings.apiKeyConfiguredShort")
+                        : t("settings.apiKeyMissing")}
+                    </span>
+                  ) : null}
                 </li>
               ))}
             </ul>
@@ -56,7 +59,7 @@ export function RuntimeRoutingSummaryCard() {
           <section>
             <h4>{t("settings.models")}</h4>
             <ul className="routing-summary-list">
-              {routing.data.models.map((model) => (
+              {routingData.models.map((model) => (
                 <li key={model.id}>
                   <strong>{model.displayName}</strong>
                   <span>

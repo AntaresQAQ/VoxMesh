@@ -21,6 +21,13 @@ describe("RuntimeRoutingSummaryCard", () => {
           displayName: "Chat · OpenAI-compatible",
           endpoint: "https://provider.example.com/v1",
           apiKeyConfigured: true
+        },
+        {
+          id: "connection-native",
+          providerId: "mock-native",
+          displayName: "Native · Mock Native Multimodal",
+          endpoint: "",
+          apiKeyConfigured: false
         }
       ],
       models: [
@@ -57,6 +64,7 @@ describe("RuntimeRoutingSummaryCard", () => {
     expect(await screen.findByText("Default Composed Voice")).toBeVisible();
     expect(screen.getByText("Chat · OpenAI-compatible")).toBeVisible();
     expect(screen.getByText("API key configured")).toBeVisible();
+    expect(screen.queryByText("Not configured")).not.toBeInTheDocument();
     expect(screen.getByText("Verified: Text input, Text output")).toBeVisible();
     expect(
       screen.getByText("Declared: Text input, Text output, Tool calling")
