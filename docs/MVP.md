@@ -1,6 +1,6 @@
-# VoxBridge — MVP Development Specification
+# VoxMesh — MVP Development Specification
 
-VoxBridge is a platform-independent, voice-first AI agent gateway.
+VoxMesh is a platform-independent, voice-first AI agent gateway.
 
 All contributions to this project MUST follow the mandatory rules in [DEVELOPMENT_RULES.md](./DEVELOPMENT_RULES.md) and the phased roadmap in [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md). If these documents appear to conflict, work MUST pause until the user confirms the intended interpretation.
 
@@ -436,7 +436,7 @@ Remote servers may use no authentication, static HTTP authorization tokens, or c
 
 MCP servers and discovered tools must be disabled by default. An administrator must explicitly enable each server and tool before Agent Core can use it.
 
-stdio servers may be configured with an executable, arguments, working directory, and environment variables. Because this grants command-execution capability as the VoxBridge service account, the Web Console must show a prominent security warning and require explicit confirmation before saving or enabling such configuration.
+stdio servers may be configured with an executable, arguments, working directory, and environment variables. Because this grants command-execution capability as the VoxMesh service account, the Web Console must show a prominent security warning and require explicit confirmation before saving or enabling such configuration.
 
 Home Assistant is a possible future MCP integration, along with web search, calendars, GitHub, Notion, and custom services. It is not a required MVP integration and must not require Home Assistant-specific logic in Agent Core or the Web Console.
 
