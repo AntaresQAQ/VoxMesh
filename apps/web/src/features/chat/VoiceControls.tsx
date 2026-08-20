@@ -24,29 +24,45 @@ export function VoiceControls({
 }: VoiceControlsProps) {
   const { t } = useI18n();
   const recorder = useRef<AudioRecorder | null>(null);
+  const unsubscribeLevel = useRef<(() => void) | null>(null);
+  const startingRef = useRef(false);
+  const [starting, setStarting] = useState(false);
   const [recording, setRecording] = useState(false);
+  const [loudness, setLoudness] = useState(0);
   const [processing, setProcessing] = useState(false);
   const [result, setResult] = useState<VoiceResponse>();
   const [error, setError] = useState("");
 
   useEffect(
     () => () => {
+      unsubscribeLevel.current?.();
       recorder.current?.cancel();
     },
     []
   );
 
   const start = async () => {
+    if (startingRef.current) return;
+    startingRef.current = true;
+    setStarting(true);
     setError("");
     setResult(undefined);
     const nextRecorder = createRecorder();
     recorder.current = nextRecorder;
+    unsubscribeLevel.current =
+      nextRecorder.subscribeLevel?.(setLoudness) ?? null;
     try {
       await nextRecorder.start();
       setRecording(true);
     } catch (caught) {
+      unsubscribeLevel.current?.();
+      unsubscribeLevel.current = null;
       recorder.current = null;
+      setLoudness(0);
       setError(localizedError(caught, t, "voice.recordingFailed"));
+    } finally {
+      startingRef.current = false;
+      setStarting(false);
     }
   };
 
@@ -54,6 +70,9 @@ export function VoiceControls({
     const activeRecorder = recorder.current;
     if (!activeRecorder) return;
     setRecording(false);
+    unsubscribeLevel.current?.();
+    unsubscribeLevel.current = null;
+    setLoudness(0);
     setProcessing(true);
     setError("");
     try {
@@ -64,6 +83,7 @@ export function VoiceControls({
       setError(localizedError(caught, t, "voice.processingFailed"));
     } finally {
       recorder.current = null;
+      setLoudness(0);
       setProcessing(false);
     }
   };
@@ -85,7 +105,7 @@ export function VoiceControls({
       <div className="button-row">
         <button
           type="button"
-          disabled={recording || processing}
+          disabled={starting || recording || processing}
           onClick={() => void start()}
         >
           {t("voice.start")}
@@ -101,6 +121,23 @@ export function VoiceControls({
         >
           {t("voice.play")}
         </button>
+      </div>
+      {starting ? <p role="status">{t("voice.starting")}</p> : null}
+      <div className="voice-level">
+        <div className="voice-level-label">
+          <span>{t("voice.microphoneLevel")}</span>
+          <span>{recording ? `${loudness}%` : t("voice.levelIdle")}</span>
+        </div>
+        <div
+          className="voice-level-meter"
+          role="meter"
+          aria-label={t("voice.microphoneLevel")}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={loudness}
+        >
+          <span style={{ width: `${loudness}%` }} />
+        </div>
       </div>
       {recording ? <p role="status">{t("voice.recording")}</p> : null}
       {processing ? <p role="status">{t("voice.processing")}</p> : null}

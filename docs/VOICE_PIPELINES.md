@@ -93,6 +93,20 @@ ttsModelDeploymentId
 
 Fallback must be explicit. VoxMesh must never silently switch from Native Multimodal to Composed or from a real provider to Mock Mode.
 
+### Browser microphone monitoring
+
+The Chat voice test derives a live loudness meter from the same browser
+`MediaStream` used by `MediaRecorder`; it never requests a second microphone
+stream. An `AnalyserNode` measures time-domain RMS and maps -60 dBFS through
+0 dBFS onto a 0–100% meter so administrators can confirm that input is
+arriving before submission.
+
+Stopping, cancelling, failing, or unmounting the recorder cancels the animation
+frame, disconnects analyser nodes, closes the browser `AudioContext`, stops
+media tracks, and resets the meter to zero. Meter initialization failures abort
+recording and release the acquired stream rather than silently presenting a
+non-functional level indicator.
+
 ## 3. Provider Connections and Models
 
 Credentials and endpoints belong to provider connections, not directly to pipeline roles.
@@ -252,8 +266,9 @@ Current implementation status:
 - [x] Add a persisted Settings mode selector and capability-filtered provider selection.
 - [x] Persist mode-specific conversation events.
 - [x] Introduce system-managed provider connections and model deployments.
-- [x] Migrate current LLM/STT/TTS settings into Composed route records.
+- [x] Seed default LLM/STT/TTS model assignments in a Composed route.
 - [x] Resolve current providers through stable system runtime routes.
-- [ ] Add editable provider connection, model deployment, and route CRUD.
-- [ ] Add explicit Composed fallback configuration.
+- [x] Add editable provider connection, model deployment, and route CRUD.
+- [x] Add explicit Composed fallback configuration.
+- [x] Add independent capability-gated STT and TTS streaming switches.
 - [ ] Add the first real Native Multimodal adapter after confirming a model and API.

@@ -9,11 +9,7 @@ export const queryKeys = {
   conversations: ["conversations"] as const,
   conversation: (id: string) => ["conversations", id] as const,
   logs: ["logs"] as const,
-  llmConfiguration: ["configuration", "llm"] as const,
-  speechConfiguration: ["configuration", "speech"] as const,
-  providerCatalog: ["providers"] as const,
-  runtimeRouting: ["runtime-routing"] as const,
-  voicePipeline: ["configuration", "voice-pipeline"] as const
+  runtimeRouting: ["runtime-routing"] as const
 };
 
 export function createQueryClient(): QueryClient {
@@ -67,33 +63,8 @@ export const logsQueryOptions = () =>
     queryFn: apiClient.logs
   });
 
-export const llmConfigurationQueryOptions = () =>
-  queryOptions({
-    queryKey: queryKeys.llmConfiguration,
-    queryFn: apiClient.llmConfiguration
-  });
-
-export const speechConfigurationQueryOptions = () =>
-  queryOptions({
-    queryKey: queryKeys.speechConfiguration,
-    queryFn: apiClient.speechConfiguration
-  });
-
-export const providerCatalogQueryOptions = () =>
-  queryOptions({
-    queryKey: queryKeys.providerCatalog,
-    queryFn: apiClient.providerCatalog,
-    staleTime: Number.POSITIVE_INFINITY
-  });
-
 export const runtimeRoutingQueryOptions = () =>
   queryOptions({
     queryKey: queryKeys.runtimeRouting,
     queryFn: apiClient.runtimeRouting
-  });
-
-export const voicePipelineQueryOptions = () =>
-  queryOptions({
-    queryKey: queryKeys.voicePipeline,
-    queryFn: apiClient.voicePipelineConfiguration
   });

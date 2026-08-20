@@ -31,37 +31,6 @@ export const SessionSchema = Type.Object({
   expiresAt: Type.String({ format: "date-time" })
 });
 
-export const DashboardSchema = Type.Object({
-  status: Type.Literal("online"),
-  mode: Type.Literal("mock"),
-  uptimeSeconds: Type.Number({ minimum: 0 }),
-  conversationCount: Type.Integer({ minimum: 0 }),
-  mcp: Type.Object({
-    name: Type.String(),
-    status: Type.Literal("connected"),
-    enabledTools: Type.Array(Type.String())
-  }),
-  providers: Type.Object({
-    llm: Type.Union([
-      Type.Literal("mock"),
-      Type.Literal("azure-openai"),
-      Type.Literal("openai-compatible")
-    ]),
-    stt: Type.Union([
-      Type.Literal("mock"),
-      Type.Literal("azure-openai"),
-      Type.Literal("openai-compatible"),
-      Type.Literal("alibaba-model-studio")
-    ]),
-    tts: Type.Union([
-      Type.Literal("mock"),
-      Type.Literal("azure-openai"),
-      Type.Literal("openai-compatible"),
-      Type.Literal("alibaba-model-studio")
-    ])
-  })
-});
-
 export const ChatRequestSchema = Type.Object({
   message: Type.String({ minLength: 1, maxLength: 8_000 })
 });
@@ -158,82 +127,12 @@ export const LlmModeSchema = Type.Union([
   Type.Literal("openai-compatible")
 ]);
 
-export const LlmConfigurationSchema = Type.Object({
-  mode: LlmModeSchema,
-  endpoint: Type.String(),
-  deployment: Type.String(),
-  apiVersion: Type.String(),
-  baseUrl: Type.String(),
-  model: Type.String(),
-  timeoutMs: Type.Integer({ minimum: 1 }),
-  maxOutputTokens: Type.Integer({ minimum: 1 }),
-  apiKeyConfigured: Type.Boolean()
-});
-
-export const LlmConfigurationUpdateSchema = Type.Object({
-  mode: LlmModeSchema,
-  endpoint: Type.String({ maxLength: 2_048 }),
-  deployment: Type.String({ maxLength: 256 }),
-  apiVersion: Type.String({ maxLength: 64 }),
-  baseUrl: Type.String({ maxLength: 2_048 }),
-  model: Type.String({ maxLength: 256 }),
-  timeoutMs: Type.Integer({ minimum: 1, maximum: 300_000 }),
-  maxOutputTokens: Type.Integer({ minimum: 1, maximum: 1_000_000 }),
-  apiKey: Type.Optional(Type.String({ minLength: 1, maxLength: 2_048 })),
-  clearApiKey: Type.Optional(Type.Boolean())
-});
-
-export const LlmConnectionTestSchema = Type.Object({
-  success: Type.Boolean(),
-  response: Type.String()
-});
-
 export const SpeechProviderModeSchema = Type.Union([
   Type.Literal("mock"),
   Type.Literal("azure-openai"),
   Type.Literal("openai-compatible"),
   Type.Literal("alibaba-model-studio")
 ]);
-
-export const SpeechConfigurationSchema = Type.Object({
-  sttMode: SpeechProviderModeSchema,
-  ttsMode: SpeechProviderModeSchema,
-  sttEndpoint: Type.String(),
-  sttDeployment: Type.String(),
-  sttApiVersion: Type.String(),
-  sttLanguage: Type.String(),
-  sttApiKeyConfigured: Type.Boolean(),
-  ttsEndpoint: Type.String(),
-  ttsDeployment: Type.String(),
-  ttsApiVersion: Type.String(),
-  ttsVoice: Type.String(),
-  ttsInstructions: Type.String(),
-  ttsApiKeyConfigured: Type.Boolean()
-});
-
-export const SpeechConfigurationUpdateSchema = Type.Object({
-  sttMode: SpeechProviderModeSchema,
-  ttsMode: SpeechProviderModeSchema,
-  sttEndpoint: Type.String({ maxLength: 2_048 }),
-  sttDeployment: Type.String({ maxLength: 256 }),
-  sttApiVersion: Type.String({ maxLength: 64 }),
-  sttLanguage: Type.String({ maxLength: 32 }),
-  sttApiKey: Type.Optional(Type.String({ minLength: 1, maxLength: 2_048 })),
-  clearSttApiKey: Type.Optional(Type.Boolean()),
-  ttsEndpoint: Type.String({ maxLength: 2_048 }),
-  ttsDeployment: Type.String({ maxLength: 256 }),
-  ttsApiVersion: Type.String({ maxLength: 64 }),
-  ttsVoice: Type.String({ maxLength: 64 }),
-  ttsInstructions: Type.String({ maxLength: 2_000 }),
-  ttsApiKey: Type.Optional(Type.String({ minLength: 1, maxLength: 2_048 })),
-  clearTtsApiKey: Type.Optional(Type.Boolean())
-});
-
-export const SpeechConnectionTestSchema = Type.Object({
-  success: Type.Boolean(),
-  transcript: Type.String(),
-  audioMimeType: Type.String()
-});
 
 export const ProviderCapabilitySchema = Type.Union([
   Type.Literal("llm"),
@@ -251,24 +150,10 @@ export const ProviderDescriptorSchema = Type.Object({
   capabilities: Type.Array(ProviderCapabilitySchema)
 });
 
-export const ProviderCatalogSchema = Type.Object({
-  providers: Type.Array(ProviderDescriptorSchema)
-});
-
 export const VoicePipelineModeSchema = Type.Union([
   Type.Literal("composed"),
   Type.Literal("native-multimodal")
 ]);
-
-export const VoicePipelineConfigurationSchema = Type.Object({
-  mode: VoicePipelineModeSchema,
-  nativeProviderId: Type.String()
-});
-
-export const VoicePipelineConfigurationUpdateSchema = Type.Object({
-  mode: VoicePipelineModeSchema,
-  nativeProviderId: Type.String({ maxLength: 128 })
-});
 
 export const ModelCapabilitySchema = Type.Union([
   Type.Literal("text-input"),
@@ -278,7 +163,9 @@ export const ModelCapabilitySchema = Type.Union([
   Type.Literal("transcription"),
   Type.Literal("speech-synthesis"),
   Type.Literal("tool-calling"),
-  Type.Literal("native-multimodal")
+  Type.Literal("native-multimodal"),
+  Type.Literal("streaming"),
+  Type.Literal("non-streaming")
 ]);
 
 export const ProviderConnectionSummarySchema = Type.Object({
@@ -286,7 +173,8 @@ export const ProviderConnectionSummarySchema = Type.Object({
   providerId: Type.String(),
   displayName: Type.String(),
   endpoint: Type.String(),
-  apiKeyConfigured: Type.Boolean()
+  apiKeyConfigured: Type.Boolean(),
+  enabled: Type.Boolean()
 });
 
 export const ModelDeploymentSummarySchema = Type.Object({
@@ -295,8 +183,13 @@ export const ModelDeploymentSummarySchema = Type.Object({
   displayName: Type.String(),
   modelName: Type.String(),
   apiVersion: Type.String(),
+  providerOptions: Type.Record(
+    Type.String(),
+    Type.Union([Type.String(), Type.Number(), Type.Boolean()])
+  ),
   declaredCapabilities: Type.Array(ModelCapabilitySchema),
-  verifiedCapabilities: Type.Array(ModelCapabilitySchema)
+  verifiedCapabilities: Type.Array(ModelCapabilitySchema),
+  enabled: Type.Boolean()
 });
 
 export const RuntimeRouteSummarySchema = Type.Object({
@@ -307,7 +200,10 @@ export const RuntimeRouteSummarySchema = Type.Object({
   chatModelDeploymentId: Type.Union([Type.String(), Type.Null()]),
   ttsModelDeploymentId: Type.Union([Type.String(), Type.Null()]),
   nativeModelDeploymentId: Type.Union([Type.String(), Type.Null()]),
-  fallbackRouteId: Type.Union([Type.String(), Type.Null()])
+  fallbackRouteId: Type.Union([Type.String(), Type.Null()]),
+  sttStreamingEnabled: Type.Boolean(),
+  ttsStreamingEnabled: Type.Boolean(),
+  enabled: Type.Boolean()
 });
 
 export const RuntimeRoutingSummarySchema = Type.Object({
@@ -315,6 +211,60 @@ export const RuntimeRoutingSummarySchema = Type.Object({
   models: Type.Array(ModelDeploymentSummarySchema),
   routes: Type.Array(RuntimeRouteSummarySchema),
   activeRouteId: Type.String()
+});
+
+export const DashboardSchema = Type.Object({
+  status: Type.Literal("online"),
+  uptimeSeconds: Type.Number({ minimum: 0 }),
+  conversationCount: Type.Integer({ minimum: 0 }),
+  mcp: Type.Object({
+    name: Type.String(),
+    status: Type.Literal("connected"),
+    enabledTools: Type.Array(Type.String())
+  }),
+  routing: RuntimeRoutingSummarySchema
+});
+
+export const ProviderConnectionInputSchema = Type.Object({
+  providerId: Type.String({ minLength: 1, maxLength: 128 }),
+  displayName: Type.String({ minLength: 1, maxLength: 128 }),
+  endpoint: Type.String({ maxLength: 2_048 }),
+  apiKey: Type.Optional(Type.String({ minLength: 1, maxLength: 2_048 })),
+  clearApiKey: Type.Optional(Type.Boolean()),
+  enabled: Type.Boolean()
+});
+
+export const ModelDeploymentInputSchema = Type.Object({
+  connectionId: Type.String({ minLength: 1, maxLength: 128 }),
+  displayName: Type.String({ minLength: 1, maxLength: 128 }),
+  modelName: Type.String({ minLength: 1, maxLength: 256 }),
+  apiVersion: Type.String({ maxLength: 64 }),
+  providerOptions: Type.Record(
+    Type.String({ maxLength: 128 }),
+    Type.Union([Type.String(), Type.Number(), Type.Boolean()])
+  ),
+  declaredCapabilities: Type.Array(ModelCapabilitySchema, {
+    minItems: 1,
+    uniqueItems: true
+  }),
+  enabled: Type.Boolean()
+});
+
+export const RuntimeRouteInputSchema = Type.Object({
+  displayName: Type.String({ minLength: 1, maxLength: 128 }),
+  mode: VoicePipelineModeSchema,
+  sttModelDeploymentId: Type.Union([Type.String(), Type.Null()]),
+  chatModelDeploymentId: Type.Union([Type.String(), Type.Null()]),
+  ttsModelDeploymentId: Type.Union([Type.String(), Type.Null()]),
+  nativeModelDeploymentId: Type.Union([Type.String(), Type.Null()]),
+  fallbackRouteId: Type.Union([Type.String(), Type.Null()]),
+  sttStreamingEnabled: Type.Boolean(),
+  ttsStreamingEnabled: Type.Boolean(),
+  enabled: Type.Boolean()
+});
+
+export const ActiveRuntimeRouteUpdateSchema = Type.Object({
+  routeId: Type.String({ minLength: 1, maxLength: 128 })
 });
 
 export type ApiError = Static<typeof ApiErrorSchema>;
@@ -333,25 +283,8 @@ export type PipelineEvent = Static<typeof PipelineEventSchema>;
 export type VoiceResponse = Static<typeof VoiceResponseSchema>;
 export type LogEntry = Static<typeof LogEntrySchema>;
 export type LlmMode = Static<typeof LlmModeSchema>;
-export type LlmConfiguration = Static<typeof LlmConfigurationSchema>;
-export type LlmConfigurationUpdate = Static<
-  typeof LlmConfigurationUpdateSchema
->;
-export type LlmConnectionTest = Static<typeof LlmConnectionTestSchema>;
 export type SpeechProviderMode = Static<typeof SpeechProviderModeSchema>;
-export type SpeechConfiguration = Static<typeof SpeechConfigurationSchema>;
-export type SpeechConfigurationUpdate = Static<
-  typeof SpeechConfigurationUpdateSchema
->;
-export type SpeechConnectionTest = Static<typeof SpeechConnectionTestSchema>;
-export type ProviderCatalog = Static<typeof ProviderCatalogSchema>;
 export type VoicePipelineMode = Static<typeof VoicePipelineModeSchema>;
-export type VoicePipelineConfiguration = Static<
-  typeof VoicePipelineConfigurationSchema
->;
-export type VoicePipelineConfigurationUpdate = Static<
-  typeof VoicePipelineConfigurationUpdateSchema
->;
 export type ModelCapability = Static<typeof ModelCapabilitySchema>;
 export type ProviderConnectionSummary = Static<
   typeof ProviderConnectionSummarySchema
@@ -361,3 +294,11 @@ export type ModelDeploymentSummary = Static<
 >;
 export type RuntimeRouteSummary = Static<typeof RuntimeRouteSummarySchema>;
 export type RuntimeRoutingSummary = Static<typeof RuntimeRoutingSummarySchema>;
+export type ProviderConnectionInput = Static<
+  typeof ProviderConnectionInputSchema
+>;
+export type ModelDeploymentInput = Static<typeof ModelDeploymentInputSchema>;
+export type RuntimeRouteInput = Static<typeof RuntimeRouteInputSchema>;
+export type ActiveRuntimeRouteUpdate = Static<
+  typeof ActiveRuntimeRouteUpdateSchema
+>;

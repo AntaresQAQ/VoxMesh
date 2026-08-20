@@ -163,28 +163,6 @@ export function validateSpeechConfiguration(
   ttsRegistry.create(config);
 }
 
-export function publicSpeechConfiguration(config: StoredSpeechConfiguration) {
-  return {
-    sttMode: config.sttMode,
-    ttsMode: config.ttsMode,
-    sttEndpoint: config.sttEndpoint,
-    sttDeployment: config.sttDeployment,
-    sttApiVersion: config.sttApiVersion,
-    sttLanguage: config.sttLanguage,
-    sttApiKeyConfigured: config.sttApiKey !== null,
-    ttsEndpoint: config.ttsEndpoint,
-    ttsDeployment: config.ttsDeployment,
-    ttsApiVersion: config.ttsApiVersion,
-    ttsVoice: config.ttsVoice,
-    ttsInstructions: config.ttsInstructions,
-    ttsApiKeyConfigured: config.ttsApiKey !== null
-  };
-}
-
-export function speechProviderDescriptors() {
-  return [...sttRegistry.descriptors(), ...ttsRegistry.descriptors()];
-}
-
 function validateAzureStt(config: StoredSpeechConfiguration): void {
   validateAzureConnection(
     config.sttEndpoint,
@@ -258,6 +236,22 @@ function validateAlibabaTts(config: StoredSpeechConfiguration): void {
   );
   if (!config.ttsVoice) {
     throw badRequest("Alibaba Model Studio TTS requires a voice");
+  }
+  if (
+    config.ttsDeployment === "qwen-audio-3.0-tts-plus" &&
+    QWEN_AUDIO_FLASH_SYSTEM_VOICES.has(config.ttsVoice)
+  ) {
+    throw badRequest(
+      "qwen-audio-3.0-tts-plus does not support this Flash voice; use longanlingxin, longanlufeng, or a Plus-compatible cloned voice"
+    );
+  }
+  if (
+    config.ttsDeployment === "qwen-audio-3.0-tts-flash" &&
+    QWEN_AUDIO_PLUS_SYSTEM_VOICES.has(config.ttsVoice)
+  ) {
+    throw badRequest(
+      "qwen-audio-3.0-tts-flash does not support this Plus voice; select a Flash-compatible voice"
+    );
   }
 }
 
@@ -336,3 +330,22 @@ function validateAlibabaConnection(
 function badRequest(message: string): Error & { statusCode: number } {
   return Object.assign(new Error(message), { statusCode: 400 });
 }
+
+const QWEN_AUDIO_PLUS_SYSTEM_VOICES = new Set([
+  "longanlingxin",
+  "longanlufeng"
+]);
+const QWEN_AUDIO_FLASH_SYSTEM_VOICES = new Set([
+  "longanfengyue",
+  "longanyuanfei",
+  "longanlingxi",
+  "longanxiaoxin",
+  "longanhuan_v3.6",
+  "longjielidou_v3.6",
+  "longpaopao_v3.6",
+  "longhuohuo_v3.6",
+  "longchuanshu_v3.6",
+  "loongmary",
+  "loongeva_v3.6",
+  "loongjohn"
+]);

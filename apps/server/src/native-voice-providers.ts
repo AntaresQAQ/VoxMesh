@@ -26,14 +26,3 @@ export function createNativeVoiceProvider(
 ): NativeVoiceProvider {
   return registry.create(config);
 }
-
-export function validateNativeVoiceConfiguration(
-  config: StoredVoicePipelineConfiguration
-): void {
-  if (config.mode === "composed") return;
-  registry.create(config);
-}
-
-export function nativeVoiceProviderDescriptors() {
-  return registry.descriptors();
-}

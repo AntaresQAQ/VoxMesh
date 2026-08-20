@@ -6,6 +6,8 @@ export interface AudioRecorder {
   start(): Promise<void>;
   stop(): Promise<Blob>;
   cancel(): void;
+  /** Emits normalized microphone loudness from 0 to 100 while recording. */
+  subscribeLevel?(listener: (level: number) => void): () => void;
 }
 
 /**
@@ -17,20 +19,39 @@ export class BrowserAudioRecorder implements AudioRecorder {
   private stream: MediaStream | null = null;
   private recorder: MediaRecorder | null = null;
   private chunks: Blob[] = [];
+  private meterContext: AudioContext | null = null;
+  private meterSource: MediaStreamAudioSourceNode | null = null;
+  private meterAnalyser: AnalyserNode | null = null;
+  private meterFrame: number | null = null;
+  private readonly levelListeners = new Set<(level: number) => void>();
+  private generation = 0;
 
   public async start(): Promise<void> {
     if (!navigator.mediaDevices?.getUserMedia || !globalThis.MediaRecorder) {
       throw new Error("Browser audio recording is not supported");
     }
-    this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const generation = ++this.generation;
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    if (generation !== this.generation) {
+      stopMediaStream(stream);
+      throw new Error("Audio recording was cancelled");
+    }
+    this.stream = stream;
     this.chunks = [];
-    this.recorder = new MediaRecorder(this.stream);
-    this.recorder.addEventListener("dataavailable", (event) => {
-      if (event.data.size > 0) {
-        this.chunks.push(event.data);
-      }
-    });
-    this.recorder.start();
+    try {
+      const recorder = new MediaRecorder(stream);
+      this.recorder = recorder;
+      recorder.addEventListener("dataavailable", (event) => {
+        if (event.data.size > 0) {
+          this.chunks.push(event.data);
+        }
+      });
+      await this.startMeter(stream);
+      recorder.start();
+    } catch (error) {
+      await this.release();
+      throw error;
+    }
   }
 
   public async stop(): Promise<Blob> {
@@ -42,15 +63,7 @@ export class BrowserAudioRecorder implements AudioRecorder {
       recorder.addEventListener(
         "stop",
         () => {
-          const type =
-            recorder.mimeType || this.chunks[0]?.type || "audio/webm";
-          const blob = new Blob(this.chunks, { type });
-          this.release();
-          if (blob.size === 0) {
-            reject(new Error("Audio recording is empty"));
-            return;
-          }
-          void normalizeBrowserRecording(blob).then(resolve, reject);
+          void this.finishRecording(recorder).then(resolve, reject);
         },
         { once: true }
       );
@@ -59,19 +72,98 @@ export class BrowserAudioRecorder implements AudioRecorder {
   }
 
   public cancel(): void {
+    this.generation += 1;
     if (this.recorder?.state === "recording") {
       this.recorder.stop();
     }
-    this.release();
+    void this.release().catch((error: unknown) => {
+      console.error(
+        "Failed to release browser audio recording resources",
+        error
+      );
+    });
   }
 
-  private release(): void {
-    for (const track of this.stream?.getTracks() ?? []) {
-      track.stop();
+  public subscribeLevel(listener: (level: number) => void): () => void {
+    this.levelListeners.add(listener);
+    listener(0);
+    return () => {
+      this.levelListeners.delete(listener);
+    };
+  }
+
+  private async finishRecording(recorder: MediaRecorder): Promise<Blob> {
+    const type = recorder.mimeType || this.chunks[0]?.type || "audio/webm";
+    const blob = new Blob(this.chunks, { type });
+    await this.release();
+    if (blob.size === 0) {
+      throw new Error("Audio recording is empty");
     }
+    return normalizeBrowserRecording(blob);
+  }
+
+  private async startMeter(stream: MediaStream): Promise<void> {
+    this.meterContext = new AudioContext();
+    await this.meterContext.resume();
+    this.meterSource = this.meterContext.createMediaStreamSource(stream);
+    this.meterAnalyser = this.meterContext.createAnalyser();
+    this.meterAnalyser.fftSize = 1024;
+    this.meterAnalyser.smoothingTimeConstant = 0.75;
+    this.meterSource.connect(this.meterAnalyser);
+    const samples = new Float32Array(this.meterAnalyser.fftSize);
+    const update = () => {
+      if (!this.meterAnalyser) return;
+      this.meterAnalyser.getFloatTimeDomainData(samples);
+      this.emitLevel(rmsToLoudnessPercent(samples));
+      this.meterFrame = requestAnimationFrame(update);
+    };
+    update();
+  }
+
+  private emitLevel(level: number): void {
+    for (const listener of this.levelListeners) {
+      listener(level);
+    }
+  }
+
+  private async release(): Promise<void> {
+    if (this.meterFrame !== null) {
+      cancelAnimationFrame(this.meterFrame);
+      this.meterFrame = null;
+    }
+    this.meterSource?.disconnect();
+    this.meterAnalyser?.disconnect();
+    const meterContext = this.meterContext;
+    this.meterSource = null;
+    this.meterAnalyser = null;
+    this.meterContext = null;
+    this.emitLevel(0);
+    if (this.stream) stopMediaStream(this.stream);
     this.stream = null;
     this.recorder = null;
+    if (meterContext) {
+      await meterContext.close();
+    }
   }
+}
+
+function stopMediaStream(stream: MediaStream): void {
+  for (const track of stream.getTracks()) {
+    track.stop();
+  }
+}
+
+/** Maps microphone RMS from -60 dBFS to 0 dBFS onto a stable percentage. */
+export function rmsToLoudnessPercent(samples: Float32Array): number {
+  if (samples.length === 0) return 0;
+  let sumSquares = 0;
+  for (const sample of samples) {
+    sumSquares += sample * sample;
+  }
+  const rms = Math.sqrt(sumSquares / samples.length);
+  if (rms <= 0) return 0;
+  const decibels = 20 * Math.log10(rms);
+  return Math.round(Math.max(0, Math.min(100, ((decibels + 60) / 60) * 100)));
 }
 
 interface DecodedAudio {

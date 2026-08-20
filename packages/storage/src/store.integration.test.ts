@@ -44,165 +44,484 @@ describe("VoxMeshStore", () => {
     expect(store.listLogs()[0]?.conversationId).toBe(id);
   });
 
-  it("stores write-only LLM configuration values", () => {
+  it("initializes default routing records", () => {
     store = new VoxMeshStore(":memory:");
 
-    const updated = store.updateLlmConfiguration({
-      mode: "azure-openai",
-      endpoint: "https://example.openai.azure.com",
-      deployment: "gpt",
-      apiVersion: "2025-01-01",
-      baseUrl: "",
-      model: "",
-      timeoutMs: 30_000,
-      maxOutputTokens: 1_024,
-      apiKey: "secret"
-    });
-
-    expect(updated.apiKey).toBe("secret");
-    expect(store.getLlmConfiguration().mode).toBe("azure-openai");
-    expect(
-      store.updateLlmConfiguration({
-        mode: updated.mode,
-        endpoint: updated.endpoint,
-        deployment: updated.deployment,
-        apiVersion: updated.apiVersion,
-        baseUrl: updated.baseUrl,
-        model: updated.model,
-        timeoutMs: updated.timeoutMs,
-        maxOutputTokens: updated.maxOutputTokens,
-        clearApiKey: true
-      }).apiKey
-    ).toBeNull();
-  });
-
-  it("stores Azure OpenAI speech configuration", () => {
-    store = new VoxMeshStore(":memory:");
-
-    const updated = store.updateSpeechConfiguration({
-      sttMode: "azure-openai",
-      ttsMode: "azure-openai",
-      sttEndpoint: "https://stt.openai.azure.com",
-      sttDeployment: "gpt-4o-mini-transcribe",
-      sttApiVersion: "2025-04-01-preview",
-      sttLanguage: "zh",
-      sttApiKey: "stt-secret",
-      ttsEndpoint: "https://tts.openai.azure.com",
-      ttsDeployment: "gpt-4o-mini-tts",
-      ttsApiVersion: "2025-03-01-preview",
-      ttsVoice: "coral",
-      ttsInstructions: "Speak warmly.",
-      ttsApiKey: "tts-secret"
-    });
-
-    expect(updated.sttMode).toBe("azure-openai");
-    expect(updated.ttsMode).toBe("azure-openai");
-    expect(updated.sttApiKey).toBe("stt-secret");
-    expect(updated.ttsApiKey).toBe("tts-secret");
-  });
-
-  it("migrates the obsolete Plus voice default without changing other settings", () => {
-    store = new VoxMeshStore(":memory:");
-
-    const updated = store.updateSpeechConfiguration({
-      sttMode: "alibaba-model-studio",
-      ttsMode: "alibaba-model-studio",
-      sttEndpoint:
-        "wss://workspace.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference",
-      sttDeployment: "fun-asr-realtime",
-      sttApiVersion: "",
-      sttLanguage: "zh",
-      sttApiKey: "stt-secret",
-      ttsEndpoint:
-        "wss://workspace.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference",
-      ttsDeployment: "qwen-audio-3.0-tts-plus",
-      ttsApiVersion: "",
-      ttsVoice: "longanlingxi",
-      ttsInstructions: "Speak naturally.",
-      ttsApiKey: "tts-secret"
-    });
-
-    expect(updated.sttMode).toBe("alibaba-model-studio");
-    expect(updated.ttsMode).toBe("alibaba-model-studio");
-    expect(updated.ttsVoice).toBe("longanlingxin");
-  });
-
-  it("stores the selected voice pipeline mode", () => {
-    store = new VoxMeshStore(":memory:");
-
-    expect(store.getVoicePipelineConfiguration()).toEqual({
+    const routing = store.getRuntimeRoutingSummary();
+    expect(routing.connections).toHaveLength(4);
+    expect(routing.models).toHaveLength(4);
+    expect(routing.routes).toHaveLength(2);
+    expect(routing.activeRouteId).toBe("system-route-composed");
+    expect(store.getRuntimeVoicePipelineConfiguration()).toMatchObject({
       mode: "composed",
-      nativeProviderId: "mock-native"
-    });
-    expect(
-      store.updateVoicePipelineConfiguration({
-        mode: "native-multimodal",
-        nativeProviderId: "mock-native"
-      })
-    ).toEqual({
-      mode: "native-multimodal",
-      nativeProviderId: "mock-native"
+      routeId: "system-route-composed"
     });
   });
 
-  it("migrates legacy settings into idempotent runtime routing records", () => {
+  it("allows deleting an inactive seeded route without recreating it", () => {
+    const directory = mkdtempSync(join(tmpdir(), "voxmesh-routing-"));
+    const databasePath = join(directory, "voxmesh.sqlite");
+    try {
+      store = new VoxMeshStore(databasePath);
+      store.deleteRuntimeRoute("system-route-native");
+      store.close();
+      store = new VoxMeshStore(databasePath);
+
+      expect(
+        store
+          .getRuntimeRoutingSummary()
+          .routes.some((route) => route.id === "system-route-native")
+      ).toBe(false);
+    } finally {
+      store?.close();
+      store = undefined;
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("manages editable routing records with streaming and deletion protection", () => {
     store = new VoxMeshStore(":memory:");
+    const activeStore = store;
 
-    const initial = store.getRuntimeRoutingSummary();
-    expect(initial.connections).toHaveLength(4);
-    expect(initial.models).toHaveLength(4);
-    expect(initial.routes).toHaveLength(2);
-    expect(initial.activeRouteId).toBe("system-route-composed");
-    expect(
-      initial.models.find((model) => model.id === "system-model-chat")
-        ?.verifiedCapabilities
-    ).toEqual(["text-input", "text-output", "tool-calling"]);
-
-    store.updateLlmConfiguration({
-      mode: "azure-openai",
-      endpoint: "https://example.openai.azure.com",
-      deployment: "model-router",
-      apiVersion: "2025-01-01",
-      baseUrl: "",
-      model: "",
-      timeoutMs: 30_000,
-      maxOutputTokens: 1_024,
-      apiKey: "secret"
+    let routing = activeStore.createRuntimeConnection({
+      providerId: "mock",
+      displayName: "Streaming Mock",
+      endpoint: "",
+      enabled: true
     });
-    const updated = store.getRuntimeRoutingSummary();
-    expect(updated.connections).toHaveLength(4);
-    expect(
-      updated.connections.find(
-        (connection) => connection.id === "system-connection-chat"
-      )
-    ).toMatchObject({
-      providerId: "azure-openai",
-      endpoint: "https://example.openai.azure.com",
-      apiKeyConfigured: true
-    });
-    expect(
-      updated.models.find((model) => model.id === "system-model-chat")
-        ?.verifiedCapabilities
-    ).toEqual([]);
+    const connection = routing.connections.find(
+      (entry) => entry.displayName === "Streaming Mock"
+    );
+    expect(connection).toBeDefined();
 
-    store.markRuntimeRoleVerified("chat");
+    routing = activeStore.createRuntimeModel({
+      connectionId: connection?.id ?? "",
+      displayName: "Streaming Mock STT",
+      modelName: "mock-streaming-stt",
+      apiVersion: "",
+      providerOptions: { language: "en" },
+      declaredCapabilities: [
+        "audio-input",
+        "text-output",
+        "transcription",
+        "streaming"
+      ],
+      enabled: true
+    });
+    const sttModel = routing.models.find(
+      (entry) => entry.displayName === "Streaming Mock STT"
+    );
+    expect(sttModel?.verifiedCapabilities).toContain("transcription");
+    expect(sttModel?.verifiedCapabilities).not.toContain("streaming");
+
+    routing = activeStore.createRuntimeRoute({
+      displayName: "Streaming Composed",
+      mode: "composed",
+      sttModelDeploymentId: sttModel?.id ?? null,
+      chatModelDeploymentId: "system-model-chat",
+      ttsModelDeploymentId: "system-model-tts",
+      nativeModelDeploymentId: null,
+      fallbackRouteId: null,
+      sttStreamingEnabled: false,
+      ttsStreamingEnabled: false,
+      enabled: true
+    });
+    const route = routing.routes.find(
+      (entry) => entry.displayName === "Streaming Composed"
+    );
+    expect(route?.sttStreamingEnabled).toBe(false);
+    expect(route?.ttsStreamingEnabled).toBe(false);
+
+    activeStore.activateRuntimeRoute(route?.id ?? "");
+    expect(activeStore.getRuntimeRoutingSummary().activeRouteId).toBe(
+      route?.id
+    );
+
+    expect(() => activeStore.deleteRuntimeModel(sttModel?.id ?? "")).toThrow(
+      "still referenced"
+    );
+    expect(() =>
+      activeStore.deleteRuntimeConnection(connection?.id ?? "")
+    ).toThrow("still referenced");
+    expect(() => activeStore.deleteRuntimeRoute(route?.id ?? "")).toThrow(
+      "Active runtime route cannot be deleted"
+    );
+  });
+
+  it("rejects streaming routes until the assigned model is verified", () => {
+    store = new VoxMeshStore(":memory:");
+    const activeStore = store;
+    let routing = activeStore.createRuntimeConnection({
+      providerId: "openai-compatible",
+      displayName: "Remote Speech",
+      endpoint: "https://provider.example.com/v1",
+      apiKey: "secret",
+      enabled: true
+    });
+    const connection = routing.connections.find(
+      (entry) => entry.displayName === "Remote Speech"
+    );
+    routing = activeStore.createRuntimeModel({
+      connectionId: connection?.id ?? "",
+      displayName: "Unverified Streaming STT",
+      modelName: "streaming-stt",
+      apiVersion: "",
+      providerOptions: { language: "en" },
+      declaredCapabilities: [
+        "audio-input",
+        "text-output",
+        "transcription",
+        "streaming"
+      ],
+      enabled: true
+    });
+    const model = routing.models.find(
+      (entry) => entry.displayName === "Unverified Streaming STT"
+    );
+
+    routing = activeStore.createRuntimeRoute({
+      displayName: "Unverified Streaming Route",
+      mode: "composed",
+      sttModelDeploymentId: model?.id ?? null,
+      chatModelDeploymentId: "system-model-chat",
+      ttsModelDeploymentId: "system-model-tts",
+      nativeModelDeploymentId: null,
+      fallbackRouteId: null,
+      sttStreamingEnabled: true,
+      ttsStreamingEnabled: false,
+      enabled: true
+    });
+    const route = routing.routes.find(
+      (entry) => entry.displayName === "Unverified Streaming Route"
+    );
+    expect(() => activeStore.activateRuntimeRoute(route?.id ?? "")).toThrow(
+      "Streaming routes cannot be activated"
+    );
+    activeStore.markRuntimeRouteVerified(
+      activeStore.captureRuntimeRouteVerification(route?.id ?? "")
+    );
+    expect(() => activeStore.activateRuntimeRoute(route?.id ?? "")).toThrow(
+      "Streaming routes cannot be activated"
+    );
+  });
+
+  it("protects active routing dependencies from runtime changes", () => {
+    store = new VoxMeshStore(":memory:");
+    const active = store.getRuntimeRoutingSummary();
+    const activeRoute = active.routes.find(
+      (route) => route.id === active.activeRouteId
+    );
+    const chatModel = active.models.find(
+      (model) => model.id === activeRoute?.chatModelDeploymentId
+    );
+    const chatConnection = active.connections.find(
+      (connection) => connection.id === chatModel?.connectionId
+    );
+
+    expect(() =>
+      store?.updateRuntimeConnection(chatConnection?.id ?? "", {
+        providerId: chatConnection?.providerId ?? "mock",
+        displayName: chatConnection?.displayName ?? "Chat",
+        endpoint: chatConnection?.endpoint ?? "",
+        enabled: false
+      })
+    ).toThrow("assigned to the active runtime route");
+    expect(() =>
+      store?.updateRuntimeModel(chatModel?.id ?? "", {
+        connectionId: chatModel?.connectionId ?? "",
+        displayName: chatModel?.displayName ?? "Chat",
+        modelName: chatModel?.modelName ?? "",
+        apiVersion: chatModel?.apiVersion ?? "",
+        providerOptions: chatModel?.providerOptions ?? {},
+        declaredCapabilities: chatModel?.declaredCapabilities ?? [],
+        enabled: false
+      })
+    ).toThrow("assigned to the active runtime route");
+    expect(() =>
+      store?.updateRuntimeRoute(activeRoute?.id ?? "", {
+        ...routeInput(activeRoute),
+        enabled: false
+      })
+    ).toThrow("Active runtime route cannot be changed");
+
+    expect(() =>
+      store?.updateRuntimeConnection(chatConnection?.id ?? "", {
+        providerId: chatConnection?.providerId ?? "mock",
+        displayName: "Renamed active connection",
+        endpoint: chatConnection?.endpoint ?? "",
+        enabled: true
+      })
+    ).not.toThrow();
+    expect(() =>
+      store?.updateRuntimeModel(chatModel?.id ?? "", {
+        connectionId: chatModel?.connectionId ?? "",
+        displayName: "Renamed active model",
+        modelName: chatModel?.modelName ?? "",
+        apiVersion: chatModel?.apiVersion ?? "",
+        providerOptions: chatModel?.providerOptions ?? {},
+        declaredCapabilities: chatModel?.declaredCapabilities ?? [],
+        enabled: true
+      })
+    ).not.toThrow();
+    expect(() =>
+      store?.updateRuntimeRoute(activeRoute?.id ?? "", {
+        ...routeInput(activeRoute),
+        displayName: "Renamed active route"
+      })
+    ).not.toThrow();
+  });
+
+  it("protects the active native route fallback dependency graph", () => {
+    store = new VoxMeshStore(":memory:");
+    let routing = store.createRuntimeRoute({
+      displayName: "Native With Fallback",
+      mode: "native-multimodal",
+      sttModelDeploymentId: null,
+      chatModelDeploymentId: null,
+      ttsModelDeploymentId: null,
+      nativeModelDeploymentId: "system-model-native",
+      fallbackRouteId: "system-route-composed",
+      sttStreamingEnabled: false,
+      ttsStreamingEnabled: false,
+      enabled: true
+    });
+    const native = routing.routes.find(
+      (route) => route.displayName === "Native With Fallback"
+    );
+    store.activateRuntimeRoute(native?.id ?? "");
+    routing = store.getRuntimeRoutingSummary();
+    const fallback = routing.routes.find(
+      (route) => route.id === "system-route-composed"
+    );
+    const chatModel = routing.models.find(
+      (model) => model.id === fallback?.chatModelDeploymentId
+    );
+    const chatConnection = routing.connections.find(
+      (connection) => connection.id === chatModel?.connectionId
+    );
+
+    expect(() =>
+      store?.updateRuntimeRoute(fallback?.id ?? "", {
+        ...routeInput(fallback),
+        enabled: false
+      })
+    ).toThrow("Active runtime route cannot be changed");
+    expect(() =>
+      store?.updateRuntimeModel(chatModel?.id ?? "", {
+        connectionId: chatModel?.connectionId ?? "",
+        displayName: chatModel?.displayName ?? "Chat",
+        modelName: chatModel?.modelName ?? "",
+        apiVersion: chatModel?.apiVersion ?? "",
+        providerOptions: chatModel?.providerOptions ?? {},
+        declaredCapabilities: chatModel?.declaredCapabilities ?? [],
+        enabled: false
+      })
+    ).toThrow("assigned to the active runtime route");
+    expect(() =>
+      store?.updateRuntimeConnection(chatConnection?.id ?? "", {
+        providerId: chatConnection?.providerId ?? "mock",
+        displayName: chatConnection?.displayName ?? "Chat",
+        endpoint: chatConnection?.endpoint ?? "",
+        enabled: false
+      })
+    ).toThrow("assigned to the active runtime route");
+  });
+
+  it("resolves Native chat through its explicit fallback after seeded deletion", () => {
+    store = new VoxMeshStore(":memory:");
+    let routing = store.createRuntimeRoute({
+      displayName: "Custom Composed Fallback",
+      mode: "composed",
+      sttModelDeploymentId: "system-model-stt",
+      chatModelDeploymentId: "system-model-chat",
+      ttsModelDeploymentId: "system-model-tts",
+      nativeModelDeploymentId: null,
+      fallbackRouteId: null,
+      sttStreamingEnabled: false,
+      ttsStreamingEnabled: false,
+      enabled: true
+    });
+    const fallback = routing.routes.find(
+      (route) => route.displayName === "Custom Composed Fallback"
+    );
+    routing = store.createRuntimeRoute({
+      displayName: "Native With Custom Fallback",
+      mode: "native-multimodal",
+      sttModelDeploymentId: null,
+      chatModelDeploymentId: null,
+      ttsModelDeploymentId: null,
+      nativeModelDeploymentId: "system-model-native",
+      fallbackRouteId: fallback?.id ?? null,
+      sttStreamingEnabled: false,
+      ttsStreamingEnabled: false,
+      enabled: true
+    });
+    const native = routing.routes.find(
+      (route) => route.displayName === "Native With Custom Fallback"
+    );
+    store.activateRuntimeRoute(fallback?.id ?? "");
+    store.deleteRuntimeRoute("system-route-composed");
+    store.activateRuntimeRoute(native?.id ?? "");
+
+    expect(store.getRuntimeLlmConfiguration()).toMatchObject({
+      mode: "mock",
+      model: ""
+    });
+    expect(store.getRuntimeSpeechConfiguration()).toMatchObject({
+      sttMode: "mock",
+      ttsMode: "mock"
+    });
+  });
+
+  it("binds verification to the tested route configuration and role", () => {
+    store = new VoxMeshStore(":memory:");
+    let routing = store.createRuntimeConnection({
+      providerId: "openai-compatible",
+      displayName: "Remote Multi-role",
+      endpoint: "https://provider.example.com/v1",
+      apiKey: "secret",
+      enabled: true
+    });
+    const connection = routing.connections.find(
+      (entry) => entry.displayName === "Remote Multi-role"
+    );
+    routing = store.createRuntimeModel({
+      connectionId: connection?.id ?? "",
+      displayName: "Remote STT",
+      modelName: "remote-stt",
+      apiVersion: "",
+      providerOptions: {},
+      declaredCapabilities: [
+        "audio-input",
+        "audio-output",
+        "text-input",
+        "text-output",
+        "transcription",
+        "speech-synthesis",
+        "tool-calling",
+        "non-streaming"
+      ],
+      enabled: true
+    });
+    const model = routing.models.find(
+      (entry) => entry.displayName === "Remote STT"
+    );
+    routing = store.createRuntimeRoute({
+      displayName: "Verification Route",
+      mode: "composed",
+      sttModelDeploymentId: model?.id ?? null,
+      chatModelDeploymentId: "system-model-chat",
+      ttsModelDeploymentId: "system-model-tts",
+      nativeModelDeploymentId: null,
+      fallbackRouteId: null,
+      sttStreamingEnabled: false,
+      ttsStreamingEnabled: false,
+      enabled: true
+    });
+    const route = routing.routes.find(
+      (entry) => entry.displayName === "Verification Route"
+    );
+    const snapshot = store.captureRuntimeRouteVerification(route?.id ?? "");
+    store.markRuntimeRouteVerified(snapshot);
+    const verified = store
+      .getRuntimeRoutingSummary()
+      .models.find((entry) => entry.id === model?.id)?.verifiedCapabilities;
+    expect(verified).toEqual([
+      "audio-input",
+      "text-output",
+      "transcription",
+      "non-streaming"
+    ]);
+    store.updateRuntimeModel(model?.id ?? "", {
+      connectionId: model?.connectionId ?? "",
+      displayName: "Renamed Remote STT",
+      modelName: model?.modelName ?? "",
+      apiVersion: model?.apiVersion ?? "",
+      providerOptions: model?.providerOptions ?? {},
+      declaredCapabilities: model?.declaredCapabilities ?? [],
+      enabled: true
+    });
     expect(
       store
         .getRuntimeRoutingSummary()
-        .models.find((model) => model.id === "system-model-chat")
-        ?.verifiedCapabilities
-    ).toEqual(["text-input", "text-output", "tool-calling"]);
-
-    store.updateVoicePipelineConfiguration({
-      mode: "native-multimodal",
-      nativeProviderId: "mock-native"
+        .models.find((entry) => entry.id === model?.id)?.verifiedCapabilities
+    ).toEqual(verified);
+    const ttsRouting = store.createRuntimeRoute({
+      displayName: "Shared Model TTS Route",
+      mode: "composed",
+      sttModelDeploymentId: "system-model-stt",
+      chatModelDeploymentId: "system-model-chat",
+      ttsModelDeploymentId: model?.id ?? null,
+      nativeModelDeploymentId: null,
+      fallbackRouteId: null,
+      sttStreamingEnabled: false,
+      ttsStreamingEnabled: false,
+      enabled: true
     });
-    expect(store.getRuntimeRoutingSummary().activeRouteId).toBe(
-      "system-route-native"
+    const ttsRoute = ttsRouting.routes.find(
+      (entry) => entry.displayName === "Shared Model TTS Route"
     );
-    expect(store.getRuntimeVoicePipelineConfiguration()).toEqual({
-      mode: "native-multimodal",
-      nativeProviderId: "mock-native"
+    store.markRuntimeRouteVerified(
+      store.captureRuntimeRouteVerification(ttsRoute?.id ?? "")
+    );
+    expect(
+      store
+        .getRuntimeRoutingSummary()
+        .models.find((entry) => entry.id === model?.id)?.verifiedCapabilities
+    ).toEqual(
+      expect.arrayContaining([
+        "audio-input",
+        "text-output",
+        "transcription",
+        "text-input",
+        "audio-output",
+        "speech-synthesis",
+        "non-streaming"
+      ])
+    );
+
+    const changed = store.createRuntimeRoute({
+      displayName: "Replacement Route",
+      mode: "composed",
+      sttModelDeploymentId: "system-model-stt",
+      chatModelDeploymentId: "system-model-chat",
+      ttsModelDeploymentId: "system-model-tts",
+      nativeModelDeploymentId: null,
+      fallbackRouteId: null,
+      sttStreamingEnabled: false,
+      ttsStreamingEnabled: false,
+      enabled: true
     });
+    const replacement = changed.routes.find(
+      (entry) => entry.displayName === "Replacement Route"
+    );
+    store.updateRuntimeRoute(route?.id ?? "", {
+      ...routeInput(route),
+      sttModelDeploymentId: replacement?.sttModelDeploymentId ?? null
+    });
+    expect(() => store?.markRuntimeRouteVerified(snapshot)).toThrow(
+      "configuration changed during testing"
+    );
   });
 });
+
+function routeInput(
+  route: ReturnType<VoxMeshStore["getRuntimeRoute"]> | undefined
+) {
+  if (!route) throw new Error("Expected a runtime route");
+  return {
+    displayName: route.displayName,
+    mode: route.mode,
+    sttModelDeploymentId: route.sttModelDeploymentId,
+    chatModelDeploymentId: route.chatModelDeploymentId,
+    ttsModelDeploymentId: route.ttsModelDeploymentId,
+    nativeModelDeploymentId: route.nativeModelDeploymentId,
+    fallbackRouteId: route.fallbackRouteId,
+    sttStreamingEnabled: route.sttStreamingEnabled,
+    ttsStreamingEnabled: route.ttsStreamingEnabled,
+    enabled: route.enabled
+  };
+}
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";

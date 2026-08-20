@@ -5,6 +5,8 @@ import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { ModelCapability } from "@voxmesh/shared";
+
 import { apiClient } from "../api.js";
 import { renderWithProviders } from "../test/render.js";
 import { ChatPage } from "./chat/ChatPage.js";
@@ -35,7 +37,6 @@ describe("feature pages", () => {
   it("renders dashboard provider and tool status", async () => {
     vi.spyOn(apiClient, "dashboard").mockResolvedValue({
       status: "online",
-      mode: "mock",
       uptimeSeconds: 10,
       conversationCount: 2,
       mcp: {
@@ -43,19 +44,94 @@ describe("feature pages", () => {
         status: "connected",
         enabledTools: ["mock.get_device_status"]
       },
-      providers: {
-        llm: "openai-compatible",
-        stt: "alibaba-model-studio",
-        tts: "alibaba-model-studio"
+      routing: {
+        connections: [
+          {
+            id: "connection-chat",
+            providerId: "openai-compatible",
+            displayName: "Alibaba Chat",
+            endpoint: "https://example.com/v1",
+            apiKeyConfigured: true,
+            enabled: true
+          },
+          {
+            id: "connection-speech",
+            providerId: "alibaba-model-studio",
+            displayName: "Alibaba Speech",
+            endpoint: "wss://example.com",
+            apiKeyConfigured: true,
+            enabled: true
+          }
+        ],
+        models: [
+          dashboardModel("model-chat", "connection-chat", "Qwen Chat", [
+            "text-input",
+            "text-output",
+            "tool-calling"
+          ]),
+          dashboardModel("model-stt", "connection-speech", "Fun-ASR", [
+            "audio-input",
+            "text-output",
+            "transcription"
+          ]),
+          dashboardModel("model-tts", "connection-speech", "Qwen TTS", [
+            "text-input",
+            "audio-output",
+            "speech-synthesis"
+          ])
+        ],
+        routes: [
+          {
+            id: "route-composed",
+            displayName: "Production Voice",
+            mode: "composed",
+            sttModelDeploymentId: "model-stt",
+            chatModelDeploymentId: "model-chat",
+            ttsModelDeploymentId: "model-tts",
+            nativeModelDeploymentId: null,
+            fallbackRouteId: null,
+            sttStreamingEnabled: false,
+            ttsStreamingEnabled: false,
+            enabled: true
+          }
+        ],
+        activeRouteId: "route-composed"
       }
     });
     renderWithProviders(<DashboardPage />);
 
     expect(await screen.findByText("mock.get_device_status")).toBeVisible();
     expect(screen.getByText("2")).toBeVisible();
-    expect(screen.getByText("OpenAI-compatible")).toBeVisible();
-    expect(screen.getAllByText("Alibaba Cloud Model Studio")).toHaveLength(2);
+    expect(screen.getByText("Production Voice")).toBeVisible();
+    expect(screen.getByText("Qwen Chat")).toBeVisible();
+    expect(screen.getByText("Fun-ASR")).toBeVisible();
+    expect(screen.getByText("Qwen TTS")).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: "Manage routing" })
+    ).toHaveAttribute("href", "/settings?section=providers");
+    expect(screen.getAllByText("Required capabilities verified")).toHaveLength(
+      3
+    );
   });
+
+  function dashboardModel(
+    id: string,
+    connectionId: string,
+    displayName: string,
+    capabilities: ModelCapability[]
+  ) {
+    return {
+      id,
+      connectionId,
+      displayName,
+      modelName: id,
+      apiVersion: "",
+      providerOptions: {},
+      declaredCapabilities: capabilities,
+      verifiedCapabilities: capabilities,
+      enabled: true
+    };
+  }
 
   it("submits chat and renders tool-assisted output", async () => {
     const user = userEvent.setup();

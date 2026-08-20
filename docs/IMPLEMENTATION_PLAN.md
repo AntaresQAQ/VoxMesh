@@ -54,7 +54,7 @@ The first confirmed Mock Mode vertical slice is implemented and validated on mac
 - [x] configurable Azure OpenAI `gpt-4o-mini-transcribe` STT adapter
 - [x] configurable Azure OpenAI `gpt-4o-mini-tts` WAV adapter
 - [x] independent Mock/Azure STT and TTS selection with write-only speech credentials
-- [x] independent STT and TTS endpoints and API keys with legacy shared-setting migration
+- [x] independent STT and TTS connections, endpoints, and API keys
 - [x] speech connection test and dynamic next-request provider activation
 - [x] generic Provider Registry used by LLM, STT, and TTS factories
 - [x] capability-based Provider Catalog API shared by LLM, STT, and TTS Settings selectors
@@ -74,7 +74,7 @@ The first confirmed Mock Mode vertical slice is implemented and validated on mac
 - [x] mono 16 kHz PCM16 WAV browser recording normalization
 - [x] Alibaba WebSocket endpoint allowlist, task lifecycle, binary audio, and failure tests
 - [x] system-managed Provider Connections, Model Deployments, and Runtime Routes
-- [x] deterministic migration from current provider settings into stable route assignments
+- [x] deterministic Mock routing initialization for new databases
 - [x] declared and verified model capabilities with connection-test verification
 - [x] authenticated runtime routing summary API and accessible Settings view
 - [x] OpenAI-compatible text, tool-call, error, registry, API, and Settings tests
@@ -84,7 +84,10 @@ The first confirmed Mock Mode vertical slice is implemented and validated on mac
 The following planned capabilities are not complete:
 
 - [ ] physical voice flow
-- [ ] editable Provider Connections, Model Deployments, and Runtime Routes CRUD
+- [x] editable Provider Connections, Model Deployments, and Runtime Routes CRUD
+- [x] explicit Native-to-Composed fallback with no silent downgrade
+- [x] independent STT/TTS streaming switches gated by declared and verified capability
+- [x] explicit activation error prevents streaming routes from silently using buffered transport
 - [ ] real Native Multimodal provider adapter and verified capability routing
 - [ ] opt-in live OpenAI-compatible LLM/STT/TTS provider smoke tests
 - [ ] true streaming browser microphone to Alibaba Fun-ASR

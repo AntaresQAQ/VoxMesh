@@ -1,7 +1,10 @@
 // @vitest-environment jsdom
 
 import { screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+import type { RuntimeRoutingSummary } from "@voxmesh/shared";
 
 import { apiClient } from "../../api.js";
 import { renderWithProviders } from "../../test/render.js";
@@ -13,58 +16,24 @@ afterEach(() => {
 
 describe("RuntimeRoutingSummaryCard", () => {
   it("renders connections, active route, and capability verification", async () => {
-    vi.spyOn(apiClient, "runtimeRouting").mockResolvedValue({
-      connections: [
-        {
-          id: "connection-chat",
-          providerId: "openai-compatible",
-          displayName: "Chat · OpenAI-compatible",
-          endpoint: "https://provider.example.com/v1",
-          apiKeyConfigured: true
-        },
-        {
-          id: "connection-native",
-          providerId: "mock-native",
-          displayName: "Native · Mock Native Multimodal",
-          endpoint: "",
-          apiKeyConfigured: false
-        }
-      ],
-      models: [
-        {
-          id: "model-chat",
-          connectionId: "connection-chat",
-          displayName: "Chat · qwen-plus",
-          modelName: "qwen-plus",
-          apiVersion: "",
-          declaredCapabilities: ["text-input", "text-output", "tool-calling"],
-          verifiedCapabilities: ["text-input", "text-output"]
-        }
-      ],
-      routes: [
-        {
-          id: "route-composed",
-          displayName: "Default Composed Voice",
-          mode: "composed",
-          sttModelDeploymentId: null,
-          chatModelDeploymentId: "model-chat",
-          ttsModelDeploymentId: null,
-          nativeModelDeploymentId: null,
-          fallbackRouteId: null
-        }
-      ],
-      activeRouteId: "route-composed"
-    });
+    const user = userEvent.setup();
+    vi.spyOn(apiClient, "runtimeRouting").mockResolvedValue(routingSummary());
 
     renderWithProviders(<RuntimeRoutingSummaryCard />);
 
     expect(
       await screen.findByRole("heading", { name: "Runtime routing" })
     ).toBeVisible();
-    expect(await screen.findByText("Default Composed Voice")).toBeVisible();
-    expect(screen.getByText("Chat · OpenAI-compatible")).toBeVisible();
+    expect(
+      (await screen.findAllByText("Default Composed Voice"))[0]
+    ).toBeVisible();
+    expect(screen.getByText("Connections: 2")).toBeVisible();
+    expect(screen.getByText("Models: 1")).toBeVisible();
+    await user.click(screen.getByText("Connections (2)"));
+    expect(screen.getAllByText("Chat · OpenAI-compatible")[0]).toBeVisible();
     expect(screen.getByText("API key configured")).toBeVisible();
     expect(screen.queryByText("Not configured")).not.toBeInTheDocument();
+    await user.click(screen.getByText("Models (1)"));
     expect(screen.getByText("Verified: Text input, Text output")).toBeVisible();
     expect(
       screen.getByText("Declared: Text input, Text output, Tool calling")
@@ -82,4 +51,77 @@ describe("RuntimeRoutingSummaryCard", () => {
       "Routing unavailable"
     );
   });
+
+  it("announces route test progress and success beside the route", async () => {
+    const user = userEvent.setup();
+    const summary = routingSummary();
+    vi.spyOn(apiClient, "runtimeRouting").mockResolvedValue(summary);
+    vi.spyOn(apiClient, "testRuntimeRoute").mockImplementation(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      return summary;
+    });
+
+    renderWithProviders(<RuntimeRoutingSummaryCard />);
+
+    await user.click(await screen.findByText("Routes (1)"));
+    await user.click(screen.getByRole("button", { name: "Test route" }));
+    expect(screen.getByRole("status")).toHaveTextContent("Testing route...");
+    expect(
+      await screen.findByText(
+        "Route test succeeded. Assigned model capabilities are verified."
+      )
+    ).toBeVisible();
+  });
 });
+
+function routingSummary(): RuntimeRoutingSummary {
+  return {
+    connections: [
+      {
+        id: "connection-chat",
+        providerId: "openai-compatible",
+        displayName: "Chat · OpenAI-compatible",
+        endpoint: "https://provider.example.com/v1",
+        apiKeyConfigured: true,
+        enabled: true
+      },
+      {
+        id: "connection-native",
+        providerId: "mock-native",
+        displayName: "Native · Mock Native Multimodal",
+        endpoint: "",
+        apiKeyConfigured: false,
+        enabled: true
+      }
+    ],
+    models: [
+      {
+        id: "model-chat",
+        connectionId: "connection-chat",
+        displayName: "Chat · qwen-plus",
+        modelName: "qwen-plus",
+        apiVersion: "",
+        providerOptions: {},
+        declaredCapabilities: ["text-input", "text-output", "tool-calling"],
+        verifiedCapabilities: ["text-input", "text-output"],
+        enabled: true
+      }
+    ],
+    routes: [
+      {
+        id: "route-composed",
+        displayName: "Default Composed Voice",
+        mode: "composed",
+        sttModelDeploymentId: null,
+        chatModelDeploymentId: "model-chat",
+        ttsModelDeploymentId: null,
+        nativeModelDeploymentId: null,
+        fallbackRouteId: null,
+        sttStreamingEnabled: false,
+        ttsStreamingEnabled: false,
+        enabled: true
+      }
+    ],
+    activeRouteId: "route-composed"
+  };
+}

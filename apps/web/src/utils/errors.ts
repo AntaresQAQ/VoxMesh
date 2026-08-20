@@ -22,7 +22,7 @@ export function localizedError(
       case "PASSWORD_UNCHANGED":
         return t("errors.PASSWORD_UNCHANGED");
       case "REQUEST_ERROR":
-        return t("errors.REQUEST_ERROR");
+        return caught.message;
       case "INTERNAL_ERROR":
         return t("errors.INTERNAL_ERROR");
       default:

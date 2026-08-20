@@ -50,24 +50,6 @@ export function validateLlmConfiguration(config: StoredLlmConfiguration): void {
   registry.create(config);
 }
 
-export function publicLlmConfiguration(config: StoredLlmConfiguration) {
-  return {
-    mode: config.mode,
-    endpoint: config.endpoint,
-    deployment: config.deployment,
-    apiVersion: config.apiVersion,
-    baseUrl: config.baseUrl,
-    model: config.model,
-    timeoutMs: config.timeoutMs,
-    maxOutputTokens: config.maxOutputTokens,
-    apiKeyConfigured: config.apiKey !== null
-  };
-}
-
-export function llmProviderDescriptors() {
-  return registry.descriptors();
-}
-
 function validateAzure(config: StoredLlmConfiguration): void {
   requireApiKey(config);
   requireHttpsUrl(config.endpoint, "Azure OpenAI endpoint");

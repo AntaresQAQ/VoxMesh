@@ -11,7 +11,7 @@ export function PageHeader(props: {
   return (
     <>
       <header>
-        <p className="eyebrow">{t("common.mockMode")}</p>
+        <p className="eyebrow">{t("common.tagline")}</p>
         <h2 data-route-heading tabIndex={-1}>
           {props.title}
         </h2>

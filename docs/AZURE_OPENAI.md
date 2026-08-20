@@ -12,7 +12,7 @@ Azure model availability varies by region. Deploy the models in Microsoft Foundr
 
 ## 2. LLM Configuration
 
-Settings fields:
+Create an Azure OpenAI Connection and Chat Model with these fields:
 
 | Field       | Example                                |
 | ----------- | -------------------------------------- |
@@ -73,22 +73,28 @@ API versions above are current tested defaults for the selected preview model fa
 
 ## 4. Saving and Testing
 
-1. Open **Settings**.
-2. Configure the LLM deployment if Chat should use Azure OpenAI.
-3. Select Azure OpenAI independently for STT and TTS.
-4. Configure the STT endpoint, key, deployment, API version, and language.
-5. Configure the TTS endpoint, key, deployment, API version, voice, and instructions.
-6. Select **Save speech settings**.
-7. Select **Test speech connection**.
+1. Open **Settings → AI Providers**.
+2. Create the required Azure OpenAI Connections with their endpoints and
+   write-only API keys.
+3. Create Chat, STT, and TTS Models with the deployment names, API versions,
+   declared capabilities, and provider options described above.
+4. Create or edit a Composed Route and assign the Chat, STT, and TTS Models.
+5. For an inactive route, select **Test & activate**. The route becomes active
+   only after every assigned provider test succeeds.
+6. For the active route, select **Test route** to revalidate its current
+   configuration.
 
-The speech connection test:
+The route test:
 
-- creates a local valid WAV sample
-- sends it to the configured STT provider
-- synthesizes a short phrase through the configured TTS provider
-- reports the transcript and returned audio MIME type
+- verifies a direct Chat completion
+- verifies Chat tool calling through a real MCP tool execution and final model
+  response
+- synthesizes a short phrase through the assigned TTS Model
+- sends the generated WAV audio to the assigned STT Model
+- commits role-specific verified capabilities only if the route, Models, and
+  Connections remain unchanged throughout the test
 
-The test makes billable provider requests when Azure OpenAI is selected.
+Route testing makes billable provider requests when Azure OpenAI is assigned.
 
 ## 5. Voice Request Flow
 

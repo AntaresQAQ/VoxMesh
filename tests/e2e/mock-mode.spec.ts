@@ -40,6 +40,34 @@ test("completes setup, tool-assisted chat, inspection, and logout", async ({
       value: FakeMediaRecorder
     });
     class FakeAudioContext {
+      public async resume(): Promise<void> {
+        return undefined;
+      }
+
+      public createMediaStreamSource(): {
+        connect: () => void;
+        disconnect: () => void;
+      } {
+        return {
+          connect: () => undefined,
+          disconnect: () => undefined
+        };
+      }
+
+      public createAnalyser(): {
+        fftSize: number;
+        smoothingTimeConstant: number;
+        getFloatTimeDomainData: (samples: Float32Array) => void;
+        disconnect: () => void;
+      } {
+        return {
+          fftSize: 1024,
+          smoothingTimeConstant: 0,
+          getFloatTimeDomainData: (samples) => samples.fill(0.1),
+          disconnect: () => undefined
+        };
+      }
+
       public async decodeAudioData(): Promise<{
         numberOfChannels: number;
         sampleRate: number;
@@ -95,10 +123,15 @@ test("completes setup, tool-assisted chat, inspection, and logout", async ({
   await expect(dashboardHeading).toBeVisible();
   await expect(dashboardHeading).toBeFocused();
   await expect(page.getByText("mock.get_device_status")).toBeVisible();
+  await expect(page.getByText("Default Composed Voice")).toBeVisible();
+  await expect(page.getByText("Chat · Mock Chat")).toBeVisible();
+  await expect(page.getByText("STT · Mock STT")).toBeVisible();
+  await expect(page.getByText("TTS · Mock TTS")).toBeVisible();
+  await expect(page.getByText("Required capabilities verified")).toHaveCount(3);
   await expectAccessible(page, "English dark dashboard");
   await page.keyboard.press("Tab");
   await expect(
-    page.getByRole("link", { name: "Skip to main content" })
+    page.getByRole("link", { name: "Manage routing" })
   ).toBeFocused();
 
   await page.getByRole("link", { name: "Chat" }).click();
@@ -213,145 +246,127 @@ test("completes setup, tool-assisted chat, inspection, and logout", async ({
   await page.emulateMedia({ colorScheme: "dark" });
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 
-  await page.route("**/api/config/llm", async (route) => {
-    if (route.request().method() === "GET") {
-      await route.fulfill({
-        json: {
-          mode: "openai-compatible",
-          endpoint: "",
-          deployment: "",
-          apiVersion: "2024-10-21",
-          baseUrl: "https://saved.example.com/v1",
-          model: "saved-model",
-          timeoutMs: 30_000,
-          maxOutputTokens: 1_024,
-          apiKeyConfigured: true
-        }
-      });
-      return;
-    }
-    await route.continue();
-  });
-  await page.route("**/api/config/speech", async (route) => {
-    if (route.request().method() === "GET") {
-      await route.fulfill({
-        json: {
-          sttMode: "openai-compatible",
-          ttsMode: "azure-openai",
-          sttEndpoint: "https://saved-stt.example.com/v1",
-          sttDeployment: "saved-stt-model",
-          sttApiVersion: "2025-04-01-preview",
-          sttLanguage: "zh",
-          sttApiKeyConfigured: true,
-          ttsEndpoint: "https://saved-tts.openai.azure.com",
-          ttsDeployment: "saved-tts-model",
-          ttsApiVersion: "2025-03-01-preview",
-          ttsVoice: "coral",
-          ttsInstructions: "Speak clearly and naturally.",
-          ttsApiKeyConfigured: true
-        }
-      });
-      return;
-    }
-    await route.continue();
-  });
   await page.getByRole("link", { name: "AI Providers" }).click();
   await expect(page).toHaveURL(/section=providers/);
   await expect(
     page.getByRole("heading", { name: "Runtime routing" })
   ).toBeVisible();
-  await expect(page.getByText("Default Composed Voice")).toBeVisible();
-  await expect(page.getByText("Chat · Mock", { exact: true })).toBeVisible();
-  await expectAccessible(page, "English dark provider settings");
-  const llmSettings = page
-    .getByRole("heading", { name: "LLM provider" })
-    .locator("..");
-  await expect(llmSettings.getByLabel("Provider", { exact: true })).toHaveValue(
-    "openai-compatible"
-  );
-  await page.getByRole("button", { name: "Test connection" }).click();
-  await expect(page.getByText(/Connection test:/)).toBeVisible();
-  await expect(llmSettings.getByLabel("Provider", { exact: true })).toHaveValue(
-    "openai-compatible"
-  );
-  await expect(llmSettings.getByLabel("Base URL")).toHaveValue(
-    "https://saved.example.com/v1"
-  );
-  await llmSettings
-    .getByLabel("Provider", { exact: true })
-    .selectOption("mock");
-  await page.getByRole("button", { name: "Save LLM settings" }).click();
-  await expect(page.getByText("LLM configuration saved.")).toBeVisible();
-  await page.getByRole("button", { name: "Test connection" }).click();
-  await expect(page.getByText(/Connection test:/)).toBeVisible();
-  await expect(page.getByLabel("STT provider")).toHaveValue(
-    "openai-compatible"
-  );
-  await expect(page.getByLabel("TTS provider")).toHaveValue("azure-openai");
-  await page.getByRole("button", { name: "Test speech connection" }).click();
-  await expect(page.getByText(/Speech test: transcript/)).toBeVisible();
-  await expect(page.getByLabel("STT provider")).toHaveValue(
-    "openai-compatible"
-  );
-  await expect(page.getByLabel("TTS provider")).toHaveValue("azure-openai");
-  await expect(page.getByLabel("STT endpoint")).toHaveValue(
-    "https://saved-stt.example.com/v1"
-  );
-  await expect(page.getByLabel("TTS endpoint")).toHaveValue(
-    "https://saved-tts.openai.azure.com"
-  );
-  await page.getByLabel("STT provider").selectOption("azure-openai");
-  await page.getByLabel("TTS provider").selectOption("mock");
-  await page.unroute("**/api/config/llm");
-  await page.unroute("**/api/config/speech");
-  await page.getByLabel("STT provider").selectOption("alibaba-model-studio");
-  await page.getByLabel("TTS provider").selectOption("alibaba-model-studio");
+  await expect(page.getByText("Default Composed Voice").first()).toBeVisible();
+  const routingManagers = page.locator("details.routing-management");
+  const connectionManager = routingManagers.nth(0);
+  await connectionManager.locator("summary").click();
   await expect(
-    page.getByText(/dedicated Model Studio WebSocket protocol/).first()
+    page.getByText("Chat · Mock", { exact: true }).first()
   ).toBeVisible();
-  await page
-    .getByLabel("STT endpoint")
-    .fill("wss://workspace.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference");
-  await page.getByLabel("STT deployment").fill("fun-asr-realtime");
-  await page.getByLabel("STT API key").fill("offline-stt-secret");
-  await page
-    .getByLabel("TTS endpoint")
-    .fill("wss://workspace.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference");
-  await page.getByLabel("TTS deployment").fill("qwen-audio-3.0-tts-plus");
-  await page.getByLabel("TTS voice").fill("longanlingxin");
-  await page.getByLabel("TTS API key").fill("offline-tts-secret");
-  await page.getByRole("button", { name: "Save speech settings" }).click();
-  await expect(page.getByText("Speech configuration saved.")).toBeVisible();
-  await page.getByLabel("STT provider").selectOption("azure-openai");
-  await page.getByLabel("TTS provider").selectOption("mock");
-  const speechPanelHeights = await page
-    .locator(".speech-provider-grid fieldset")
-    .evaluateAll((elements) =>
-      elements.map((element) => element.getBoundingClientRect().height)
-    );
-  expect(speechPanelHeights[0]).toBeGreaterThan(speechPanelHeights[1] ?? 0);
-  await page.getByLabel("STT provider").selectOption("mock");
-  await page.getByRole("button", { name: "Save speech settings" }).click();
-  await expect(page.getByText("Speech configuration saved.")).toBeVisible();
-  await page.getByRole("button", { name: "Test speech connection" }).click();
-  await expect(page.getByText(/Speech test: transcript/)).toBeVisible();
-
-  await page
-    .getByLabel("Voice pipeline mode")
-    .selectOption("native-multimodal");
-  await expect(page.getByLabel("Native multimodal provider")).toBeVisible();
+  const referencedConnection = connectionManager
+    .getByText("Chat · Mock", { exact: true })
+    .locator("..");
   await expect(
-    page.getByRole("heading", { name: "LLM provider" })
-  ).not.toBeVisible();
+    referencedConnection.getByRole("button", { name: "Delete" })
+  ).toBeDisabled();
+  await expect(referencedConnection).toContainText("Used by models:");
+  await connectionManager
+    .getByRole("button", { name: "Add connection" })
+    .click();
+  await connectionManager.getByLabel("Provider").selectOption("mock");
+  await connectionManager.getByLabel("Display name").fill("E2E Mock");
+  await connectionManager.getByRole("button", { name: "Create" }).click();
+  await expect(connectionManager.getByText("E2E Mock")).toBeVisible();
+
+  const modelManager = routingManagers.nth(1);
+  await modelManager.locator("summary").click();
+  await modelManager.getByRole("button", { name: "Add model" }).click();
+  await modelManager.getByLabel("Connection").selectOption({
+    label: "E2E Mock"
+  });
+  await modelManager.getByLabel("Display name").fill("E2E Streaming STT");
+  await modelManager.getByLabel("Model name").fill("mock-streaming-stt");
+  await modelManager.getByLabel("Declared").click();
+  await modelManager.getByRole("checkbox", { name: "Audio input" }).check();
+  await modelManager.getByRole("checkbox", { name: "Text output" }).check();
+  await modelManager.getByRole("checkbox", { name: "Transcription" }).check();
+  await modelManager
+    .getByRole("checkbox", { name: "Streaming", exact: true })
+    .check();
+  await expect(modelManager.getByLabel("Declared")).toContainText(
+    "4 capabilities selected"
+  );
+  await expectAccessible(page, "capability picker");
+  await modelManager.getByRole("button", { name: "Done" }).click();
+  await modelManager.getByRole("button", { name: "Create" }).click();
+  const streamingModelItem = modelManager
+    .getByText("E2E Streaming STT")
+    .locator("..");
+  await expect(streamingModelItem).toBeVisible();
+  await streamingModelItem.getByRole("button", { name: "Edit" }).click();
+  await expect(streamingModelItem.getByLabel("Display name")).toHaveValue(
+    "E2E Streaming STT"
+  );
+  await expect(streamingModelItem.locator("form")).toBeVisible();
+  await streamingModelItem.getByRole("button", { name: "Cancel" }).click();
+
+  const routeManager = routingManagers.nth(2);
+  await routeManager.locator("summary").click();
+  await routeManager.getByRole("button", { name: "Add route" }).click();
+  await routeManager.getByLabel("Display name").fill("E2E Streaming Route");
+  await routeManager.getByLabel("Speech to text").selectOption({
+    label: "E2E Streaming STT"
+  });
+  await routeManager.getByLabel("LLM").selectOption({
+    label: "Chat · Mock Chat"
+  });
+  await routeManager.getByLabel("Text to speech").selectOption({
+    label: "TTS · Mock TTS"
+  });
+  await routeManager.getByLabel("Enable STT streaming").check();
+  await expect(
+    routeManager.getByLabel("Enable TTS streaming")
+  ).not.toBeChecked();
+  await routeManager.getByRole("button", { name: "Create" }).click();
+  const customRoute = routeManager
+    .getByText("E2E Streaming Route")
+    .locator("..");
+  await expect(customRoute).toBeVisible();
+  const routeTestResponse = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      new URL(response.url()).pathname.endsWith("/test")
+  );
+  await customRoute.getByRole("button", { name: "Test & activate" }).click();
+  expect((await routeTestResponse).status()).toBe(200);
+  await expect(page.getByRole("alert")).toContainText(
+    "Streaming routes cannot be activated"
+  );
+  await expectAccessible(page, "English dark provider settings");
+  const nativeRoute = routeManager
+    .getByText("Default Native Voice")
+    .locator("..");
+  await nativeRoute.getByRole("button", { name: "Test & activate" }).click();
+  await expect(routeManager.getByRole("status")).toContainText(
+    "Route test succeeded and the route is active."
+  );
+  await expect(nativeRoute.getByText("Active route")).toBeVisible();
   await page.getByRole("link", { name: "Chat" }).click();
   await page.getByRole("button", { name: "Start recording" }).click();
+  await expect(
+    page.getByRole("meter", { name: "Microphone level" })
+  ).toHaveAttribute("aria-valuenow", "67");
   await page.getByRole("button", { name: "Stop recording" }).click();
   await expect(
     page.getByText("Native multimodal model reports living-room-light is on.")
   ).toBeVisible();
   await page.getByRole("link", { name: "Settings" }).click();
   await page.getByRole("link", { name: "AI Providers" }).click();
-  await page.getByLabel("Voice pipeline mode").selectOption("composed");
+  const returnedRoutes = page.locator("details.routing-management").nth(2);
+  await returnedRoutes.locator("summary").click();
+  const composedRoute = returnedRoutes
+    .getByText("Default Composed Voice")
+    .locator("..");
+  await composedRoute.getByRole("button", { name: "Test & activate" }).click();
+  await expect(returnedRoutes.getByRole("status")).toContainText(
+    "Route test succeeded and the route is active."
+  );
+  await expect(composedRoute.getByText("Active route")).toBeVisible();
 
   await page.getByRole("link", { name: "Security" }).click();
   await expect(page).toHaveURL(/section=security/);

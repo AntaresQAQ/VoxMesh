@@ -10,47 +10,34 @@ import Fastify, {
   type FastifyRequest
 } from "fastify";
 
-import { MockMcpServer } from "@voxmesh/agent-core";
+import { MockMcpServer, NativeVoiceRuntime } from "@voxmesh/agent-core";
 import {
   ApiErrorSchema,
+  ActiveRuntimeRouteUpdateSchema,
   ChatRequestSchema,
   ChatResponseSchema,
   ConversationDetailSchema,
   ConversationListSchema,
   DashboardSchema,
   HealthSchema,
-  LlmConfigurationSchema,
-  LlmConfigurationUpdateSchema,
-  LlmConnectionTestSchema,
   LogListSchema,
+  ModelDeploymentInputSchema,
   PasswordChangeSchema,
   PasswordSchema,
-  ProviderCatalogSchema,
+  ProviderConnectionInputSchema,
   RuntimeRoutingSummarySchema,
+  RuntimeRouteInputSchema,
   SessionSchema,
-  SpeechConfigurationSchema,
-  SpeechConfigurationUpdateSchema,
-  SpeechConnectionTestSchema,
   SetupStatusSchema,
-  VoiceResponseSchema,
-  VoicePipelineConfigurationSchema,
-  VoicePipelineConfigurationUpdateSchema
+  VoiceResponseSchema
 } from "@voxmesh/shared";
 import { VoxMeshStore } from "@voxmesh/storage";
 
 import type { ServerConfig } from "./config.js";
 import { ConversationService } from "./conversation-service.js";
-import {
-  createLlmProvider,
-  publicLlmConfiguration,
-  validateLlmConfiguration
-} from "./llm-providers.js";
+import { createLlmProvider } from "./llm-providers.js";
 import { LoginRateLimiter } from "./login-rate-limiter.js";
-import {
-  createNativeVoiceProvider,
-  validateNativeVoiceConfiguration
-} from "./native-voice-providers.js";
-import { providerCatalog } from "./provider-catalog.js";
+import { createNativeVoiceProvider } from "./native-voice-providers.js";
 import {
   createSessionToken,
   hashPassword,
@@ -60,7 +47,6 @@ import {
 import {
   createSpeechToTextProvider,
   createTextToSpeechProvider,
-  publicSpeechConfiguration,
   testSpeechProviders,
   validateSpeechConfiguration
 } from "./speech-providers.js";
@@ -87,9 +73,11 @@ export async function buildServer(
   const conversationService = new ConversationService(
     store,
     mcp,
-    () => createLlmProvider(store.getRuntimeLlmConfiguration()),
-    () => createSpeechToTextProvider(store.getRuntimeSpeechConfiguration()),
-    () => createTextToSpeechProvider(store.getRuntimeSpeechConfiguration()),
+    (routeId) => createLlmProvider(store.getRuntimeLlmConfiguration(routeId)),
+    (routeId) =>
+      createSpeechToTextProvider(store.getRuntimeSpeechConfiguration(routeId)),
+    (routeId) =>
+      createTextToSpeechProvider(store.getRuntimeSpeechConfiguration(routeId)),
     createNativeVoiceProvider
   );
   const loginRateLimiter = new LoginRateLimiter();
@@ -379,176 +367,6 @@ export async function buildServer(
   );
 
   app.get(
-    "/api/config/llm",
-    {
-      preHandler: authenticate,
-      schema: {
-        response: {
-          200: LlmConfigurationSchema,
-          401: ApiErrorSchema
-        }
-      }
-    },
-    async () => publicLlmConfiguration(store.getLlmConfiguration())
-  );
-
-  app.put(
-    "/api/config/llm",
-    {
-      preHandler: authenticate,
-      schema: {
-        body: LlmConfigurationUpdateSchema,
-        response: {
-          200: LlmConfigurationSchema,
-          400: ApiErrorSchema,
-          401: ApiErrorSchema
-        }
-      }
-    },
-    async (request) => {
-      const current = store.getLlmConfiguration();
-      validateLlmConfiguration({
-        mode: request.body.mode,
-        endpoint: request.body.endpoint,
-        deployment: request.body.deployment,
-        apiVersion: request.body.apiVersion,
-        baseUrl: request.body.baseUrl,
-        model: request.body.model,
-        timeoutMs: request.body.timeoutMs,
-        maxOutputTokens: request.body.maxOutputTokens,
-        apiKey:
-          request.body.apiKey ??
-          (request.body.clearApiKey ? null : current.apiKey)
-      });
-      const updated = store.updateLlmConfiguration(request.body);
-      store.addLog({
-        category: "SYSTEM",
-        level: "INFO",
-        message: `LLM provider configured as ${updated.mode}`
-      });
-      return publicLlmConfiguration(updated);
-    }
-  );
-
-  app.post(
-    "/api/config/llm/test",
-    {
-      preHandler: authenticate,
-      schema: {
-        response: {
-          200: LlmConnectionTestSchema,
-          400: ApiErrorSchema,
-          401: ApiErrorSchema
-        }
-      }
-    },
-    async () => {
-      const provider = createLlmProvider(store.getRuntimeLlmConfiguration());
-      const result = await provider.complete({
-        messages: [
-          {
-            role: "user",
-            content:
-              "Reply with a short confirmation that the connection works."
-          }
-        ],
-        tools: []
-      });
-      const response = {
-        success: result.type === "message",
-        response:
-          result.type === "message"
-            ? result.content
-            : "Provider returned an unexpected tool call"
-      };
-      if (response.success) {
-        store.markRuntimeRoleVerified("chat");
-      }
-      return response;
-    }
-  );
-
-  app.get(
-    "/api/config/speech",
-    {
-      preHandler: authenticate,
-      schema: {
-        response: {
-          200: SpeechConfigurationSchema,
-          401: ApiErrorSchema
-        }
-      }
-    },
-    async () => publicSpeechConfiguration(store.getSpeechConfiguration())
-  );
-
-  app.put(
-    "/api/config/speech",
-    {
-      preHandler: authenticate,
-      schema: {
-        body: SpeechConfigurationUpdateSchema,
-        response: {
-          200: SpeechConfigurationSchema,
-          400: ApiErrorSchema,
-          401: ApiErrorSchema
-        }
-      }
-    },
-    async (request) => {
-      const current = store.getSpeechConfiguration();
-      validateSpeechConfiguration({
-        sttMode: request.body.sttMode,
-        ttsMode: request.body.ttsMode,
-        sttEndpoint: request.body.sttEndpoint,
-        sttDeployment: request.body.sttDeployment,
-        sttApiVersion: request.body.sttApiVersion,
-        sttLanguage: request.body.sttLanguage,
-        sttApiKey:
-          request.body.sttApiKey ??
-          (request.body.clearSttApiKey ? null : current.sttApiKey),
-        ttsEndpoint: request.body.ttsEndpoint,
-        ttsDeployment: request.body.ttsDeployment,
-        ttsApiVersion: request.body.ttsApiVersion,
-        ttsVoice: request.body.ttsVoice,
-        ttsInstructions: request.body.ttsInstructions,
-        ttsApiKey:
-          request.body.ttsApiKey ??
-          (request.body.clearTtsApiKey ? null : current.ttsApiKey)
-      });
-      const updated = store.updateSpeechConfiguration(request.body);
-      store.addLog({
-        category: "SYSTEM",
-        level: "INFO",
-        message: `Speech providers configured as STT=${updated.sttMode}, TTS=${updated.ttsMode}`
-      });
-      return publicSpeechConfiguration(updated);
-    }
-  );
-
-  app.post(
-    "/api/config/speech/test",
-    {
-      preHandler: authenticate,
-      schema: {
-        response: {
-          200: SpeechConnectionTestSchema,
-          400: ApiErrorSchema,
-          401: ApiErrorSchema
-        }
-      }
-    },
-    async () => {
-      const result = await testSpeechProviders(
-        store.getRuntimeSpeechConfiguration()
-      );
-      store.markRuntimeRoleVerified("stt");
-      store.markRuntimeRoleVerified("tts");
-      return result;
-    }
-  );
-
-  app.get(
     "/api/runtime-routing",
     {
       preHandler: authenticate,
@@ -562,43 +380,295 @@ export async function buildServer(
     async () => store.getRuntimeRoutingSummary()
   );
 
-  app.get(
-    "/api/config/voice-pipeline",
+  app.post(
+    "/api/runtime-routing/connections",
     {
       preHandler: authenticate,
       schema: {
+        body: ProviderConnectionInputSchema,
         response: {
-          200: VoicePipelineConfigurationSchema,
-          401: ApiErrorSchema
-        }
-      }
-    },
-    async () => store.getVoicePipelineConfiguration()
-  );
-
-  app.put(
-    "/api/config/voice-pipeline",
-    {
-      preHandler: authenticate,
-      schema: {
-        body: VoicePipelineConfigurationUpdateSchema,
-        response: {
-          200: VoicePipelineConfigurationSchema,
+          201: RuntimeRoutingSummarySchema,
           400: ApiErrorSchema,
           401: ApiErrorSchema
         }
       }
     },
-    async (request) => {
-      validateNativeVoiceConfiguration(request.body);
-      const updated = store.updateVoicePipelineConfiguration(request.body);
-      store.addLog({
-        category: "SYSTEM",
-        level: "INFO",
-        message: `Voice pipeline configured as ${updated.mode}`
-      });
-      return updated;
+    async (request, reply) => {
+      const result = store.createRuntimeConnection(request.body);
+      return reply.code(201).send(result);
     }
+  );
+
+  app.put(
+    "/api/runtime-routing/connections/:id",
+    {
+      preHandler: authenticate,
+      schema: {
+        params: Type.Object({ id: Type.String() }),
+        body: ProviderConnectionInputSchema,
+        response: {
+          200: RuntimeRoutingSummarySchema,
+          400: ApiErrorSchema,
+          401: ApiErrorSchema,
+          404: ApiErrorSchema
+        }
+      }
+    },
+    async (request) =>
+      store.updateRuntimeConnection(request.params.id, request.body)
+  );
+
+  app.delete(
+    "/api/runtime-routing/connections/:id",
+    {
+      preHandler: authenticate,
+      schema: {
+        params: Type.Object({ id: Type.String() }),
+        response: {
+          200: RuntimeRoutingSummarySchema,
+          400: ApiErrorSchema,
+          401: ApiErrorSchema,
+          404: ApiErrorSchema
+        }
+      }
+    },
+    async (request) => store.deleteRuntimeConnection(request.params.id)
+  );
+
+  app.post(
+    "/api/runtime-routing/models",
+    {
+      preHandler: authenticate,
+      schema: {
+        body: ModelDeploymentInputSchema,
+        response: {
+          201: RuntimeRoutingSummarySchema,
+          400: ApiErrorSchema,
+          401: ApiErrorSchema,
+          404: ApiErrorSchema
+        }
+      }
+    },
+    async (request, reply) => {
+      const result = store.createRuntimeModel(request.body);
+      return reply.code(201).send(result);
+    }
+  );
+
+  app.put(
+    "/api/runtime-routing/models/:id",
+    {
+      preHandler: authenticate,
+      schema: {
+        params: Type.Object({ id: Type.String() }),
+        body: ModelDeploymentInputSchema,
+        response: {
+          200: RuntimeRoutingSummarySchema,
+          400: ApiErrorSchema,
+          401: ApiErrorSchema,
+          404: ApiErrorSchema
+        }
+      }
+    },
+    async (request) => store.updateRuntimeModel(request.params.id, request.body)
+  );
+
+  app.delete(
+    "/api/runtime-routing/models/:id",
+    {
+      preHandler: authenticate,
+      schema: {
+        params: Type.Object({ id: Type.String() }),
+        response: {
+          200: RuntimeRoutingSummarySchema,
+          400: ApiErrorSchema,
+          401: ApiErrorSchema,
+          404: ApiErrorSchema
+        }
+      }
+    },
+    async (request) => store.deleteRuntimeModel(request.params.id)
+  );
+
+  app.post(
+    "/api/runtime-routing/routes",
+    {
+      preHandler: authenticate,
+      schema: {
+        body: RuntimeRouteInputSchema,
+        response: {
+          201: RuntimeRoutingSummarySchema,
+          400: ApiErrorSchema,
+          401: ApiErrorSchema,
+          404: ApiErrorSchema
+        }
+      }
+    },
+    async (request, reply) => {
+      const result = store.createRuntimeRoute(request.body);
+      return reply.code(201).send(result);
+    }
+  );
+
+  app.put(
+    "/api/runtime-routing/routes/:id",
+    {
+      preHandler: authenticate,
+      schema: {
+        params: Type.Object({ id: Type.String() }),
+        body: RuntimeRouteInputSchema,
+        response: {
+          200: RuntimeRoutingSummarySchema,
+          400: ApiErrorSchema,
+          401: ApiErrorSchema,
+          404: ApiErrorSchema
+        }
+      }
+    },
+    async (request) => store.updateRuntimeRoute(request.params.id, request.body)
+  );
+
+  app.delete(
+    "/api/runtime-routing/routes/:id",
+    {
+      preHandler: authenticate,
+      schema: {
+        params: Type.Object({ id: Type.String() }),
+        response: {
+          200: RuntimeRoutingSummarySchema,
+          400: ApiErrorSchema,
+          401: ApiErrorSchema,
+          404: ApiErrorSchema
+        }
+      }
+    },
+    async (request) => store.deleteRuntimeRoute(request.params.id)
+  );
+
+  app.post(
+    "/api/runtime-routing/routes/:id/test",
+    {
+      preHandler: authenticate,
+      schema: {
+        params: Type.Object({ id: Type.String() }),
+        response: {
+          200: RuntimeRoutingSummarySchema,
+          400: ApiErrorSchema,
+          401: ApiErrorSchema,
+          404: ApiErrorSchema
+        }
+      }
+    },
+    async (request) => {
+      const route = store.getRuntimeRoute(request.params.id);
+      const verification = store.captureRuntimeRouteVerification(route.id);
+      if (route.mode === "composed") {
+        const speechConfiguration = store.getRuntimeSpeechConfiguration(
+          route.id
+        );
+        validateSpeechConfiguration(speechConfiguration);
+        const llmProvider = createLlmProvider(
+          store.getRuntimeLlmConfiguration(route.id)
+        );
+        const result = await llmProvider.complete({
+          messages: [
+            {
+              role: "user",
+              content:
+                "Reply with a short confirmation that the connection works."
+            }
+          ],
+          tools: []
+        });
+        if (result.type !== "message") {
+          throw Object.assign(
+            new Error("Chat model returned an unexpected tool call"),
+            { statusCode: 400 }
+          );
+        }
+        const diagnosticTool = (await mcp.listTools())[0];
+        if (!diagnosticTool) {
+          throw Object.assign(
+            new Error("No MCP tool is available for tool-calling verification"),
+            { statusCode: 400 }
+          );
+        }
+        const toolPrompt = `Call the ${diagnosticTool.name} tool exactly once to verify tool calling.`;
+        const toolResult = await llmProvider.complete({
+          messages: [{ role: "user", content: toolPrompt }],
+          tools: [diagnosticTool]
+        });
+        if (
+          toolResult.type !== "tool_call" ||
+          toolResult.toolCall.name !== diagnosticTool.name
+        ) {
+          throw Object.assign(
+            new Error(
+              `Chat model did not return the ${diagnosticTool.name} tool call`
+            ),
+            { statusCode: 400 }
+          );
+        }
+        const mcpResult = await mcp.callTool(
+          toolResult.toolCall.name,
+          toolResult.toolCall.arguments
+        );
+        const finalResult = await llmProvider.complete({
+          messages: [
+            { role: "user", content: toolPrompt },
+            {
+              role: "assistant",
+              content: "",
+              toolCall: toolResult.toolCall
+            },
+            {
+              role: "tool",
+              content: JSON.stringify({
+                name: toolResult.toolCall.name,
+                result: mcpResult
+              }),
+              toolCallId: toolResult.toolCall.id
+            }
+          ],
+          tools: [diagnosticTool]
+        });
+        if (finalResult.type !== "message") {
+          throw Object.assign(
+            new Error("Chat model did not complete after the test tool call"),
+            { statusCode: 400 }
+          );
+        }
+        await testSpeechProviders(speechConfiguration);
+      } else {
+        const pipeline = store.getRuntimeVoiceRouteConfiguration(route.id);
+        await new NativeVoiceRuntime(
+          createNativeVoiceProvider(pipeline),
+          mcp
+        ).run({
+          data: new Uint8Array([1]),
+          mimeType: "audio/wav"
+        });
+      }
+      store.markRuntimeRouteVerified(verification);
+      return store.getRuntimeRoutingSummary();
+    }
+  );
+
+  app.put(
+    "/api/runtime-routing/active",
+    {
+      preHandler: authenticate,
+      schema: {
+        body: ActiveRuntimeRouteUpdateSchema,
+        response: {
+          200: RuntimeRoutingSummarySchema,
+          400: ApiErrorSchema,
+          401: ApiErrorSchema,
+          404: ApiErrorSchema
+        }
+      }
+    },
+    async (request) => store.activateRuntimeRoute(request.body.routeId)
   );
 
   app.get(
@@ -612,36 +682,19 @@ export async function buildServer(
         }
       }
     },
-    async () => ({
-      status: "online" as const,
-      mode: "mock" as const,
-      uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000),
-      conversationCount: store.conversationCount(),
-      mcp: {
-        name: mcp.name,
-        status: "connected" as const,
-        enabledTools: (await mcp.listTools()).map((tool) => tool.name)
-      },
-      providers: {
-        llm: store.getLlmConfiguration().mode,
-        stt: store.getSpeechConfiguration().sttMode,
-        tts: store.getSpeechConfiguration().ttsMode
-      }
-    })
-  );
-
-  app.get(
-    "/api/providers",
-    {
-      preHandler: authenticate,
-      schema: {
-        response: {
-          200: ProviderCatalogSchema,
-          401: ApiErrorSchema
-        }
-      }
-    },
-    async () => ({ providers: providerCatalog() })
+    async () => {
+      return {
+        status: "online" as const,
+        uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000),
+        conversationCount: store.conversationCount(),
+        mcp: {
+          name: mcp.name,
+          status: "connected" as const,
+          enabledTools: (await mcp.listTools()).map((tool) => tool.name)
+        },
+        routing: store.getRuntimeRoutingSummary()
+      };
+    }
   );
 
   app.post(
