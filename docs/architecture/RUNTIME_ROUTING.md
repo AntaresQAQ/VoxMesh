@@ -1,5 +1,7 @@
 # Runtime Routing
 
+[Documentation Index](../README.md)
+
 VoxMesh stores provider connections, model deployments, and runtime routes as
 the only AI provider configuration source.
 

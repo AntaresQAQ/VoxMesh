@@ -1,5 +1,7 @@
 # Security Operations
 
+[Documentation Index](../README.md)
+
 This document describes repository security automation and alert handling for
 VoxMesh.
 

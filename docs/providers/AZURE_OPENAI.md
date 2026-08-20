@@ -1,5 +1,7 @@
 # Azure OpenAI Configuration Guide
 
+[Documentation Index](../README.md)
+
 ## 1. Supported Integrations
 
 VoxMesh currently supports non-streaming Azure OpenAI deployments for:

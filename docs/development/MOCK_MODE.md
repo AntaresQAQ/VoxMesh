@@ -1,5 +1,7 @@
 # Mock Mode Development Guide
 
+[Documentation Index](../README.md)
+
 ## 1. Purpose
 
 Mock Mode provides a deterministic, offline environment for developing and testing the complete VoxMesh application without:

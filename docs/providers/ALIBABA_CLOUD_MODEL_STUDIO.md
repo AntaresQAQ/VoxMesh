@@ -1,5 +1,7 @@
 # Alibaba Cloud Model Studio Integration Guide
 
+[Documentation Index](../README.md)
+
 ## 1. Integration Strategy
 
 Alibaba Cloud Model Studio, also known as Bailian, provides an OpenAI-compatible API for Qwen and other supported models.

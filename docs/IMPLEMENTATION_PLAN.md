@@ -1,4 +1,4 @@
-# VoxBridge MVP Implementation Plan
+# VoxMesh MVP Implementation Plan
 
 ## Related Documents
 
@@ -9,99 +9,164 @@ This document is the project-visible implementation roadmap. It does not authori
 
 ## Implementation Progress
 
-Last updated: 2026-08-19
+Last updated: 2026-08-20
 
-The first confirmed Mock Mode vertical slice is implemented and validated on macOS:
+Current merged baseline: `91eaa81` (`feat: add runtime routing management (#7)`).
 
-- [x] pnpm and strict TypeScript monorepo
-- [x] cross-platform development scripts and Linux/macOS/Windows CI matrix configuration
-- [x] shared TypeBox API schemas and TypeScript contracts
-- [x] configurable Fastify host, port, database path, session lifetime, and cookie security
-- [x] SQLite administrator, session, conversation, message, and log persistence
-- [x] first-run single-administrator password setup with salted scrypt hashing
-- [x] opaque server-side sessions with `HttpOnly` and `SameSite=Strict` cookies
-- [x] provider-independent Agent Core interfaces and bounded tool-call runtime
-- [x] deterministic Mock LLM and Mock MCP tool-assisted text flow
-- [x] React Web Console with Dashboard, Chat, Conversations, and Logs
-- [x] Settings page with password rotation and session revocation
-- [x] write-only Mock/Azure OpenAI LLM configuration and connection testing
-- [x] Azure OpenAI non-streaming text and tool-call adapter
-- [x] typed English and Simplified Chinese locale resources
-- [x] browser-language detection, English fallback, and persisted language selection
-- [x] setup/login and Settings language selectors with immediate switching
-- [x] locale-aware time formatting and translation coverage tests
-- [x] semantic Light and Dark CSS design tokens across the Web Console
-- [x] Light, Dark, and System appearance selector in Settings
-- [x] persisted theme preference and live system-theme synchronization
-- [x] pre-render theme resolution to avoid a persistent incorrect-theme flash
-- [x] feature-oriented decomposition into focused page, form, selector, and layout components
-- [x] component files below the decomposition review threshold
-- [x] React Testing Library behavioral unit tests for every current Web Console component
-- [x] TanStack Router Browser History route tree and authenticated layout guards
-- [x] stable setup, login, Dashboard, Chat, Conversations, conversation detail, Logs, Settings, and not-found routes
-- [x] direct loading, refresh, back/forward navigation, deep links, and safe login return targets
-- [x] TanStack Query server-state ownership with centralized typed query keys and mutation invalidation
-- [x] TanStack Form migration for LLM configuration and password rotation
-- [x] WCAG 2.2 AA engineering rules and accessibility audit documentation
-- [x] jsx-a11y linting and representative English/Chinese Light/Dark axe scans
-- [x] visible focus, skip navigation, route focus/announcement, and async status semantics
-- [x] current automated axe audit passes with zero violations
-- [x] provider-independent audio metadata and STT/TTS contracts
-- [x] deterministic Mock STT transcript and valid Mock TTS WAV generation
-- [x] authenticated binary Mock Voice API and persisted STT/Agent/MCP/TTS events
-- [x] browser record, stop, transcript, response, and playback controls
-- [x] Mock Voice component, provider, API integration, and fake MediaRecorder e2e tests
-- [x] configurable Azure OpenAI `gpt-4o-mini-transcribe` STT adapter
-- [x] configurable Azure OpenAI `gpt-4o-mini-tts` WAV adapter
-- [x] independent Mock/Azure STT and TTS selection with write-only speech credentials
-- [x] independent STT and TTS connections, endpoints, and API keys
-- [x] speech connection test and dynamic next-request provider activation
-- [x] generic Provider Registry used by LLM, STT, and TTS factories
-- [x] capability-based Provider Catalog API shared by LLM, STT, and TTS Settings selectors
-- [x] provider metadata merged by ID with `llm`, `stt`, and `tts` capabilities
-- [x] URL-backed General, AI Providers, and Security Settings sections
-- [x] LLM, STT, and TTS grouped in one AI Providers section
-- [x] persisted Composed and Native Multimodal voice mode selector
-- [x] provider-independent Native Voice contract and bounded MCP tool loop
-- [x] Mock Native Multimodal provider with audio input, tool calls, text, and audio output
-- [x] mode-specific Settings visibility and browser e2e coverage
-- [x] generic OpenAI-compatible Chat Completions adapter
-- [x] generic OpenAI-compatible STT and TTS adapters for standard Audio API endpoints
-- [x] OpenAI-compatible provider registered with `llm`, `stt`, and `tts` capabilities
-- [x] Alibaba Cloud Model Studio base URL, API key, model, timeout, and output-limit configuration
-- [x] dedicated Alibaba Cloud Model Studio Fun-ASR WebSocket STT provider
-- [x] dedicated Alibaba Cloud Model Studio Qwen-Audio-TTS/CosyVoice WebSocket TTS provider
-- [x] mono 16 kHz PCM16 WAV browser recording normalization
-- [x] Alibaba WebSocket endpoint allowlist, task lifecycle, binary audio, and failure tests
-- [x] system-managed Provider Connections, Model Deployments, and Runtime Routes
-- [x] deterministic Mock routing initialization for new databases
-- [x] declared and verified model capabilities with connection-test verification
-- [x] authenticated runtime routing summary API and accessible Settings view
-- [x] OpenAI-compatible text, tool-call, error, registry, API, and Settings tests
-- [x] unit, integration, and Playwright tests for the implemented vertical slice
-- [x] format, lint, strict type-check, production build, and browser e2e validation on macOS
+### Completed foundation and vertical slices
 
-The following planned capabilities are not complete:
+- [x] pnpm strict-TypeScript monorepo with format, lint, type-check, unit,
+      integration, production-build, and Playwright commands
+- [x] Linux, macOS, and Windows CI plus Playwright and CodeQL
+- [x] Fastify server, React Web Console, TypeBox contracts, SQLite migrations,
+      structured errors, and same-origin defaults
+- [x] first-run administrator setup, salted scrypt password hashing, opaque
+      server-side sessions, logout, rotation, expiry, and rate limiting
+- [x] provider-independent Agent Core with bounded Mock MCP tool execution
+- [x] deterministic Mock Chat, Mock Native Multimodal, and complete buffered
+      browser voice pipelines
+- [x] Dashboard, Chat, Conversations, HTTP snapshot Logs, Settings,
+      authentication, stable Browser History routes, localization, themes, and
+      representative accessibility automation; manual WCAG 2.2 AA review
+      remains required
+- [x] Azure OpenAI non-streaming Chat, Audio STT, and Audio TTS adapters
+- [x] generic OpenAI-compatible Chat, STT, and TTS adapters
+- [x] buffered Alibaba Cloud Model Studio Chat plus dedicated Fun-ASR and
+      Qwen-Audio-TTS/CosyVoice application adapters that use provider-internal
+      WebSocket protocols
+- [x] buffered browser recording normalization to mono 16 kHz PCM16 WAV and a
+      live local microphone loudness meter
 
-- [ ] physical voice flow
-- [x] editable Provider Connections, Model Deployments, and Runtime Routes CRUD
-- [x] explicit Native-to-Composed fallback with no silent downgrade
-- [x] independent STT/TTS streaming switches gated by declared and verified capability
-- [x] explicit activation error prevents streaming routes from silently using buffered transport
-- [ ] real Native Multimodal provider adapter and verified capability routing
-- [ ] opt-in live OpenAI-compatible LLM/STT/TTS provider smoke tests
-- [ ] true streaming browser microphone to Alibaba Fun-ASR
-- [ ] complete WCAG 2.2 AA audit evidence for every future Web Console route
-- [ ] WebSocket real-time logs and events
-- [ ] full MCP configuration and inspection console
-- [ ] STT, TTS, audio, MCP server, and advanced runtime configuration UI
-- [ ] optional Azure AI Speech Service adapter, external MCP transports, ALSA audio, and deployment phases
+### Completed Runtime Routing
+
+- [x] Runtime Routing is the only provider configuration source; the legacy
+      Provider Catalog and separate LLM/Speech/Voice Pipeline settings were
+      removed
+- [x] editable Provider Connections, Model Deployments, Runtime Routes, and
+      write-only credential replacement/clearing
+- [x] declared and verified capabilities with configuration-bound,
+      role-specific verification and real MCP tool-call execution
+- [x] protected active-route dependency graphs, dependency-aware deletion, and
+      persisted deletion of seeded records
+- [x] explicit Native-to-Composed fallback with no silent provider or pipeline
+      downgrade
+- [x] buffered route testing, Test & activate, actionable result states, and
+      provider configuration error reporting
+- [x] independent STT/TTS streaming intent switches with explicit activation
+      rejection while runtime transport remains buffered
+- [x] route-aware Dashboard status, inline Settings editors, accessible
+      capability selection, responsive layouts, and bilingual copy
+
+### Current implementation boundaries
+
+- Browser voice requests are buffered: recording completes and is normalized
+  before `/api/voice` executes the route.
+- Alibaba speech adapters use WebSockets internally, but VoxMesh does not yet
+  expose an application-level streaming voice session.
+- Native Multimodal is implemented with a deterministic Mock provider only.
+- The Logs page loads persisted data through `GET /api/logs`; it is not
+  real-time.
+- Conversation list/detail and persisted pipeline events are implemented, but
+  complete duration, correlation, in-progress, failed, and cancelled metadata
+  remain.
+- Mock MCP tool execution through Agent Core is implemented; generic MCP
+  server configuration, discovery, approval, and manual execution UI are not.
+- Automated accessibility checks cover representative routes and states. They
+  do not replace the remaining manual screen-reader, forced-colors, complete
+  zoom, device, and hardware review.
+
+### Remaining Phase 3 acceptance work
+
+- [ ] authenticated WebSocket real-time logs and domain events with versioned
+      envelopes, reconnection, gap indication, bounded buffering, backpressure,
+      URL-backed filters, and redaction
+- [ ] Chat cancellation, retry, and conversation continuity
+- [ ] Conversation Inspector duration, safe metadata, correlation identifiers,
+      and complete in-progress/failed/cancelled states
+- [ ] Dashboard device and physical-audio status with explicit unavailable,
+      stale, degraded, and failed states
+- [ ] generic Mock MCP inspection and manual execution UI without
+      service-specific logic
+- [ ] remaining Phase 3 failure/recovery, locale, theme, keyboard, zoom, and
+      accessibility evidence
+
+### Remaining buffered Phase 4 acceptance work
+
+- [ ] opt-in live Azure and Alibaba/OpenAI-compatible Chat/STT/TTS smoke tests
+      and one opt-in live composed-voice test
+- [ ] safe provider readiness and last-error status
+- [ ] documented live-test cost, quota, region, retention, and credential
+      safeguards
+- [ ] real Native Multimodal provider adapter; this is an extension and is not
+      required before the original non-streaming Azure/Alibaba acceptance gate
+
+### Planned streaming voice work
+
+- [ ] authenticated, versioned bidirectional browser voice WebSocket transport
+- [ ] browser PCM capture without waiting for `MediaRecorder.stop()`
+- [ ] capability-gated streaming STT sessions with partial and final
+      transcription events
+- [ ] provider-independent Streaming Chat LLM and Agent Core event flow with
+      text deltas, tool-call deltas, MCP execution, and follow-up streaming
+- [ ] independent capability-gated streaming TTS with chunked browser playback
+- [ ] ordered semantic text segmentation so TTS begins before the final LLM
+      response without speaking incomplete tool calls or unstable text
+- [ ] bounded queues, backpressure, cancellation, timeouts, interruption
+      cleanup, and explicit non-resumable reconnect behavior
+- [ ] Alibaba Fun-ASR and Qwen-Audio-TTS/CosyVoice streaming adapters using
+      their existing incremental WebSocket protocols
+- [ ] deterministic Mock streaming adapters and complete unit, integration,
+      Playwright, accessibility, and live-provider qualification
+
+### Later confirmed phases
+
+- [ ] generic MCP configuration, Streamable HTTP and stdio transports,
+      lifecycle, permissions, and full MCP Console
+- [ ] Debian/Ubuntu ALSA USB capture/playback and local offline wake-word
+      detection through platform adapters
+- [ ] Linux amd64/arm64 archives, containers, Debian packages, Compose,
+      systemd, backup/restore, rollback, and NanoPi R2S qualification
+- [ ] final cross-platform and hardware MVP acceptance
+
+### Deferred and not active backlog
+
+- VAD
+- full-duplex barge-in and user interruption of active TTS playback
+- WebRTC and Bluetooth audio
+- long-term memory and vector databases
+- multi-agent, multi-device, and complex approval workflows
+- local/offline AI and mobile applications
+
+Streaming intent is already represented independently for STT and TTS in
+Runtime Routing. Until the transport and assigned adapters are implemented and
+verified, activation must continue to reject routes that request streaming.
+
+### Next execution order
+
+1. Implement Phase 3 real-time observability.
+2. Close the remaining Phase 3 Web Console and end-to-end acceptance gaps.
+3. Complete the Phase 4 opt-in live-provider acceptance gate.
+4. Implement capability-gated full-chain Streaming STT/Chat LLM/TTS.
+5. Implement Phase 5 generic MCP.
+6. Implement Phase 6 ALSA physical audio and offline wake-word detection.
+7. Implement Phase 7 packaging, deployment, backup, rollback, and NanoPi
+   qualification.
 
 ## 1. Current State and Approach
 
-The repository contains the initial validated Mock Mode vertical slice in addition to product, architecture, governance, and coding-agent documentation. The implementation is intentionally incomplete and follows the remaining roadmap below.
+The repository contains validated Mock and real-provider buffered voice
+vertical slices, protected Runtime Routing, and a bilingual Web Console with
+representative accessibility automation. The implementation is intentionally
+incomplete: application-level streaming, real-time observability, complete
+MCP integration, physical audio, manual accessibility evidence, deployment,
+and final hardware qualification remain.
 
-The implementation will follow the seven phases defined in the MVP specification while preserving a platform-independent Agent Core. All seven phases are detailed into executable work packages and remain independently gated by explicit user confirmation.
+The implementation follows the seven phases defined in the MVP specification
+while preserving a platform-independent Agent Core. Some provider work was
+delivered before all Phase 3 acceptance items; the next work returns to Phase 3
+closure before continuing to generic MCP, physical audio, and deployment.
+Every behavior-changing work package remains gated by explicit user
+confirmation.
 
 ## 2. Confirmed Product Decisions
 
@@ -122,7 +187,15 @@ The implementation will follow the seven phases defined in the MVP specification
 - The first real AI integration is non-streaming Azure OpenAI for LLM, STT, and TTS.
 - Alibaba Cloud Model Studio is the first supported OpenAI-compatible third-party LLM provider.
 - Bailian migration must require only API key, base URL, and model name changes for compatible Chat Completions behavior.
-- Voice supports two explicit non-streaming pipeline modes: Native Multimodal and Composed.
+- Voice supports explicit Native Multimodal and Composed pipeline modes.
+- Buffered request/response remains the compatibility baseline.
+- Composed routes may independently enable Streaming STT, Streaming Chat LLM,
+  and Streaming TTS only when the runtime transport, assigned adapter, and
+  model capability are all verified.
+- A full-chain streaming route enables all three roles and begins ordered TTS
+  synthesis from stable LLM text segments before the final LLM completion.
+- Full-chain streaming does not imply VAD, full-duplex conversation, barge-in,
+  or interruption of active TTS playback.
 - Native Multimodal uses one audio-capable model for audio input, reasoning/tools, and audio output.
 - Composed uses independent STT, Chat LLM, and TTS model assignments.
 - Provider endpoints and credentials belong to reusable Connections; pipeline roles reference Model Deployments.
@@ -133,7 +206,24 @@ The implementation will follow the seven phases defined in the MVP specification
 - MCP servers and tools are disabled by default and require explicit administrator enablement.
 - Administrators may configure arbitrary stdio commands after a prominent command-execution warning and explicit confirmation.
 - Linux audio targets Debian or Ubuntu ARM64, ALSA, and standard USB Audio Class devices.
-- Audio device IDs, sample rate, and channels are configurable; capture defaults to 16 kHz mono.
+- Server-side physical audio input and output devices are selected independently
+  in Settings through explicit dropdowns populated by the platform adapter.
+- No physical audio device is selected implicitly. VoxMesh must not select the
+  first discovered device or silently fall back to another physical or Mock
+  device.
+- Audio device IDs, sample rate, and channels are configurable; capture
+  defaults to 16 kHz mono.
+- Browser voice testing remains a separate browser-owned audio boundary and
+  does not reuse or overwrite the server-side physical device selection.
+- Wake-word detection uses the Apache-2.0 sherpa-onnx open-vocabulary keyword
+  spotter through its Node.js addon in the Linux platform adapter.
+- Wake-word detection is local and offline, requires no cloud service or
+  access key, and consumes the selected physical input device as mono 16 kHz
+  PCM.
+- Wake-word detection is disabled by default and must be enabled explicitly
+  after an input device and packaged keyword profile are selected.
+- VAD remains deferred. The first wake-word flow uses a bounded configurable
+  utterance window after detection rather than indefinite recording.
 - Releases provide Linux amd64 and arm64 images, archives, and Debian packages.
 - NanoPi supports Docker Compose, systemd, scripts, and manual deployment with backup and one-command compatible rollback.
 - TanStack Router is the required Web Console router.
@@ -528,6 +618,23 @@ Phase 3 implementation requires a new explicit user confirmation after Phase 2 a
 ### 7.6 Configuration UI
 
 - Expose safe settings for providers, MCP servers, audio devices, and non-secret server behavior.
+- Provide a dedicated Audio Settings section with separate **Input device** and
+  **Output device** dropdowns for server-side physical capture and playback.
+- Populate device dropdowns from safe platform-adapter discovery metadata and
+  provide an explicit refresh action.
+- Include a **No device selected** option and require an administrator to make
+  each selection explicitly.
+- Persist stable device IDs rather than transient list positions or display
+  labels.
+- If a saved device is missing, retain its configured ID, show it as
+  unavailable, and block physical voice operations instead of changing the
+  selection.
+- Provide bounded **Test input** and **Test output** actions. Input testing
+  shows a live level meter without retaining audio; output testing plays a
+  bundled local sample so hardware can be isolated from provider failures.
+- Announce discovery, refresh, test, unavailable, busy, permission, and failure
+  states accessibly. Dropdowns and test actions must remain keyboard usable in
+  English and Simplified Chinese at narrow widths and 200% zoom.
 - Treat secrets as write-only fields.
 - Validate changes before persistence and indicate restart requirements.
 - Use version checks to prevent silent overwrites.
@@ -676,13 +783,149 @@ Phase 4 requires explicit confirmation after Phase 3 acceptance.
 - Add opt-in live Azure smoke tests and an opt-in live voice pipeline e2e test outside default CI.
 - Document resource setup, deployments, API versions, regions, languages, voices, quotas, cost controls, secret rotation, and diagnostics.
 
-Phase 4 acceptance:
+Buffered Phase 4 acceptance:
 
 - The non-streaming Azure OpenAI STT -> Agent Core -> Azure OpenAI TTS flow works.
 - Direct and MCP-assisted Azure OpenAI responses work without Agent Core changes.
 - Direct and MCP-assisted Alibaba Cloud Model Studio responses work through the generic OpenAI-compatible adapter.
 - Azure failures are diagnosable without secret exposure.
 - Default CI remains offline and deterministic.
+
+### 8.7 Capability-Gated Full-Chain Streaming
+
+Transport and protocol:
+
+- Add a dedicated authenticated `/api/voice-stream` WebSocket endpoint rather
+  than overloading the buffered `/api/voice` request.
+- Define a versioned session protocol with explicit start, ready, audio-frame,
+  input-finished, partial-transcript, final-transcript, llm-text-delta,
+  llm-tool-call-delta, tool-started, tool-finished, llm-finished,
+  output-segment-started, output-frame, output-segment-finished,
+  output-finished, cancelled, and failed states.
+- Use JSON control envelopes and bounded binary audio frames with session ID,
+  direction, format, and monotonically increasing sequence information.
+- Reject unknown versions, invalid ordering, duplicate terminal messages,
+  oversized frames, excessive frame rates, unsupported formats, and route
+  changes during a session.
+- Authenticate during the WebSocket upgrade with the established administrator
+  session. Never place credentials or sensitive configuration in message
+  payloads, URLs, logs, or close reasons.
+- A dropped connection cancels the provider session and releases browser,
+  server, and provider resources. MVP reconnect starts a new voice session; it
+  never claims to resume an interrupted provider stream.
+
+Browser input and playback:
+
+- Capture mono PCM frames through Web Audio/AudioWorklet rather than waiting
+  for a complete `MediaRecorder` container.
+- Negotiate and validate sample rate, channels, sample format, frame duration,
+  and maximum buffered duration before accepting audio.
+- Reuse the microphone loudness calculation without retaining duplicate audio
+  buffers or opening a second browser stream.
+- Play Streaming TTS through a bounded Web Audio queue that uses explicit
+  audio metadata and reports underrun, unsupported-browser, and decode errors.
+- Render Streaming Chat text deltas incrementally and reconcile them with one
+  final persisted assistant message.
+- Disable streaming controls when required browser APIs are unavailable.
+  Never silently send the same route through the buffered endpoint.
+
+Provider contracts, Agent Core, and routing:
+
+- Add optional `StreamingSpeechToTextProvider` and
+  `StreamingTextToSpeechProvider` contracts behind the provider-independent
+  audio boundary.
+- Add a provider-independent `StreamingLlmProvider` that emits typed text,
+  tool-call, usage, completion, and failure events. HTTP SSE parsing remains in
+  provider adapters.
+- Extend Agent Core with a bounded streaming state machine that accumulates and
+  validates fragmented tool-call names/arguments, executes MCP only after a
+  complete validated call, and supports a streaming follow-up completion.
+- Persist one final assistant message. Partial text and tool-call deltas are
+  observable events, not separate conversation messages.
+- Streaming STT accepts ordered PCM chunks and emits safe partial transcripts
+  plus one final transcript. Partial transcripts are observational and are not
+  sent to Agent Core.
+- Agent Core starts Streaming Chat after the final transcript.
+- Implement Azure OpenAI and generic OpenAI-compatible Chat streaming through
+  `stream: true` HTTP SSE, including fragmented text, finish reasons, usage, and
+  tool-call arguments. Use a maintained SSE parser rather than ad hoc line
+  splitting.
+- Alibaba Chat uses the generic OpenAI-compatible streaming adapter.
+- Buffer LLM deltas into stable speech segments using punctuation, bounded
+  character count, and bounded wait time. Preserve exact final text and
+  synthesize segments sequentially to guarantee playback order.
+- Do not send pre-tool explanatory text to TTS when a turn resolves to a tool
+  call. Speech begins from the final post-tool assistant stream.
+- Streaming TTS exposes ordered audio chunks as an async iterable with one
+  terminal metadata result.
+- Implement deterministic Mock streaming adapters first.
+- Adapt Alibaba Fun-ASR and Qwen-Audio-TTS/CosyVoice because their current
+  provider protocols already exchange incremental binary frames.
+- Azure and generic OpenAI-compatible models remain buffered unless a specific
+  endpoint and model declare streaming, pass contract tests, and complete
+  capability verification.
+- Add an independent Chat streaming switch to Runtime Routes alongside the
+  existing STT and TTS switches.
+- Preserve all independent combinations across the three roles. The
+  full-chain profile enables STT, Chat, and TTS streaming together.
+- Route activation requires the runtime transport plus declared and verified
+  `streaming` capability for every enabled role.
+
+Backpressure, cancellation, and lifecycle:
+
+- Bound browser, server, provider, and playback queues by bytes, frames, and
+  duration.
+- Bound accumulated LLM text, fragmented tool-call arguments, pending speech
+  segments, synthesized audio, and playback duration.
+- Define high-water and low-water marks. Pause production where supported or
+  fail explicitly when pressure cannot be relieved.
+- Bound session setup, silence-independent maximum capture, provider response,
+  Agent, first-audio, total synthesis, and idle durations.
+- Cancellation must propagate to browser capture, STT, Agent work when
+  cancellable, LLM SSE streams, MCP work when cancellable, TTS, playback,
+  timers, queues, and provider sockets.
+- Do not retry non-idempotent streaming sessions automatically.
+- Persist safe stage, latency, byte/frame count, partial/final status, cancel,
+  LLM delta/segment count, tool lifecycle, pressure, and failure events without
+  storing raw audio, secret payloads, or unbounded token fragments.
+
+Testing and acceptance:
+
+- Unit-test protocol ordering, sequence validation, frame limits, capability
+  gates, streaming LLM delta assembly, fragmented tool calls, semantic speech
+  segmentation, queue bounds, pressure transitions, cancellation, timeouts,
+  cleanup, duplicate terminals, and redaction.
+- Integration-test WebSocket authentication, binary framing, Mock streaming
+  providers, partial/final STT, direct Streaming Chat, streaming tool calls,
+  MCP follow-up Streaming Chat, TTS segment ordering, chunked audio,
+  disconnect, provider failure, and resource release.
+- Playwright-test permission denial, unsupported browsers, independent
+  STT/Chat/TTS switches, partial transcript and LLM text rendering, streamed
+  tool-assisted output, first-audio-before-final-text, cancellation,
+  reconnect-as-new-session, failure recovery, keyboard access, status
+  announcements, localization, themes, responsive zoom, and axe scans.
+- Add opt-in credentialed Alibaba live streaming smoke tests with strict
+  duration, request, cost, retention, and redaction safeguards.
+- Measure microphone-to-partial-transcript latency, final-transcript latency,
+  final-transcript-to-first-LLM-token latency, first-token-to-first-speech-
+  segment latency, final-transcript-to-first-audio latency, underruns, queue
+  depth, CPU, memory, and network use.
+
+Streaming acceptance:
+
+- A supported route can independently stream STT, Chat LLM, TTS, or any
+  combination without using a buffered provider call for an enabled streaming
+  role.
+- A full-chain route displays incremental final-turn assistant text and begins
+  ordered TTS playback before the final LLM completion.
+- Streaming tool calls are fully assembled and validated before MCP execution,
+  and only the final post-tool assistant stream is synthesized.
+- Unsupported routes remain impossible to activate and receive actionable
+  capability or transport errors.
+- Disconnect, cancellation, timeout, pressure, and provider failures release
+  every resource and never produce a success-shaped result.
+- Agent Core remains independent of WebSocket, browser, and vendor streaming
+  APIs.
 
 ## 9. Phase 5 - Generic Third-Party MCP Integration
 
@@ -711,11 +954,11 @@ Phase 5 requires explicit confirmation after Phase 4 acceptance. Home Assistant 
 
 - Spawn executables directly with `shell: false` and explicit argument arrays.
 - Use platform-aware executable resolution and process tracking on macOS, Linux, and Windows.
-- Run with privileges no broader than the VoxBridge service account.
+- Run with privileges no broader than the VoxMesh service account.
 - Bound startup, initialization, calls, idle time, shutdown, restart count, and crash-loop behavior.
 - Redact sensitive environment values from diagnostics.
-- Terminate only process trees started and tracked by VoxBridge.
-- Display a persistent Web Console warning that arbitrary stdio configuration grants command execution as the VoxBridge service account.
+- Terminate only process trees started and tracked by VoxMesh.
+- Display a persistent Web Console warning that arbitrary stdio configuration grants command execution as the VoxMesh service account.
 - Require explicit confirmation before saving or enabling changed command, arguments, working directory, or environment.
 - Audit create, edit, enable, disable, start, stop, crash, and delete actions.
 
@@ -747,7 +990,7 @@ Phase 5 acceptance:
 - stdio never uses an implicit shell and never reveals sensitive environment values.
 - No Home Assistant-specific code, schemas, labels, or branches exist in Agent Core.
 
-## 10. Phase 6 - Debian/Ubuntu ALSA USB Audio
+## 10. Phase 6 - Debian/Ubuntu ALSA USB Audio and Wake Word
 
 Phase 6 requires explicit confirmation after Phase 5 acceptance and access to representative Linux ARM64 hardware.
 
@@ -755,8 +998,18 @@ Phase 6 requires explicit confirmation after Phase 5 acceptance and access to re
 
 - Target Debian or Ubuntu ARM64 with ALSA while keeping the adapter testable on Linux amd64.
 - Support standard USB Audio Class capture and playback devices without model-specific logic.
-- Enumerate devices with stable IDs and safe display metadata.
-- Configure input and output IDs independently.
+- Define platform-independent audio discovery contracts that return stable ID,
+  direction, safe display name, availability, supported formats, and a
+  platform-neutral status.
+- Enumerate capture and playback devices separately and expose only safe
+  metadata through authenticated APIs.
+- Configure input and output IDs independently through Settings dropdowns.
+- Use a visible **No device selected** state as the default.
+- Persist selected stable IDs across service and device restarts.
+- Provide explicit refresh after hot-plug changes; automatic discovery may
+  supplement but must not replace the administrator-controlled refresh path.
+- Retain missing saved IDs as unavailable selections so reconnecting the same
+  stable device can restore readiness without choosing a different device.
 - Never silently select another device or fall back to Mock Audio.
 - Expose unavailable, busy, permission-denied, unsupported-format, disconnected, and error states.
 - Keep Linux audio optional so macOS and Windows can install, build, test, and run Mock Mode without ALSA dependencies.
@@ -769,6 +1022,12 @@ Phase 6 requires explicit confirmation after Phase 5 acceptance and access to re
 - Convert supported ALSA, Azure OpenAI Audio, WAV, and PCM formats at adapter boundaries.
 - Preserve audio metadata and reject unapproved lossy conversion.
 - Implement capture and playback start, stop, cancellation, timeout, duration limits, queue policy, cleanup, and graceful shutdown.
+- Apply changed device selections to the next physical audio operation after
+  validation; never switch a device during an active capture or playback.
+- Implement a bounded input test that exposes live loudness only and discards
+  captured samples immediately.
+- Implement an output test with a bundled local audio sample and explicit
+  completion/failure status, independent of TTS provider availability.
 - Release handles after success, failure, cancellation, shutdown, or removal.
 - Normalize busy, disconnect, overrun, underrun, permission, format, timeout, and backend errors.
 
@@ -780,11 +1039,112 @@ Phase 6 requires explicit confirmation after Phase 5 acceptance and access to re
 - Run platform-independent audio contract tests on macOS, Linux, and Windows.
 - Run fake ALSA integration in default CI and native ALSA integration only on Linux.
 - Qualify representative USB Audio Class hardware on Debian or Ubuntu ARM64.
-- Test enumeration, selection, capture, Azure STT, Azure TTS playback, cancellation, removal, reconnect, busy-device recovery, reboot persistence, and stability.
+- Component- and Playwright-test dropdown loading, explicit selection,
+  persistence, missing saved devices, refresh, input level testing, output
+  testing, validation errors, keyboard behavior, localization, themes, and
+  responsive zoom with deterministic fake devices.
+- Test enumeration, selection, capture, Azure STT, Azure TTS playback,
+  cancellation, removal, reconnect, busy-device recovery, reboot persistence,
+  and stability on Linux.
+
+### 10.4 Offline Wake-Word Detection
+
+Selected implementation:
+
+- Use
+  [sherpa-onnx open-vocabulary keyword spotting](https://k2-fsa.github.io/sherpa/onnx/kws/index.html)
+  through the official Node.js addon.
+- sherpa-onnx is Apache-2.0 licensed, performs inference locally, supports
+  JavaScript and Linux ARM64, and accepts keyword files that can change phrases
+  without retraining the acoustic model.
+- This is preferred over openWakeWord because openWakeWord's supported runtime
+  is Python-first and its packaged models are currently English-focused. It is
+  preferred over Picovoice Porcupine because Porcupine requires a vendor
+  AccessKey and introduces additional service terms.
+- Keep sherpa-onnx imports and native binaries inside a Linux wake-word
+  platform adapter. Agent Core and generic audio contracts depend only on a
+  project-owned `WakeWordDetector` interface.
+- Provide a deterministic Mock detector on macOS, Windows, and default CI.
+- Package model, token, and keyword-profile artifacts with checksums, source,
+  license, version, supported locale, expected sample format, and measured
+  resource use.
+- Pin the Node addon, model, and token artifact versions. If the target Node ABI
+  has no compatible Linux ARM64 prebuilt addon, build it in the release
+  pipeline; production devices must not compile native code at runtime.
+- Generate curated keyword files during the artifact build using the official
+  `text2token` tooling. Store the source phrase and generated profile together;
+  do not require Python or keyword compilation on the deployed device.
+
+Runtime behavior:
+
+- Consume mono 16 kHz PCM frames from the explicitly selected physical input
+  device without opening a second ALSA handle.
+- Keep wake-word processing local; do not send or persist pre-trigger audio.
+- Maintain only a bounded in-memory pre-roll buffer so the beginning of the
+  post-trigger utterance is not clipped.
+- Use an explicit state machine: disabled, starting, listening, triggered,
+  capturing, processing, cooldown, and failed.
+- On detection, optionally play a bundled local acknowledgement sound, then
+  capture one bounded utterance and submit it to the existing buffered voice
+  pipeline.
+- Because VAD is deferred, stop initial capture using configurable minimum and
+  maximum durations with a mandatory upper bound. Never record indefinitely.
+- Ignore duplicate detections while capturing, processing, or in cooldown.
+- Release model, stream, timers, buffers, and native resources on disable,
+  device change, permission loss, disconnect, shutdown, or failure.
+- A wake-word failure must not crash Agent Core or silently switch input
+  devices. Manual browser voice testing remains available independently.
+
+Settings and operations:
+
+- Add a default-off **Enable wake word** control in Audio Settings.
+- Provide a **Wake word profile** dropdown populated from packaged, validated
+  profiles. The initial implementation uses curated profiles; arbitrary model
+  upload and training remain out of scope.
+- Include at least one English `Hey VoxMesh` profile. Add a Chinese profile
+  only after model and hardware qualification meet the same false-accept and
+  false-reject targets.
+- Expose profile description, locale, model version, threshold, cooldown, and
+  capture-window settings. Advanced numeric values require bounded validation
+  and safe defaults.
+- Provide a local **Test wake word** mode that shows listening/detected status
+  and confidence without invoking STT, Agent Core, MCP, or TTS.
+- Show disabled, model-missing, input-unavailable, permission-denied,
+  unsupported-format, listening, triggered, cooldown, and failed states in the
+  Dashboard and Settings.
+
+Validation and qualification:
+
+- Unit-test state transitions, threshold boundaries, duplicate suppression,
+  cooldown, pre-roll bounds, timeouts, cancellation, cleanup, model validation,
+  and redaction.
+- Integration-test deterministic PCM fixtures for positive, negative,
+  near-threshold, noise, repeated-trigger, disconnect, and corrupted-model
+  cases.
+- Playwright-test default-off behavior, profile selection, enablement,
+  unavailable devices, test mode, status announcements, keyboard behavior,
+  localization, themes, responsive zoom, and error recovery with a fake
+  detector.
+- Measure false accepts per hour, false rejects, detection latency, CPU,
+  memory, and temperature on representative Debian/Ubuntu ARM64 hardware.
+- Define qualification thresholds before enabling a profile by default. No
+  profile may be shipped as enabled by default.
 
 Phase 6 acceptance:
 
 - A configured standard USB Audio Class device completes the non-streaming voice pipeline.
+- An administrator can explicitly choose and persist independent input and
+  output devices in Settings and verify both before starting the physical voice
+  flow.
+- Missing, disconnected, or unauthorized saved devices remain selected but
+  unavailable; VoxMesh never substitutes another device.
+- An administrator can explicitly enable a packaged wake-word profile and
+  trigger one bounded physical voice request without cloud wake-word services.
+- Pre-trigger audio is not persisted or transmitted, and wake-word detection
+  remains local when the network and AI providers are unavailable.
+- Wake-word false-accept, false-reject, latency, CPU, memory, and thermal
+  measurements satisfy documented qualification thresholds on the target
+  Linux ARM64 hardware.
 - Device failures remain recoverable and do not crash Agent Core.
 - R2S-specific code remains outside Agent Core and generic audio contracts.
 
@@ -856,20 +1216,25 @@ Add and maintain documentation as the relevant phase begins:
 
 ```text
 README.md
+docs/README.md
+docs/MVP.md
 docs/IMPLEMENTATION_PLAN.md
-docs/TECHNOLOGY_STACK.md
-docs/ACCESSIBILITY.md
-docs/MOCK_MODE.md
-docs/AZURE_OPENAI.md
-docs/ALIBABA_CLOUD_MODEL_STUDIO.md
-docs/VOICE_PIPELINES.md
-docs/ARCHITECTURE.md
-docs/CONFIGURATION.md
-docs/TESTING.md
-docs/SECURITY.md
-docs/OPERATIONS.md
-docs/API.md
-docs/WEBSOCKET.md
+docs/DEVELOPMENT_RULES.md
+docs/architecture/TECHNOLOGY_STACK.md
+docs/architecture/VOICE_PIPELINES.md
+docs/architecture/RUNTIME_ROUTING.md
+docs/architecture/WAKE_WORD.md
+docs/architecture/ARCHITECTURE.md
+docs/architecture/API.md
+docs/architecture/WEBSOCKET.md
+docs/development/ACCESSIBILITY.md
+docs/development/MOCK_MODE.md
+docs/development/CONFIGURATION.md
+docs/development/TESTING.md
+docs/providers/AZURE_OPENAI.md
+docs/providers/ALIBABA_CLOUD_MODEL_STUDIO.md
+docs/operations/SECURITY_OPERATIONS.md
+docs/operations/OPERATIONS.md
 docs/adr/
 deployments/*/README.md
 ```
@@ -925,5 +1290,12 @@ The MVP is complete only when:
 - macOS, Linux, and Windows are supported development environments. macOS and Linux are primary; Windows is a required CI and Mock Mode platform, not a production target.
 - Linux audio and deployment dependencies must remain optional on unsupported development platforms.
 - Multi-user roles, external identity providers, public-internet hardening, and certificate management are outside the MVP unless separately confirmed.
-- Streaming STT/TTS, wake word, VAD, long-term memory, multi-agent behavior, and other MVP non-goals remain excluded.
+- VAD, full-duplex barge-in, long-term memory, multi-agent behavior, and other
+  MVP non-goals remain excluded.
+- Capability-gated full-chain Streaming STT/Chat LLM/TTS is included after
+  buffered Phase 4 acceptance and remains separately confirmed before
+  implementation.
+- Offline wake-word detection is included in Phase 6 using sherpa-onnx and
+  remains separately gated from ALSA implementation by explicit confirmation
+  and hardware qualification.
 - Every phase requires fresh user confirmation even when its technical direction is documented.
