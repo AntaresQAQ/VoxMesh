@@ -14,8 +14,8 @@ VoxMesh supports Bailian Chat through a generic OpenAI-compatible LLM adapter
 and supports Bailian speech through a dedicated Alibaba Cloud Model Studio
 provider. Agent Core remains vendor-independent in both cases.
 
-The speech provider is registered with `stt` and `tts` capabilities and appears
-in the same capability-based Provider Catalog used by the other providers.
+The speech provider is registered with `stt` and `tts` capabilities and is
+selected through Runtime Routing Connections and Model Deployments.
 
 The generic OpenAI-compatible speech adapters use `/audio/transcriptions` and
 `/audio/speech`. Model Studio Fun-ASR and Qwen-Audio-TTS/CosyVoice do not use
@@ -24,7 +24,7 @@ configured with the dedicated `Alibaba Cloud Model Studio` speech provider.
 
 ## 2. Configuration
 
-The Web Console LLM provider configuration supports:
+Create an OpenAI-compatible Connection and Chat Model for Model Studio LLMs:
 
 | Field           | Description                                                      |
 | --------------- | ---------------------------------------------------------------- |
@@ -52,6 +52,8 @@ Base URLs and API keys are region-specific. VoxMesh must not hard-code a region 
 
 ### Speech-to-text
 
+Create a dedicated Alibaba Cloud Model Studio Connection and STT Model:
+
 | Field              | Description                                           |
 | ------------------ | ----------------------------------------------------- |
 | Provider           | Alibaba Cloud Model Studio                            |
@@ -78,6 +80,8 @@ WebSocket adapter.
 
 ### Text-to-speech
 
+Create an independent Alibaba Cloud Model Studio Connection and TTS Model:
+
 | Field              | Description                                       |
 | ------------------ | ------------------------------------------------- |
 | Provider           | Alibaba Cloud Model Studio                        |
@@ -89,6 +93,13 @@ WebSocket adapter.
 
 STT and TTS remain independently configurable. They may use different
 workspaces, regions, API keys, endpoints, models, and voices.
+
+Qwen Audio system voices are model-family specific. For example,
+`qwen-audio-3.0-tts-plus` supports `longanlingxin` and `longanlufeng`, while
+voices such as `longpaopao_v3.6` belong to the Flash family. VoxMesh rejects a
+known Plus/Flash voice mismatch locally instead of sending a request that
+Model Studio would reject with a TTS engine error. Custom cloned voices remain
+allowed because their names cannot be enumerated locally.
 
 ## 3. Supported Model Families
 
@@ -197,9 +208,7 @@ model name
 
 No Agent Core changes should be required.
 
-This three-field migration applies to Chat only. Existing speech settings that
-use a recognized Model Studio `compatible-mode` URL can be converted in the Web
-Console by selecting `Alibaba Cloud Model Studio`. VoxMesh rewrites the known
-workspace URL to the official WebSocket endpoint and replaces a file
-transcription model with `fun-asr-realtime`. Other endpoints are never
-rewritten automatically.
+This three-field migration applies to Chat only. Speech must use an Alibaba
+Cloud Model Studio Connection with the official workspace WebSocket endpoint
+and dedicated STT/TTS Model Deployments. Runtime Routing never rewrites an
+arbitrary endpoint or silently replaces a configured model.

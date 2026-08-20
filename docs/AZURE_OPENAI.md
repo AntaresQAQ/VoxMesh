@@ -12,7 +12,7 @@ Azure model availability varies by region. Deploy the models in Microsoft Foundr
 
 ## 2. LLM Configuration
 
-Settings fields:
+Create an Azure OpenAI Connection and Chat Model with these fields:
 
 | Field       | Example                                |
 | ----------- | -------------------------------------- |
@@ -73,13 +73,15 @@ API versions above are current tested defaults for the selected preview model fa
 
 ## 4. Saving and Testing
 
-1. Open **Settings**.
-2. Configure the LLM deployment if Chat should use Azure OpenAI.
-3. Select Azure OpenAI independently for STT and TTS.
-4. Configure the STT endpoint, key, deployment, API version, and language.
-5. Configure the TTS endpoint, key, deployment, API version, voice, and instructions.
-6. Select **Save speech settings**.
-7. Select **Test speech connection**.
+1. Open **Settings → AI Providers**.
+2. Create the required Azure OpenAI Connections and Models.
+3. Create or edit a Composed Route and assign Chat, STT, and TTS models.
+4. Use **Test route** to verify capabilities.
+5. Activate the route after verification succeeds.
+6. Configure the STT endpoint, key, deployment, API version, and language.
+7. Configure the TTS endpoint, key, deployment, API version, voice, and instructions.
+8. Select **Save speech settings**.
+9. Select **Test speech connection**.
 
 The speech connection test:
 

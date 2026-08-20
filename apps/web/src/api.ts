@@ -3,20 +3,14 @@ import type {
   ConversationDetail,
   ConversationSummary,
   Dashboard,
-  LlmConfiguration,
-  LlmConfigurationUpdate,
-  LlmConnectionTest,
   LogEntry,
-  ProviderCatalog,
+  ModelDeploymentInput,
+  ProviderConnectionInput,
+  RuntimeRouteInput,
   RuntimeRoutingSummary,
   Session,
-  SpeechConfiguration,
-  SpeechConfigurationUpdate,
-  SpeechConnectionTest,
   SetupStatus,
-  VoiceResponse,
-  VoicePipelineConfiguration,
-  VoicePipelineConfigurationUpdate
+  VoiceResponse
 } from "@voxmesh/shared";
 
 interface ApiFailure {
@@ -78,32 +72,57 @@ export const apiClient = {
       method: "POST",
       body: JSON.stringify({ currentPassword, newPassword })
     }),
-  llmConfiguration: () => api<LlmConfiguration>("/api/config/llm"),
-  updateLlmConfiguration: (configuration: LlmConfigurationUpdate) =>
-    api<LlmConfiguration>("/api/config/llm", {
-      method: "PUT",
-      body: JSON.stringify(configuration)
-    }),
-  testLlmConnection: () =>
-    api<LlmConnectionTest>("/api/config/llm/test", { method: "POST" }),
-  speechConfiguration: () => api<SpeechConfiguration>("/api/config/speech"),
-  updateSpeechConfiguration: (configuration: SpeechConfigurationUpdate) =>
-    api<SpeechConfiguration>("/api/config/speech", {
-      method: "PUT",
-      body: JSON.stringify(configuration)
-    }),
-  testSpeechConnection: () =>
-    api<SpeechConnectionTest>("/api/config/speech/test", { method: "POST" }),
-  providerCatalog: () => api<ProviderCatalog>("/api/providers"),
   runtimeRouting: () => api<RuntimeRoutingSummary>("/api/runtime-routing"),
-  voicePipelineConfiguration: () =>
-    api<VoicePipelineConfiguration>("/api/config/voice-pipeline"),
-  updateVoicePipelineConfiguration: (
-    configuration: VoicePipelineConfigurationUpdate
-  ) =>
-    api<VoicePipelineConfiguration>("/api/config/voice-pipeline", {
+  createRuntimeConnection: (input: ProviderConnectionInput) =>
+    api<RuntimeRoutingSummary>("/api/runtime-routing/connections", {
+      method: "POST",
+      body: JSON.stringify(input)
+    }),
+  updateRuntimeConnection: (id: string, input: ProviderConnectionInput) =>
+    api<RuntimeRoutingSummary>(`/api/runtime-routing/connections/${id}`, {
       method: "PUT",
-      body: JSON.stringify(configuration)
+      body: JSON.stringify(input)
+    }),
+  deleteRuntimeConnection: (id: string) =>
+    api<RuntimeRoutingSummary>(`/api/runtime-routing/connections/${id}`, {
+      method: "DELETE"
+    }),
+  createRuntimeModel: (input: ModelDeploymentInput) =>
+    api<RuntimeRoutingSummary>("/api/runtime-routing/models", {
+      method: "POST",
+      body: JSON.stringify(input)
+    }),
+  updateRuntimeModel: (id: string, input: ModelDeploymentInput) =>
+    api<RuntimeRoutingSummary>(`/api/runtime-routing/models/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(input)
+    }),
+  deleteRuntimeModel: (id: string) =>
+    api<RuntimeRoutingSummary>(`/api/runtime-routing/models/${id}`, {
+      method: "DELETE"
+    }),
+  createRuntimeRoute: (input: RuntimeRouteInput) =>
+    api<RuntimeRoutingSummary>("/api/runtime-routing/routes", {
+      method: "POST",
+      body: JSON.stringify(input)
+    }),
+  updateRuntimeRoute: (id: string, input: RuntimeRouteInput) =>
+    api<RuntimeRoutingSummary>(`/api/runtime-routing/routes/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(input)
+    }),
+  deleteRuntimeRoute: (id: string) =>
+    api<RuntimeRoutingSummary>(`/api/runtime-routing/routes/${id}`, {
+      method: "DELETE"
+    }),
+  testRuntimeRoute: (id: string) =>
+    api<RuntimeRoutingSummary>(`/api/runtime-routing/routes/${id}/test`, {
+      method: "POST"
+    }),
+  activateRuntimeRoute: (routeId: string) =>
+    api<RuntimeRoutingSummary>("/api/runtime-routing/active", {
+      method: "PUT",
+      body: JSON.stringify({ routeId })
     }),
   dashboard: () => api<Dashboard>("/api/dashboard"),
   chat: (message: string) =>

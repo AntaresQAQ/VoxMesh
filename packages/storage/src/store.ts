@@ -12,15 +12,22 @@ import type {
   LogLevel,
   LlmMode,
   MessageRole,
+  ModelDeploymentInput,
   PipelineEvent,
   PipelineStage,
   PipelineStatus,
+  ProviderConnectionInput,
+  RuntimeRouteSummary,
+  RuntimeRouteInput,
   RuntimeRoutingSummary,
   SpeechProviderMode,
   VoicePipelineMode
 } from "@voxmesh/shared";
 
-import { RuntimeRoutingStore } from "./runtime-routing-store.js";
+import {
+  RuntimeRoutingStore,
+  type RuntimeRouteVerificationSnapshot
+} from "./runtime-routing-store.js";
 
 interface CountRow {
   count: number;
@@ -56,11 +63,6 @@ interface LogRow {
   message: string;
   conversation_id: string | null;
   created_at: string;
-}
-
-interface SettingRow {
-  key: string;
-  value: string;
 }
 
 interface PipelineEventRow {
@@ -102,7 +104,42 @@ export interface StoredSpeechConfiguration {
 export interface StoredVoicePipelineConfiguration {
   mode: VoicePipelineMode;
   nativeProviderId: string;
+  routeId?: string;
+  fallbackRouteId?: string | null;
 }
+
+const DEFAULT_LLM_CONFIGURATION: StoredLlmConfiguration = {
+  mode: "mock",
+  endpoint: "",
+  deployment: "",
+  apiVersion: "",
+  baseUrl: "",
+  model: "Mock Chat",
+  timeoutMs: 30_000,
+  maxOutputTokens: 1_024,
+  apiKey: null
+};
+
+const DEFAULT_SPEECH_CONFIGURATION: StoredSpeechConfiguration = {
+  sttMode: "mock",
+  ttsMode: "mock",
+  sttEndpoint: "",
+  sttDeployment: "Mock STT",
+  sttApiVersion: "",
+  sttLanguage: "en",
+  sttApiKey: null,
+  ttsEndpoint: "",
+  ttsDeployment: "Mock TTS",
+  ttsApiVersion: "",
+  ttsVoice: "mock",
+  ttsInstructions: "",
+  ttsApiKey: null
+};
+
+const DEFAULT_VOICE_CONFIGURATION: StoredVoicePipelineConfiguration = {
+  mode: "composed",
+  nativeProviderId: "mock-native"
+};
 
 export class VoxMeshStore {
   private readonly database: Database.Database;
@@ -117,7 +154,7 @@ export class VoxMeshStore {
     this.database.pragma("foreign_keys = ON");
     this.migrate();
     this.runtimeRouting = new RuntimeRoutingStore(this.database);
-    this.syncRuntimeRoutingRecords();
+    this.runtimeRouting.initializeDefaults();
   }
 
   public close(): void {
@@ -190,211 +227,107 @@ export class VoxMeshStore {
     this.database.prepare("DELETE FROM sessions").run();
   }
 
-  public getLlmConfiguration(): StoredLlmConfiguration {
-    const rows = this.database
-      .prepare(
-        "SELECT key, value FROM app_settings WHERE key LIKE 'llm.%' ORDER BY key"
-      )
-      .all() as SettingRow[];
-    const settings = new Map(rows.map((row) => [row.key, row.value]));
-    return {
-      mode: llmMode(settings.get("llm.mode")),
-      endpoint: settings.get("llm.endpoint") ?? "",
-      deployment: settings.get("llm.deployment") ?? "",
-      apiVersion: settings.get("llm.apiVersion") ?? "2024-10-21",
-      baseUrl: settings.get("llm.baseUrl") ?? "",
-      model: settings.get("llm.model") ?? "qwen-plus",
-      timeoutMs: positiveInteger(settings.get("llm.timeoutMs"), 30_000),
-      maxOutputTokens: positiveInteger(
-        settings.get("llm.maxOutputTokens"),
-        1_024
-      ),
-      apiKey: settings.get("llm.apiKey") ?? null
-    };
-  }
-
-  public updateLlmConfiguration(input: {
-    mode: LlmMode;
-    endpoint: string;
-    deployment: string;
-    apiVersion: string;
-    baseUrl: string;
-    model: string;
-    timeoutMs: number;
-    maxOutputTokens: number;
-    apiKey?: string;
-    clearApiKey?: boolean;
-  }): StoredLlmConfiguration {
-    this.database.transaction(() => {
-      this.setSetting("llm.mode", input.mode);
-      this.setSetting("llm.endpoint", input.endpoint);
-      this.setSetting("llm.deployment", input.deployment);
-      this.setSetting("llm.apiVersion", input.apiVersion);
-      this.setSetting("llm.baseUrl", input.baseUrl);
-      this.setSetting("llm.model", input.model);
-      this.setSetting("llm.timeoutMs", String(input.timeoutMs));
-      this.setSetting("llm.maxOutputTokens", String(input.maxOutputTokens));
-      if (input.clearApiKey) {
-        this.database
-          .prepare("DELETE FROM app_settings WHERE key = 'llm.apiKey'")
-          .run();
-      } else if (input.apiKey !== undefined) {
-        this.setSetting("llm.apiKey", input.apiKey);
-      }
-    })();
-    this.syncRuntimeRoutingRecords();
-    return this.getLlmConfiguration();
-  }
-
-  public getSpeechConfiguration(): StoredSpeechConfiguration {
-    const rows = this.database
-      .prepare(
-        "SELECT key, value FROM app_settings WHERE key LIKE 'speech.%' ORDER BY key"
-      )
-      .all() as SettingRow[];
-    const settings = new Map(rows.map((row) => [row.key, row.value]));
-    // Legacy shared values remain readable so existing installations can
-    // migrate without losing configured credentials.
-    const legacyEndpoint = settings.get("speech.endpoint") ?? "";
-    const legacyApiKey = settings.get("speech.apiKey") ?? null;
-    const ttsMode = providerMode(settings.get("speech.ttsMode"));
-    const ttsDeployment = settings.get("speech.ttsDeployment") ?? "";
-    const configuredTtsVoice = settings.get("speech.ttsVoice") ?? "coral";
-    // VoxMesh briefly suggested a Flash-only voice for the Plus model.
-    // Preserve other custom voices while correcting that exact invalid pair.
-    const ttsVoice =
-      ttsMode === "alibaba-model-studio" &&
-      ttsDeployment === "qwen-audio-3.0-tts-plus" &&
-      configuredTtsVoice === "longanlingxi"
-        ? "longanlingxin"
-        : configuredTtsVoice;
-    return {
-      sttMode: providerMode(settings.get("speech.sttMode")),
-      ttsMode,
-      sttEndpoint: settings.get("speech.sttEndpoint") ?? legacyEndpoint,
-      sttDeployment: settings.get("speech.sttDeployment") ?? "",
-      sttApiVersion:
-        settings.get("speech.sttApiVersion") ?? "2025-04-01-preview",
-      sttLanguage: settings.get("speech.sttLanguage") ?? "zh",
-      sttApiKey: settings.get("speech.sttApiKey") ?? legacyApiKey,
-      ttsEndpoint: settings.get("speech.ttsEndpoint") ?? legacyEndpoint,
-      ttsDeployment,
-      ttsApiVersion:
-        settings.get("speech.ttsApiVersion") ?? "2025-03-01-preview",
-      ttsVoice,
-      ttsInstructions:
-        settings.get("speech.ttsInstructions") ??
-        "Speak clearly and naturally.",
-      ttsApiKey: settings.get("speech.ttsApiKey") ?? legacyApiKey
-    };
-  }
-
-  public updateSpeechConfiguration(input: {
-    sttMode: SpeechProviderMode;
-    ttsMode: SpeechProviderMode;
-    sttEndpoint: string;
-    sttDeployment: string;
-    sttApiVersion: string;
-    sttLanguage: string;
-    sttApiKey?: string;
-    clearSttApiKey?: boolean;
-    ttsEndpoint: string;
-    ttsDeployment: string;
-    ttsApiVersion: string;
-    ttsVoice: string;
-    ttsInstructions: string;
-    ttsApiKey?: string;
-    clearTtsApiKey?: boolean;
-  }): StoredSpeechConfiguration {
-    this.database.transaction(() => {
-      this.setSetting("speech.sttMode", input.sttMode);
-      this.setSetting("speech.ttsMode", input.ttsMode);
-      this.setSetting("speech.sttEndpoint", input.sttEndpoint);
-      this.setSetting("speech.sttDeployment", input.sttDeployment);
-      this.setSetting("speech.sttApiVersion", input.sttApiVersion);
-      this.setSetting("speech.sttLanguage", input.sttLanguage);
-      if (input.clearSttApiKey) {
-        this.database
-          .prepare("DELETE FROM app_settings WHERE key = 'speech.sttApiKey'")
-          .run();
-      } else if (input.sttApiKey !== undefined) {
-        this.setSetting("speech.sttApiKey", input.sttApiKey);
-      }
-      this.setSetting("speech.ttsEndpoint", input.ttsEndpoint);
-      this.setSetting("speech.ttsDeployment", input.ttsDeployment);
-      this.setSetting("speech.ttsApiVersion", input.ttsApiVersion);
-      this.setSetting("speech.ttsVoice", input.ttsVoice);
-      this.setSetting("speech.ttsInstructions", input.ttsInstructions);
-      if (input.clearTtsApiKey) {
-        this.database
-          .prepare("DELETE FROM app_settings WHERE key = 'speech.ttsApiKey'")
-          .run();
-      } else if (input.ttsApiKey !== undefined) {
-        this.setSetting("speech.ttsApiKey", input.ttsApiKey);
-      }
-    })();
-    this.syncRuntimeRoutingRecords();
-    return this.getSpeechConfiguration();
-  }
-
-  public getVoicePipelineConfiguration(): StoredVoicePipelineConfiguration {
-    const rows = this.database
-      .prepare(
-        "SELECT key, value FROM app_settings WHERE key LIKE 'voice.%' ORDER BY key"
-      )
-      .all() as SettingRow[];
-    const settings = new Map(rows.map((row) => [row.key, row.value]));
-    return {
-      mode:
-        settings.get("voice.mode") === "native-multimodal"
-          ? "native-multimodal"
-          : "composed",
-      nativeProviderId: settings.get("voice.nativeProviderId") ?? "mock-native"
-    };
-  }
-
-  public updateVoicePipelineConfiguration(
-    input: StoredVoicePipelineConfiguration
-  ): StoredVoicePipelineConfiguration {
-    this.database.transaction(() => {
-      this.setSetting("voice.mode", input.mode);
-      this.setSetting("voice.nativeProviderId", input.nativeProviderId);
-    })();
-    this.syncRuntimeRoutingRecords();
-    return this.getVoicePipelineConfiguration();
-  }
-
   /** Returns the migrated connection, model, and route records without secrets. */
   public getRuntimeRoutingSummary(): RuntimeRoutingSummary {
     return this.runtimeRouting.getSummary();
   }
 
-  /**
-   * Resolves the Chat provider through the system Composed route.
-   *
-   * The compatibility configuration remains the provider factory input until
-   * editable model deployments are introduced.
-   */
-  public getRuntimeLlmConfiguration(): StoredLlmConfiguration {
-    return this.runtimeRouting.resolveLlm(this.getLlmConfiguration());
+  public createRuntimeConnection(
+    input: ProviderConnectionInput
+  ): RuntimeRoutingSummary {
+    return this.runtimeRouting.createConnection(input);
   }
 
-  /** Resolves STT and TTS through the system Composed route. */
-  public getRuntimeSpeechConfiguration(): StoredSpeechConfiguration {
-    return this.runtimeRouting.resolveSpeech(this.getSpeechConfiguration());
+  public updateRuntimeConnection(
+    id: string,
+    input: ProviderConnectionInput
+  ): RuntimeRoutingSummary {
+    return this.runtimeRouting.updateConnection(id, input);
+  }
+
+  public deleteRuntimeConnection(id: string): RuntimeRoutingSummary {
+    return this.runtimeRouting.deleteConnection(id);
+  }
+
+  public createRuntimeModel(
+    input: ModelDeploymentInput
+  ): RuntimeRoutingSummary {
+    return this.runtimeRouting.createModel(input);
+  }
+
+  public updateRuntimeModel(
+    id: string,
+    input: ModelDeploymentInput
+  ): RuntimeRoutingSummary {
+    return this.runtimeRouting.updateModel(id, input);
+  }
+
+  public deleteRuntimeModel(id: string): RuntimeRoutingSummary {
+    return this.runtimeRouting.deleteModel(id);
+  }
+
+  public createRuntimeRoute(input: RuntimeRouteInput): RuntimeRoutingSummary {
+    return this.runtimeRouting.createRoute(input);
+  }
+
+  public updateRuntimeRoute(
+    id: string,
+    input: RuntimeRouteInput
+  ): RuntimeRoutingSummary {
+    return this.runtimeRouting.updateRoute(id, input);
+  }
+
+  public deleteRuntimeRoute(id: string): RuntimeRoutingSummary {
+    return this.runtimeRouting.deleteRoute(id);
+  }
+
+  public activateRuntimeRoute(id: string): RuntimeRoutingSummary {
+    return this.runtimeRouting.activateRoute(id);
+  }
+
+  /** Resolves the Chat provider from routing records. */
+  public getRuntimeLlmConfiguration(routeId?: string): StoredLlmConfiguration {
+    return this.runtimeRouting.resolveLlm(DEFAULT_LLM_CONFIGURATION, routeId);
+  }
+
+  /** Resolves STT and TTS from routing records. */
+  public getRuntimeSpeechConfiguration(
+    routeId?: string
+  ): StoredSpeechConfiguration {
+    return this.runtimeRouting.resolveSpeech(
+      DEFAULT_SPEECH_CONFIGURATION,
+      routeId
+    );
   }
 
   /** Resolves the selected pipeline mode through the active runtime route. */
   public getRuntimeVoicePipelineConfiguration(): StoredVoicePipelineConfiguration {
+    return this.runtimeRouting.resolveVoice(DEFAULT_VOICE_CONFIGURATION);
+  }
+
+  public getRuntimeVoiceRouteConfiguration(
+    routeId: string
+  ): StoredVoicePipelineConfiguration {
     return this.runtimeRouting.resolveVoice(
-      this.getVoicePipelineConfiguration()
+      DEFAULT_VOICE_CONFIGURATION,
+      routeId
     );
   }
 
-  public markRuntimeRoleVerified(
-    role: "chat" | "stt" | "tts" | "native"
+  public getRuntimeRoute(id: string): RuntimeRouteSummary {
+    return this.runtimeRouting.getRouteSummary(id);
+  }
+
+  public captureRuntimeRouteVerification(
+    id: string
+  ): RuntimeRouteVerificationSnapshot {
+    return this.runtimeRouting.captureRouteVerification(id);
+  }
+
+  public markRuntimeRouteVerified(
+    snapshot: RuntimeRouteVerificationSnapshot
   ): void {
-    this.runtimeRouting.markRoleVerified(role);
+    this.runtimeRouting.markRouteVerified(snapshot);
   }
 
   public createConversation(userMessage: string): string {
@@ -556,14 +489,6 @@ export class VoxMeshStore {
     return row.count;
   }
 
-  private syncRuntimeRoutingRecords(): void {
-    this.runtimeRouting.sync({
-      llm: this.getLlmConfiguration(),
-      speech: this.getSpeechConfiguration(),
-      voice: this.getVoicePipelineConfiguration()
-    });
-  }
-
   private migrate(): void {
     this.database.exec(`
       CREATE TABLE IF NOT EXISTS admin_credentials (
@@ -602,18 +527,13 @@ export class VoxMeshStore {
         created_at TEXT NOT NULL
       );
 
-      CREATE TABLE IF NOT EXISTS app_settings (
-        key TEXT PRIMARY KEY,
-        value TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      );
-
       CREATE TABLE IF NOT EXISTS provider_connections (
         id TEXT PRIMARY KEY,
         provider_id TEXT NOT NULL,
         display_name TEXT NOT NULL,
         endpoint TEXT NOT NULL,
         api_key TEXT,
+        enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
@@ -628,6 +548,7 @@ export class VoxMeshStore {
         verified_capabilities TEXT NOT NULL,
         provider_options TEXT NOT NULL,
         configuration_fingerprint TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
@@ -641,6 +562,9 @@ export class VoxMeshStore {
         tts_model_deployment_id TEXT REFERENCES model_deployments(id) ON DELETE RESTRICT,
         native_model_deployment_id TEXT REFERENCES model_deployments(id) ON DELETE RESTRICT,
         fallback_route_id TEXT REFERENCES runtime_routes(id) ON DELETE RESTRICT,
+        stt_streaming_enabled INTEGER NOT NULL DEFAULT 0 CHECK (stt_streaming_enabled IN (0, 1)),
+        tts_streaming_enabled INTEGER NOT NULL DEFAULT 0 CHECK (tts_streaming_enabled IN (0, 1)),
+        enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
@@ -649,6 +573,11 @@ export class VoxMeshStore {
         id INTEGER PRIMARY KEY CHECK (id = 1),
         active_route_id TEXT NOT NULL REFERENCES runtime_routes(id) ON DELETE RESTRICT,
         updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS runtime_routing_metadata (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        initialized INTEGER NOT NULL CHECK (initialized IN (0, 1))
       );
 
       CREATE TABLE IF NOT EXISTS conversation_events (
@@ -660,16 +589,46 @@ export class VoxMeshStore {
         created_at TEXT NOT NULL
       );
     `);
+    this.ensureColumn(
+      "provider_connections",
+      "enabled",
+      "INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1))"
+    );
+    this.ensureColumn(
+      "model_deployments",
+      "enabled",
+      "INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1))"
+    );
+    this.ensureColumn(
+      "runtime_routes",
+      "stt_streaming_enabled",
+      "INTEGER NOT NULL DEFAULT 0 CHECK (stt_streaming_enabled IN (0, 1))"
+    );
+    this.ensureColumn(
+      "runtime_routes",
+      "tts_streaming_enabled",
+      "INTEGER NOT NULL DEFAULT 0 CHECK (tts_streaming_enabled IN (0, 1))"
+    );
+    this.ensureColumn(
+      "runtime_routes",
+      "enabled",
+      "INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1))"
+    );
   }
 
-  private setSetting(key: string, value: string): void {
-    this.database
-      .prepare(
-        `INSERT INTO app_settings (key, value, updated_at)
-         VALUES (?, ?, ?)
-         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
-      )
-      .run(key, value, new Date().toISOString());
+  private ensureColumn(
+    table: string,
+    column: string,
+    definition: string
+  ): void {
+    const columns = this.database
+      .prepare(`PRAGMA table_info(${table})`)
+      .all() as Array<{ name: string }>;
+    if (!columns.some((entry) => entry.name === column)) {
+      this.database.exec(
+        `ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`
+      );
+    }
   }
 }
 
@@ -695,27 +654,4 @@ function mapPipelineEvent(row: PipelineEventRow): PipelineEvent {
 
 function conversationTitle(message: string): string {
   return message.length > 64 ? `${message.slice(0, 61)}...` : message;
-}
-
-function providerMode(value: string | undefined): SpeechProviderMode {
-  if (
-    value === "azure-openai" ||
-    value === "openai-compatible" ||
-    value === "alibaba-model-studio"
-  ) {
-    return value;
-  }
-  return "mock";
-}
-
-function llmMode(value: string | undefined): LlmMode {
-  if (value === "azure-openai" || value === "openai-compatible") {
-    return value;
-  }
-  return "mock";
-}
-
-function positiveInteger(value: string | undefined, fallback: number): number {
-  const parsed = value === undefined ? Number.NaN : Number.parseInt(value, 10);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }

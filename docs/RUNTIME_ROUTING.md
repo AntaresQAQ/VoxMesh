@@ -1,21 +1,18 @@
-# Runtime Routing Foundation
+# Runtime Routing
 
-VoxMesh stores system-managed provider connections, model deployments, and
-runtime routes as the compatibility foundation for future editable routing.
+VoxMesh stores provider connections, model deployments, and runtime routes as
+the only AI provider configuration source.
 
 ## Scope
 
-The initial foundation:
+The routing implementation:
 
-- migrates existing LLM, STT, TTS, and Native Voice settings into stable
-  routing records
-- keeps existing configuration APIs and Settings forms compatible
+- seeds a complete Mock connection/model/route set for a new database
 - resolves runtime providers through system route assignments
 - records declared and verified model capabilities
-- exposes a read-only authenticated routing summary
-
-It does not yet provide arbitrary connection, model, or route CRUD. Deletion,
-credential sharing, route cloning, and fallback editing remain future work.
+- exposes authenticated routing CRUD and activation APIs
+- supports explicit Native-to-Composed fallback
+- provides independent STT and TTS streaming switches
 
 ## Storage Model
 
@@ -63,24 +60,36 @@ The Composed route assigns STT, Chat, and TTS model deployments. The Native
 route assigns one Native Multimodal model deployment. `active_runtime_route`
 selects the route used by voice requests.
 
-Fallback is always `null` in this foundation. VoxMesh never silently changes
-pipeline mode or falls back to Mock Mode.
+Native routes may reference one explicit enabled Composed fallback route.
+Fallback is disabled when the reference is `null`. VoxMesh never silently
+changes pipeline mode or falls back to Mock Mode.
 
-## Compatibility Migration
+When a Native route is active, text Chat and any Composed provider resolution
+use that explicit fallback. Without one, Composed-only operations fail clearly;
+they never depend on a hard-coded seeded route.
 
-Migration runs after SQLite schema initialization and after each legacy
-configuration update. It uses deterministic IDs and upserts, so repeated
-startup and configuration saves do not create duplicate records.
+STT and TTS streaming switches are independent and default to disabled. A
+streaming route may be saved only when the assigned model declares
+`streaming`. Activation also requires verified capability. Until a true
+streaming transport is implemented, VoxMesh rejects activation explicitly
+rather than silently running the configured route through the buffered
+non-streaming path. The switches do not imply every model from a provider
+supports streaming.
 
-The existing endpoints remain supported:
+## Initialization
 
-- `/api/config/llm`
-- `/api/config/speech`
-- `/api/config/voice-pipeline`
+New databases receive deterministic Mock connections, models, Composed and
+Native routes, and an active Composed route. Initialization runs only when the
+system routing records do not exist, so restart never overwrites administrator
+changes.
 
-They act as compatibility facades and synchronize system routing records. The
-runtime resolves the corresponding model assignments before creating provider
-adapters.
+Provider configuration is managed only through `/api/runtime-routing`.
+
+The authenticated Dashboard receives the same safe routing summary from
+`/api/dashboard`. It resolves the active route, assigned models and
+connections, provider IDs, transport mode, fallback, enabled state, and
+required capability verification without exposing credentials or maintaining
+a second legacy provider-selection model.
 
 ## Capabilities
 
@@ -101,6 +110,14 @@ Changing relevant provider configuration resets verified capabilities. This
 prevents a successful test for one endpoint, credential, or model from being
 treated as verification for a different deployment.
 
+Route testing snapshots the route assignments, model fingerprints, connection
+configuration, and enabled state before external provider calls. Verification
+is committed only if that snapshot still matches. Each assignment receives
+only the capabilities exercised for its role; Chat tool calling is verified
+with an actual MCP tool-call request, MCP execution, and final model response
+instead of being inferred from a text completion. Capabilities verified by
+multiple unchanged routes are merged rather than replacing earlier results.
+
 ## API
 
 Authenticated clients can read:
@@ -118,17 +135,53 @@ The response contains:
 
 API keys and configuration fingerprints are never returned.
 
+Authenticated CRUD endpoints are available below `/api/runtime-routing` for:
+
+- `connections`
+- `models`
+- `routes`
+- active route selection
+- route connection testing
+
+Seeded records use stable `system-*` IDs and follow the same edit/delete rules
+as custom records. Initialization is tracked separately, so deleting seeded
+records does not recreate them on restart.
+
+Connections referenced by models, models referenced by routes, active routes,
+and fallback targets cannot be deleted. Activate another route before deleting
+the active route. Settings derives these dependencies from the current routing
+summary, disables the corresponding Delete action, and names the dependent
+records that must be reassigned or removed. Storage validation remains the
+authoritative protection against concurrent or stale clients.
+
+Runtime-affecting edits to the active route or its assigned models and
+connections are rejected. For an active Native route, its Composed fallback and
+the fallback's assignments are part of the same protected dependency graph.
+Activate a different tested route before changing the live dependency graph;
+display-only names may still be updated.
+
 ## Settings
 
-The AI Providers section displays a read-only Runtime Routing summary with:
+The AI Providers section provides routing management for:
 
 - active route and mode
 - provider connections
 - credential configuration status
-- model deployments
+- model deployments and provider options
 - declared and verified capabilities
+- route assignments and activation
+- one-step route testing and activation for inactive routes
+- inline editing directly beneath the selected connection, model, or route
+- explicit fallback
+- independent STT/TTS streaming switches
 
-The existing forms remain the editing surface until full CRUD is implemented.
+Destructive actions require an explicit second confirmation in the UI.
+
+An inactive route uses **Test & activate**. VoxMesh first verifies every
+assigned provider and updates model capabilities, then activates the route
+only when the test succeeds. A provider or configuration failure is shown
+directly and activation is not attempted. The active route retains a separate
+**Test route** action for health revalidation.
 
 ## Failure Behavior
 
@@ -139,6 +192,13 @@ Runtime resolution fails explicitly if:
 - a referenced model deployment does not exist
 - a Native route lacks a Native model deployment
 - stored capability JSON is invalid
+- a referenced connection, model, or route is disabled
+- activation requires capabilities that have not been verified
+- a streaming switch references a model without declared and verified
+  streaming capability
+- a streaming route is activated before runtime streaming transport is
+  available
+- a fallback is not an enabled Composed route
 
 No resolver failure is converted to Mock Mode or another success-shaped
 fallback.
@@ -147,9 +207,7 @@ fallback.
 
 Future routing work should add:
 
-1. editable Provider Connections
-2. editable Model Deployments
-3. capability-specific connection tests
-4. editable Runtime Routes
-5. explicit Native-to-Composed fallback
-6. route and model metadata in conversation observability
+1. true streaming browser and physical-audio transports
+2. richer provider-specific option editors instead of JSON
+3. route cloning and import/export
+4. route and model metadata in conversation observability

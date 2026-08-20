@@ -54,7 +54,6 @@ describe("authenticated routing", () => {
     });
     vi.spyOn(apiClient, "dashboard").mockResolvedValue({
       status: "online",
-      mode: "mock",
       uptimeSeconds: 1,
       conversationCount: 0,
       mcp: {
@@ -62,71 +61,26 @@ describe("authenticated routing", () => {
         status: "connected",
         enabledTools: []
       },
-      providers: { llm: "mock", stt: "mock", tts: "mock" }
-    });
-    vi.spyOn(apiClient, "llmConfiguration").mockResolvedValue({
-      mode: "mock",
-      endpoint: "",
-      deployment: "",
-      apiVersion: "2024-10-21",
-      baseUrl: "",
-      model: "qwen-plus",
-      timeoutMs: 30_000,
-      maxOutputTokens: 1_024,
-      apiKeyConfigured: false
-    });
-    vi.spyOn(apiClient, "providerCatalog").mockResolvedValue({
-      providers: [
-        {
-          id: "mock",
-          displayName: "Mock",
-          capabilities: ["llm", "stt", "tts"]
-        },
-        {
-          id: "azure-openai",
-          displayName: "Azure OpenAI",
-          capabilities: ["llm", "stt", "tts"]
-        },
-        {
-          id: "openai-compatible",
-          displayName: "OpenAI-compatible",
-          capabilities: ["llm", "stt", "tts"]
-        },
-        {
-          id: "alibaba-model-studio",
-          displayName: "Alibaba Cloud Model Studio",
-          capabilities: ["stt", "tts"]
-        },
-        {
-          id: "mock-native",
-          displayName: "Mock Native Multimodal",
-          capabilities: [
-            "native-multimodal",
-            "audio-input",
-            "audio-output",
-            "tool-calling"
-          ]
-        }
-      ]
-    });
-    vi.spyOn(apiClient, "speechConfiguration").mockResolvedValue({
-      sttMode: "mock",
-      ttsMode: "mock",
-      sttEndpoint: "",
-      sttDeployment: "",
-      sttApiVersion: "2025-04-01-preview",
-      sttLanguage: "zh",
-      sttApiKeyConfigured: false,
-      ttsEndpoint: "",
-      ttsDeployment: "",
-      ttsApiVersion: "2025-03-01-preview",
-      ttsVoice: "coral",
-      ttsInstructions: "Speak clearly and naturally.",
-      ttsApiKeyConfigured: false
-    });
-    vi.spyOn(apiClient, "voicePipelineConfiguration").mockResolvedValue({
-      mode: "composed",
-      nativeProviderId: "mock-native"
+      routing: {
+        connections: [],
+        models: [],
+        routes: [
+          {
+            id: "system-route-composed",
+            displayName: "Default Composed Voice",
+            mode: "composed",
+            sttModelDeploymentId: null,
+            chatModelDeploymentId: null,
+            ttsModelDeploymentId: null,
+            nativeModelDeploymentId: null,
+            fallbackRouteId: null,
+            sttStreamingEnabled: false,
+            ttsStreamingEnabled: false,
+            enabled: true
+          }
+        ],
+        activeRouteId: "system-route-composed"
+      }
     });
     vi.spyOn(apiClient, "runtimeRouting").mockResolvedValue({
       connections: [],
@@ -140,7 +94,10 @@ describe("authenticated routing", () => {
           chatModelDeploymentId: null,
           ttsModelDeploymentId: null,
           nativeModelDeploymentId: null,
-          fallbackRouteId: null
+          fallbackRouteId: null,
+          sttStreamingEnabled: false,
+          ttsStreamingEnabled: false,
+          enabled: true
         }
       ],
       activeRouteId: "system-route-composed"

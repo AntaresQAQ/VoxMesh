@@ -37,9 +37,9 @@ export class ConversationService {
   public constructor(
     private readonly store: VoxMeshStore,
     private readonly mcp: McpServer,
-    private readonly createLlm: () => LlmProvider,
-    private readonly createStt: () => SpeechToTextProvider,
-    private readonly createTts: () => TextToSpeechProvider,
+    private readonly createLlm: (routeId?: string) => LlmProvider,
+    private readonly createStt: (routeId?: string) => SpeechToTextProvider,
+    private readonly createTts: (routeId?: string) => TextToSpeechProvider,
     private readonly createNativeVoice: (
       config: StoredVoicePipelineConfiguration
     ) => NativeVoiceProvider
@@ -53,13 +53,30 @@ export class ConversationService {
   public async runVoice(audio: AudioData): Promise<VoiceConversationResult> {
     const pipeline = this.store.getRuntimeVoicePipelineConfiguration();
     if (pipeline.mode === "native-multimodal") {
-      return this.runNativeVoice(audio, pipeline);
+      try {
+        return await this.runNativeVoice(audio, pipeline);
+      } catch (error) {
+        if (!pipeline.fallbackRouteId) throw error;
+        return this.runComposedVoice(
+          audio,
+          pipeline.fallbackRouteId,
+          `Fallback activated after Native route ${pipeline.routeId ?? "unknown"} failed`
+        );
+      }
     }
+    return this.runComposedVoice(audio, pipeline.routeId);
+  }
+
+  private async runComposedVoice(
+    audio: AudioData,
+    routeId?: string,
+    fallbackMessage?: string
+  ): Promise<VoiceConversationResult> {
     const conversationId =
       this.store.createPendingConversation("Voice request");
     let transcription: TranscriptionResult;
     try {
-      transcription = await this.createStt().transcribe(audio);
+      transcription = await this.createStt(routeId).transcribe(audio);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "STT transcription failed";
@@ -85,10 +102,22 @@ export class ConversationService {
       status: "completed",
       message: `Transcribed ${audio.mimeType} audio as ${transcription.language}`
     });
+    if (fallbackMessage) {
+      this.store.addPipelineEvent({
+        conversationId,
+        stage: "AGENT",
+        status: "completed",
+        message: fallbackMessage
+      });
+    }
 
-    const agentResult = await this.runAgent(conversationId, transcription.text);
+    const agentResult = await this.runAgent(
+      conversationId,
+      transcription.text,
+      routeId
+    );
     try {
-      const synthesized = await this.createTts().synthesize(
+      const synthesized = await this.createTts(routeId).synthesize(
         agentResult.response
       );
       this.store.addPipelineEvent({
@@ -160,9 +189,10 @@ export class ConversationService {
 
   private async runAgent(
     conversationId: string,
-    message: string
+    message: string,
+    routeId?: string
   ): Promise<ConversationResult> {
-    const agent = new AgentRuntime(this.createLlm(), this.mcp);
+    const agent = new AgentRuntime(this.createLlm(routeId), this.mcp);
     try {
       const result = await agent.run(message);
       for (const transcriptMessage of result.transcript

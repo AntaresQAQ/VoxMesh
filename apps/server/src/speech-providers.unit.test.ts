@@ -143,6 +143,20 @@ describe("speech provider factory", () => {
     ).toThrow("requires a realtime Fun-ASR or Qwen Audio streaming model");
   });
 
+  it("rejects Alibaba Qwen Audio voices from a different model family", () => {
+    expect(() =>
+      validateSpeechConfiguration({
+        ...mockConfig,
+        ttsMode: "alibaba-model-studio",
+        ttsEndpoint:
+          "wss://workspace.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference",
+        ttsDeployment: "qwen-audio-3.0-tts-plus",
+        ttsVoice: "longpaopao_v3.6",
+        ttsApiKey: "secret"
+      })
+    ).toThrow("does not support this Flash voice");
+  });
+
   it("tests STT with actual audio produced by the selected TTS provider", async () => {
     const audio = {
       data: new Uint8Array([82, 73, 70, 70]),

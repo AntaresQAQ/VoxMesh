@@ -1,12 +1,26 @@
 // @vitest-environment jsdom
 
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { decodePcm16Wav } from "@voxmesh/audio/pcm-wav";
 
-import { normalizeBrowserRecording } from "./browser-audio.js";
+import {
+  BrowserAudioRecorder,
+  normalizeBrowserRecording,
+  rmsToLoudnessPercent
+} from "./browser-audio.js";
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("browser audio normalization", () => {
+  it("maps microphone RMS onto a bounded loudness percentage", () => {
+    expect(rmsToLoudnessPercent(new Float32Array([0, 0]))).toBe(0);
+    expect(rmsToLoudnessPercent(new Float32Array([0.1, -0.1]))).toBe(67);
+    expect(rmsToLoudnessPercent(new Float32Array([1, -1]))).toBe(100);
+  });
+
   it("downmixes and resamples decoded browser audio to mono PCM16 WAV", async () => {
     const close = vi.fn(async () => undefined);
     const result = await normalizeBrowserRecording(
@@ -45,6 +59,63 @@ describe("browser audio normalization", () => {
       "Browser audio normalization failed: unsupported recording"
     );
     expect(close).toHaveBeenCalledOnce();
+  });
+
+  it("stops a microphone stream acquired after recording was cancelled", async () => {
+    let resolveStream: ((stream: MediaStream) => void) | undefined;
+    const stop = vi.fn();
+    const stream = {
+      getTracks: () => [{ stop }]
+    } as unknown as MediaStream;
+    vi.stubGlobal(
+      "MediaRecorder",
+      class {
+        public state = "inactive";
+      }
+    );
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: {
+        getUserMedia: () =>
+          new Promise<MediaStream>((resolve) => {
+            resolveStream = resolve;
+          })
+      }
+    });
+    const recorder = new BrowserAudioRecorder();
+
+    const started = recorder.start();
+    recorder.cancel();
+    resolveStream?.(stream);
+
+    await expect(started).rejects.toThrow("Audio recording was cancelled");
+    expect(stop).toHaveBeenCalledOnce();
+  });
+
+  it("stops the microphone when MediaRecorder construction fails", async () => {
+    const stop = vi.fn();
+    const stream = {
+      getTracks: () => [{ stop }]
+    } as unknown as MediaStream;
+    vi.stubGlobal(
+      "MediaRecorder",
+      class {
+        public constructor() {
+          throw new Error("unsupported stream");
+        }
+      }
+    );
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: {
+        getUserMedia: vi.fn(async () => stream)
+      }
+    });
+
+    await expect(new BrowserAudioRecorder().start()).rejects.toThrow(
+      "unsupported stream"
+    );
+    expect(stop).toHaveBeenCalledOnce();
   });
 });
 

@@ -17,8 +17,9 @@ VoxMesh has an initial Mock Mode vertical slice for development and architecture
 - browser Mock Voice recording with Mock STT and generated WAV response
 - selectable Composed and Mock Native Multimodal voice pipeline modes
 - system-managed provider connections, model deployments, runtime routes, and capability verification
+- editable routing CRUD, explicit Native fallback, and independent capability-gated STT/TTS streaming switches
 - Dashboard, Chat, Conversations, and Logs pages
-- Settings page for password rotation and Mock/Azure OpenAI configuration
+- Settings page for password rotation and Runtime Routing configuration
 - write-only Azure OpenAI API key handling and connection testing
 - generic OpenAI-compatible LLM configuration, including Alibaba Cloud Model Studio
 - English and Simplified Chinese Web Console localization
@@ -58,14 +59,15 @@ Open <http://127.0.0.1:3000>, create the first administrator password, sign in, 
 
 The Chat page also provides **Start recording**, **Stop recording**, and **Play response** controls. In Mock Mode, recorded audio is validated, transcribed to a deterministic test phrase, processed through Agent Core and Mock MCP, and returned with a generated test WAV.
 
-Use **Settings** to change the administrator password or switch Chat between Mock and Azure OpenAI. Azure OpenAI requires an HTTPS endpoint, deployment name, API version, and API key. The API key is stored in the local SQLite database, is never returned to the browser, and is protected by host filesystem permissions.
+Use **Settings → AI Providers** to manage Connections, Models, and Routes.
+Connections store write-only credentials and endpoints, Models declare provider
+options and capabilities, and Routes assign Chat/STT/TTS or Native Multimodal
+models. API keys are stored in the local SQLite database, are never returned to
+the browser, and are protected by host filesystem permissions.
 
-The LLM provider can also use an OpenAI-compatible API. For Alibaba Cloud Model Studio, configure the region/workspace base URL, API key, and model name such as `qwen-plus`.
-
-Alibaba Cloud speech uses the dedicated **Alibaba Cloud Model Studio** STT/TTS
-provider, not the OpenAI-compatible Audio API. Configure the workspace
-WebSocket endpoint, API key, realtime ASR or TTS model, language, and voice
-independently for STT and TTS.
+Alibaba Cloud Chat uses an OpenAI-compatible connection. Alibaba Cloud speech
+uses dedicated Model Studio connections and models, not OpenAI-compatible Audio
+endpoints. STT and TTS remain independently configurable.
 
 Use the language selector on setup, login, or Settings to switch between English and Simplified Chinese. The preference is stored in the browser and applies immediately.
 
