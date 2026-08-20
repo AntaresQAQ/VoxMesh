@@ -270,6 +270,53 @@ export const VoicePipelineConfigurationUpdateSchema = Type.Object({
   nativeProviderId: Type.String({ maxLength: 128 })
 });
 
+export const ModelCapabilitySchema = Type.Union([
+  Type.Literal("text-input"),
+  Type.Literal("text-output"),
+  Type.Literal("audio-input"),
+  Type.Literal("audio-output"),
+  Type.Literal("transcription"),
+  Type.Literal("speech-synthesis"),
+  Type.Literal("tool-calling"),
+  Type.Literal("native-multimodal")
+]);
+
+export const ProviderConnectionSummarySchema = Type.Object({
+  id: Type.String(),
+  providerId: Type.String(),
+  displayName: Type.String(),
+  endpoint: Type.String(),
+  apiKeyConfigured: Type.Boolean()
+});
+
+export const ModelDeploymentSummarySchema = Type.Object({
+  id: Type.String(),
+  connectionId: Type.String(),
+  displayName: Type.String(),
+  modelName: Type.String(),
+  apiVersion: Type.String(),
+  declaredCapabilities: Type.Array(ModelCapabilitySchema),
+  verifiedCapabilities: Type.Array(ModelCapabilitySchema)
+});
+
+export const RuntimeRouteSummarySchema = Type.Object({
+  id: Type.String(),
+  displayName: Type.String(),
+  mode: VoicePipelineModeSchema,
+  sttModelDeploymentId: Type.Union([Type.String(), Type.Null()]),
+  chatModelDeploymentId: Type.Union([Type.String(), Type.Null()]),
+  ttsModelDeploymentId: Type.Union([Type.String(), Type.Null()]),
+  nativeModelDeploymentId: Type.Union([Type.String(), Type.Null()]),
+  fallbackRouteId: Type.Union([Type.String(), Type.Null()])
+});
+
+export const RuntimeRoutingSummarySchema = Type.Object({
+  connections: Type.Array(ProviderConnectionSummarySchema),
+  models: Type.Array(ModelDeploymentSummarySchema),
+  routes: Type.Array(RuntimeRouteSummarySchema),
+  activeRouteId: Type.String()
+});
+
 export type ApiError = Static<typeof ApiErrorSchema>;
 export type Health = Static<typeof HealthSchema>;
 export type SetupStatus = Static<typeof SetupStatusSchema>;
@@ -305,3 +352,12 @@ export type VoicePipelineConfiguration = Static<
 export type VoicePipelineConfigurationUpdate = Static<
   typeof VoicePipelineConfigurationUpdateSchema
 >;
+export type ModelCapability = Static<typeof ModelCapabilitySchema>;
+export type ProviderConnectionSummary = Static<
+  typeof ProviderConnectionSummarySchema
+>;
+export type ModelDeploymentSummary = Static<
+  typeof ModelDeploymentSummarySchema
+>;
+export type RuntimeRouteSummary = Static<typeof RuntimeRouteSummarySchema>;
+export type RuntimeRoutingSummary = Static<typeof RuntimeRoutingSummarySchema>;

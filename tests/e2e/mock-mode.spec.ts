@@ -257,6 +257,11 @@ test("completes setup, tool-assisted chat, inspection, and logout", async ({
   });
   await page.getByRole("link", { name: "AI Providers" }).click();
   await expect(page).toHaveURL(/section=providers/);
+  await expect(
+    page.getByRole("heading", { name: "Runtime routing" })
+  ).toBeVisible();
+  await expect(page.getByText("Default Composed Voice")).toBeVisible();
+  await expect(page.getByText("Chat · Mock", { exact: true })).toBeVisible();
   await expectAccessible(page, "English dark provider settings");
   const llmSettings = page
     .getByRole("heading", { name: "LLM provider" })

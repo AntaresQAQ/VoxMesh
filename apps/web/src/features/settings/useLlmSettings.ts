@@ -45,6 +45,9 @@ export function useLlmSettings() {
     onSuccess: (updated) => {
       queryClient.setQueryData(queryKeys.llmConfiguration, updated);
       void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.runtimeRouting
+      });
     }
   });
   const testConnection = useMutation({
@@ -85,6 +88,9 @@ export function useLlmSettings() {
     setMessage("");
     try {
       const result = await testConnection.mutateAsync();
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.runtimeRouting
+      });
       setMessage(t("settings.connectionResult", { response: result.response }));
     } catch (caught) {
       setError(localizedError(caught, t, "settings.connectionFailed"));

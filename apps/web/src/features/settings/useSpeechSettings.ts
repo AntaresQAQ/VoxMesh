@@ -53,6 +53,9 @@ export function useSpeechSettings() {
     onSuccess: (updated) => {
       queryClient.setQueryData(queryKeys.speechConfiguration, updated);
       void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.runtimeRouting
+      });
     }
   });
   const testConnection = useMutation({
@@ -94,6 +97,9 @@ export function useSpeechSettings() {
     setMessage("");
     try {
       const result = await testConnection.mutateAsync();
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.runtimeRouting
+      });
       setMessage(
         t("settings.speechConnectionResult", {
           transcript: result.transcript,

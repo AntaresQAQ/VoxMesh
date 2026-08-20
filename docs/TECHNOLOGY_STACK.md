@@ -421,6 +421,13 @@ mono PCM16 WAV before entering the provider-independent audio boundary. See
 
 Provider registrations include a stable ID, display name, capabilities, validation, and factory. The server merges registry metadata into one authenticated Provider Catalog API. Web Console LLM, STT, and TTS selectors filter the same catalog by `llm`, `stt`, or `tts` capability instead of hard-coding separate provider lists. A provider may expose only the capabilities its API actually supports.
 
+System-managed Provider Connections, Model Deployments, and Runtime Routes now
+mirror the compatibility configuration and are used for runtime assignment
+resolution. Declared capabilities are migrated from provider roles; verified
+capabilities are recorded after successful connection tests and reset when the
+configuration fingerprint changes. See
+[RUNTIME_ROUTING.md](./RUNTIME_ROUTING.md).
+
 ## 11. Adding a Feature
 
 Before implementation:
