@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { voicePipelineQueryOptions } from "../../query.js";
 import { LlmSettingsCard } from "./LlmSettingsCard.js";
+import { RuntimeRoutingSummaryCard } from "./RuntimeRoutingSummaryCard.js";
 import { SpeechSettingsCard } from "./SpeechSettingsCard.js";
 import { VoicePipelineSettingsCard } from "./VoicePipelineSettingsCard.js";
 
@@ -11,6 +12,7 @@ export function AiProvidersSettings() {
   return (
     <div className="settings-provider-stack">
       <VoicePipelineSettingsCard />
+      <RuntimeRoutingSummaryCard />
       {mode === "composed" ? (
         <>
           <LlmSettingsCard />

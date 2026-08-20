@@ -18,6 +18,9 @@ export function VoicePipelineSettingsCard() {
     mutationFn: apiClient.updateVoicePipelineConfiguration,
     onSuccess: (updated) => {
       queryClient.setQueryData(queryKeys.voicePipeline, updated);
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.runtimeRouting
+      });
       setMessage(t("settings.voicePipelineSaved"));
     }
   });

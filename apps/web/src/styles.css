@@ -470,6 +470,36 @@ main > header {
   grid-column: 1 / -1;
 }
 
+.routing-summary-grid {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.routing-summary-grid h4 {
+  margin: 0 0 0.75rem;
+}
+
+.routing-summary-list {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.routing-summary-list li {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.75rem;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+}
+
+.routing-summary-list span {
+  color: var(--color-muted);
+}
+
 .settings-card fieldset {
   display: grid;
   gap: 1rem;

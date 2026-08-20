@@ -15,9 +15,12 @@ import type {
   PipelineEvent,
   PipelineStage,
   PipelineStatus,
+  RuntimeRoutingSummary,
   SpeechProviderMode,
   VoicePipelineMode
 } from "@voxmesh/shared";
+
+import { RuntimeRoutingStore } from "./runtime-routing-store.js";
 
 interface CountRow {
   count: number;
@@ -103,6 +106,7 @@ export interface StoredVoicePipelineConfiguration {
 
 export class VoxMeshStore {
   private readonly database: Database.Database;
+  private readonly runtimeRouting: RuntimeRoutingStore;
 
   public constructor(path: string) {
     if (path !== ":memory:") {
@@ -112,6 +116,8 @@ export class VoxMeshStore {
     this.database.pragma("journal_mode = WAL");
     this.database.pragma("foreign_keys = ON");
     this.migrate();
+    this.runtimeRouting = new RuntimeRoutingStore(this.database);
+    this.syncRuntimeRoutingRecords();
   }
 
   public close(): void {
@@ -236,6 +242,7 @@ export class VoxMeshStore {
         this.setSetting("llm.apiKey", input.apiKey);
       }
     })();
+    this.syncRuntimeRoutingRecords();
     return this.getLlmConfiguration();
   }
 
@@ -326,6 +333,7 @@ export class VoxMeshStore {
         this.setSetting("speech.ttsApiKey", input.ttsApiKey);
       }
     })();
+    this.syncRuntimeRoutingRecords();
     return this.getSpeechConfiguration();
   }
 
@@ -352,7 +360,41 @@ export class VoxMeshStore {
       this.setSetting("voice.mode", input.mode);
       this.setSetting("voice.nativeProviderId", input.nativeProviderId);
     })();
+    this.syncRuntimeRoutingRecords();
     return this.getVoicePipelineConfiguration();
+  }
+
+  /** Returns the migrated connection, model, and route records without secrets. */
+  public getRuntimeRoutingSummary(): RuntimeRoutingSummary {
+    return this.runtimeRouting.getSummary();
+  }
+
+  /**
+   * Resolves the Chat provider through the system Composed route.
+   *
+   * The compatibility configuration remains the provider factory input until
+   * editable model deployments are introduced.
+   */
+  public getRuntimeLlmConfiguration(): StoredLlmConfiguration {
+    return this.runtimeRouting.resolveLlm(this.getLlmConfiguration());
+  }
+
+  /** Resolves STT and TTS through the system Composed route. */
+  public getRuntimeSpeechConfiguration(): StoredSpeechConfiguration {
+    return this.runtimeRouting.resolveSpeech(this.getSpeechConfiguration());
+  }
+
+  /** Resolves the selected pipeline mode through the active runtime route. */
+  public getRuntimeVoicePipelineConfiguration(): StoredVoicePipelineConfiguration {
+    return this.runtimeRouting.resolveVoice(
+      this.getVoicePipelineConfiguration()
+    );
+  }
+
+  public markRuntimeRoleVerified(
+    role: "chat" | "stt" | "tts" | "native"
+  ): void {
+    this.runtimeRouting.markRoleVerified(role);
   }
 
   public createConversation(userMessage: string): string {
@@ -514,6 +556,14 @@ export class VoxMeshStore {
     return row.count;
   }
 
+  private syncRuntimeRoutingRecords(): void {
+    this.runtimeRouting.sync({
+      llm: this.getLlmConfiguration(),
+      speech: this.getSpeechConfiguration(),
+      voice: this.getVoicePipelineConfiguration()
+    });
+  }
+
   private migrate(): void {
     this.database.exec(`
       CREATE TABLE IF NOT EXISTS admin_credentials (
@@ -555,6 +605,49 @@ export class VoxMeshStore {
       CREATE TABLE IF NOT EXISTS app_settings (
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS provider_connections (
+        id TEXT PRIMARY KEY,
+        provider_id TEXT NOT NULL,
+        display_name TEXT NOT NULL,
+        endpoint TEXT NOT NULL,
+        api_key TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS model_deployments (
+        id TEXT PRIMARY KEY,
+        connection_id TEXT NOT NULL REFERENCES provider_connections(id) ON DELETE RESTRICT,
+        display_name TEXT NOT NULL,
+        model_name TEXT NOT NULL,
+        api_version TEXT NOT NULL,
+        declared_capabilities TEXT NOT NULL,
+        verified_capabilities TEXT NOT NULL,
+        provider_options TEXT NOT NULL,
+        configuration_fingerprint TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS runtime_routes (
+        id TEXT PRIMARY KEY,
+        display_name TEXT NOT NULL,
+        mode TEXT NOT NULL CHECK (mode IN ('composed', 'native-multimodal')),
+        stt_model_deployment_id TEXT REFERENCES model_deployments(id) ON DELETE RESTRICT,
+        chat_model_deployment_id TEXT REFERENCES model_deployments(id) ON DELETE RESTRICT,
+        tts_model_deployment_id TEXT REFERENCES model_deployments(id) ON DELETE RESTRICT,
+        native_model_deployment_id TEXT REFERENCES model_deployments(id) ON DELETE RESTRICT,
+        fallback_route_id TEXT REFERENCES runtime_routes(id) ON DELETE RESTRICT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS active_runtime_route (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        active_route_id TEXT NOT NULL REFERENCES runtime_routes(id) ON DELETE RESTRICT,
         updated_at TEXT NOT NULL
       );
 

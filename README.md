@@ -16,6 +16,7 @@ VoxMesh has an initial Mock Mode vertical slice for development and architecture
 - deterministic Mock LLM and Mock MCP tool execution
 - browser Mock Voice recording with Mock STT and generated WAV response
 - selectable Composed and Mock Native Multimodal voice pipeline modes
+- system-managed provider connections, model deployments, runtime routes, and capability verification
 - Dashboard, Chat, Conversations, and Logs pages
 - Settings page for password rotation and Mock/Azure OpenAI configuration
 - write-only Azure OpenAI API key handling and connection testing
@@ -153,6 +154,7 @@ tests/e2e             Browser end-to-end tests
 - [Azure OpenAI Configuration Guide](docs/AZURE_OPENAI.md)
 - [Alibaba Cloud Model Studio Provider Plan](docs/ALIBABA_CLOUD_MODEL_STUDIO.md)
 - [Voice Pipeline Architecture](docs/VOICE_PIPELINES.md)
+- [Runtime Routing Foundation](docs/RUNTIME_ROUTING.md)
 
 ## Coding Agent Instructions
 

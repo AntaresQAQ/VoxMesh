@@ -51,7 +51,7 @@ export class ConversationService {
   }
 
   public async runVoice(audio: AudioData): Promise<VoiceConversationResult> {
-    const pipeline = this.store.getVoicePipelineConfiguration();
+    const pipeline = this.store.getRuntimeVoicePipelineConfiguration();
     if (pipeline.mode === "native-multimodal") {
       return this.runNativeVoice(audio, pipeline);
     }

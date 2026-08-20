@@ -251,7 +251,9 @@ Current implementation status:
 - [x] Add a Mock Native Multimodal provider.
 - [x] Add a persisted Settings mode selector and capability-filtered provider selection.
 - [x] Persist mode-specific conversation events.
-- [ ] Introduce full provider connections and model deployments.
-- [ ] Migrate current LLM/STT/TTS settings into Composed route records.
+- [x] Introduce system-managed provider connections and model deployments.
+- [x] Migrate current LLM/STT/TTS settings into Composed route records.
+- [x] Resolve current providers through stable system runtime routes.
+- [ ] Add editable provider connection, model deployment, and route CRUD.
 - [ ] Add explicit Composed fallback configuration.
 - [ ] Add the first real Native Multimodal adapter after confirming a model and API.

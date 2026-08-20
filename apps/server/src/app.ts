@@ -26,6 +26,7 @@ import {
   PasswordChangeSchema,
   PasswordSchema,
   ProviderCatalogSchema,
+  RuntimeRoutingSummarySchema,
   SessionSchema,
   SpeechConfigurationSchema,
   SpeechConfigurationUpdateSchema,
@@ -86,9 +87,9 @@ export async function buildServer(
   const conversationService = new ConversationService(
     store,
     mcp,
-    () => createLlmProvider(store.getLlmConfiguration()),
-    () => createSpeechToTextProvider(store.getSpeechConfiguration()),
-    () => createTextToSpeechProvider(store.getSpeechConfiguration()),
+    () => createLlmProvider(store.getRuntimeLlmConfiguration()),
+    () => createSpeechToTextProvider(store.getRuntimeSpeechConfiguration()),
+    () => createTextToSpeechProvider(store.getRuntimeSpeechConfiguration()),
     createNativeVoiceProvider
   );
   const loginRateLimiter = new LoginRateLimiter();
@@ -442,7 +443,7 @@ export async function buildServer(
       }
     },
     async () => {
-      const provider = createLlmProvider(store.getLlmConfiguration());
+      const provider = createLlmProvider(store.getRuntimeLlmConfiguration());
       const result = await provider.complete({
         messages: [
           {
@@ -453,13 +454,17 @@ export async function buildServer(
         ],
         tools: []
       });
-      return {
+      const response = {
         success: result.type === "message",
         response:
           result.type === "message"
             ? result.content
             : "Provider returned an unexpected tool call"
       };
+      if (response.success) {
+        store.markRuntimeRoleVerified("chat");
+      }
+      return response;
     }
   );
 
@@ -533,7 +538,28 @@ export async function buildServer(
         }
       }
     },
-    async () => testSpeechProviders(store.getSpeechConfiguration())
+    async () => {
+      const result = await testSpeechProviders(
+        store.getRuntimeSpeechConfiguration()
+      );
+      store.markRuntimeRoleVerified("stt");
+      store.markRuntimeRoleVerified("tts");
+      return result;
+    }
+  );
+
+  app.get(
+    "/api/runtime-routing",
+    {
+      preHandler: authenticate,
+      schema: {
+        response: {
+          200: RuntimeRoutingSummarySchema,
+          401: ApiErrorSchema
+        }
+      }
+    },
+    async () => store.getRuntimeRoutingSummary()
   );
 
   app.get(

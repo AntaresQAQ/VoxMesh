@@ -73,6 +73,10 @@ The first confirmed Mock Mode vertical slice is implemented and validated on mac
 - [x] dedicated Alibaba Cloud Model Studio Qwen-Audio-TTS/CosyVoice WebSocket TTS provider
 - [x] mono 16 kHz PCM16 WAV browser recording normalization
 - [x] Alibaba WebSocket endpoint allowlist, task lifecycle, binary audio, and failure tests
+- [x] system-managed Provider Connections, Model Deployments, and Runtime Routes
+- [x] deterministic migration from current provider settings into stable route assignments
+- [x] declared and verified model capabilities with connection-test verification
+- [x] authenticated runtime routing summary API and accessible Settings view
 - [x] OpenAI-compatible text, tool-call, error, registry, API, and Settings tests
 - [x] unit, integration, and Playwright tests for the implemented vertical slice
 - [x] format, lint, strict type-check, production build, and browser e2e validation on macOS
@@ -80,7 +84,7 @@ The first confirmed Mock Mode vertical slice is implemented and validated on mac
 The following planned capabilities are not complete:
 
 - [ ] physical voice flow
-- [ ] Provider Connections, Model Deployments, and Runtime Routes data model
+- [ ] editable Provider Connections, Model Deployments, and Runtime Routes CRUD
 - [ ] real Native Multimodal provider adapter and verified capability routing
 - [ ] opt-in live OpenAI-compatible LLM/STT/TTS provider smoke tests
 - [ ] true streaming browser microphone to Alibaba Fun-ASR

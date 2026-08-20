@@ -8,6 +8,7 @@ import type {
   LlmConnectionTest,
   LogEntry,
   ProviderCatalog,
+  RuntimeRoutingSummary,
   Session,
   SpeechConfiguration,
   SpeechConfigurationUpdate,
@@ -94,6 +95,7 @@ export const apiClient = {
   testSpeechConnection: () =>
     api<SpeechConnectionTest>("/api/config/speech/test", { method: "POST" }),
   providerCatalog: () => api<ProviderCatalog>("/api/providers"),
+  runtimeRouting: () => api<RuntimeRoutingSummary>("/api/runtime-routing"),
   voicePipelineConfiguration: () =>
     api<VoicePipelineConfiguration>("/api/config/voice-pipeline"),
   updateVoicePipelineConfiguration: (

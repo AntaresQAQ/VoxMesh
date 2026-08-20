@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type {
   ConversationDetail,
   ProviderCatalog,
+  RuntimeRoutingSummary,
   VoiceResponse
 } from "@voxmesh/shared";
 import { VoxMeshStore } from "@voxmesh/storage";
@@ -71,6 +72,24 @@ describe("server API", () => {
         (provider) => provider.id === "alibaba-model-studio"
       )?.capabilities
     ).toEqual(["stt", "tts"]);
+
+    const routing = await app.inject({
+      method: "GET",
+      url: "/api/runtime-routing",
+      headers: { cookie }
+    });
+    expect(routing.statusCode).toBe(200);
+    const routingBody = JSON.parse(routing.body) as RuntimeRoutingSummary;
+    expect(routingBody).toMatchObject({
+      activeRouteId: "system-route-composed"
+    });
+    expect(routingBody.connections).toHaveLength(4);
+    expect(routingBody.models).toHaveLength(4);
+    expect(
+      routingBody.connections.every(
+        (connection) => !Object.hasOwn(connection, "apiKey")
+      )
+    ).toBe(true);
 
     const chat = await app.inject({
       method: "POST",

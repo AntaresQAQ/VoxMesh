@@ -144,4 +144,65 @@ describe("VoxMeshStore", () => {
       nativeProviderId: "mock-native"
     });
   });
+
+  it("migrates legacy settings into idempotent runtime routing records", () => {
+    store = new VoxMeshStore(":memory:");
+
+    const initial = store.getRuntimeRoutingSummary();
+    expect(initial.connections).toHaveLength(4);
+    expect(initial.models).toHaveLength(4);
+    expect(initial.routes).toHaveLength(2);
+    expect(initial.activeRouteId).toBe("system-route-composed");
+    expect(
+      initial.models.find((model) => model.id === "system-model-chat")
+        ?.verifiedCapabilities
+    ).toEqual(["text-input", "text-output", "tool-calling"]);
+
+    store.updateLlmConfiguration({
+      mode: "azure-openai",
+      endpoint: "https://example.openai.azure.com",
+      deployment: "model-router",
+      apiVersion: "2025-01-01",
+      baseUrl: "",
+      model: "",
+      timeoutMs: 30_000,
+      maxOutputTokens: 1_024,
+      apiKey: "secret"
+    });
+    const updated = store.getRuntimeRoutingSummary();
+    expect(updated.connections).toHaveLength(4);
+    expect(
+      updated.connections.find(
+        (connection) => connection.id === "system-connection-chat"
+      )
+    ).toMatchObject({
+      providerId: "azure-openai",
+      endpoint: "https://example.openai.azure.com",
+      apiKeyConfigured: true
+    });
+    expect(
+      updated.models.find((model) => model.id === "system-model-chat")
+        ?.verifiedCapabilities
+    ).toEqual([]);
+
+    store.markRuntimeRoleVerified("chat");
+    expect(
+      store
+        .getRuntimeRoutingSummary()
+        .models.find((model) => model.id === "system-model-chat")
+        ?.verifiedCapabilities
+    ).toEqual(["text-input", "text-output", "tool-calling"]);
+
+    store.updateVoicePipelineConfiguration({
+      mode: "native-multimodal",
+      nativeProviderId: "mock-native"
+    });
+    expect(store.getRuntimeRoutingSummary().activeRouteId).toBe(
+      "system-route-native"
+    );
+    expect(store.getRuntimeVoicePipelineConfiguration()).toEqual({
+      mode: "native-multimodal",
+      nativeProviderId: "mock-native"
+    });
+  });
 });

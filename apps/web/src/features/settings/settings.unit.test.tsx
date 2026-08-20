@@ -98,6 +98,23 @@ beforeEach(() => {
     mode: "composed",
     nativeProviderId: "mock-native"
   });
+  vi.spyOn(apiClient, "runtimeRouting").mockResolvedValue({
+    connections: [],
+    models: [],
+    routes: [
+      {
+        id: "system-route-composed",
+        displayName: "Default Composed Voice",
+        mode: "composed",
+        sttModelDeploymentId: null,
+        chatModelDeploymentId: null,
+        ttsModelDeploymentId: null,
+        nativeModelDeploymentId: null,
+        fallbackRouteId: null
+      }
+    ],
+    activeRouteId: "system-route-composed"
+  });
 });
 
 afterEach(() => {

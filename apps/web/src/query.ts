@@ -12,6 +12,7 @@ export const queryKeys = {
   llmConfiguration: ["configuration", "llm"] as const,
   speechConfiguration: ["configuration", "speech"] as const,
   providerCatalog: ["providers"] as const,
+  runtimeRouting: ["runtime-routing"] as const,
   voicePipeline: ["configuration", "voice-pipeline"] as const
 };
 
@@ -83,6 +84,12 @@ export const providerCatalogQueryOptions = () =>
     queryKey: queryKeys.providerCatalog,
     queryFn: apiClient.providerCatalog,
     staleTime: Number.POSITIVE_INFINITY
+  });
+
+export const runtimeRoutingQueryOptions = () =>
+  queryOptions({
+    queryKey: queryKeys.runtimeRouting,
+    queryFn: apiClient.runtimeRouting
   });
 
 export const voicePipelineQueryOptions = () =>
