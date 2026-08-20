@@ -15,12 +15,13 @@ VoxMesh has an initial Mock Mode vertical slice for development and architecture
 - provider-independent Agent Core contracts
 - deterministic Mock LLM and Mock MCP tool execution
 - browser Mock Voice recording with Mock STT and generated WAV response
+- live browser microphone loudness monitoring
 - selectable Composed and Mock Native Multimodal voice pipeline modes
 - system-managed provider connections, model deployments, runtime routes, and capability verification
 - editable routing CRUD, explicit Native fallback, and independent capability-gated STT/TTS streaming switches
 - Dashboard, Chat, Conversations, and Logs pages
 - Settings page for password rotation and Runtime Routing configuration
-- write-only Azure OpenAI API key handling and connection testing
+- write-only provider credentials and route-bound capability verification
 - generic OpenAI-compatible LLM configuration, including Alibaba Cloud Model Studio
 - English and Simplified Chinese Web Console localization
 - browser-language detection and persisted language selection
@@ -33,7 +34,17 @@ VoxMesh has an initial Mock Mode vertical slice for development and architecture
 - TanStack Form for complex Settings workflows
 - unit, integration, and Playwright end-to-end tests
 
-Azure Speech, generic external MCP transports, physical audio, and deployment packaging remain planned work.
+Azure AI Speech Service, generic external MCP transports, physical audio, and
+deployment packaging remain planned work. Azure OpenAI Audio STT/TTS is already
+implemented. The physical-audio phase also plans local offline wake-word
+detection through sherpa-onnx after explicit input-device selection.
+Capability-gated full-chain Streaming STT/Chat LLM/TTS is also planned after
+the buffered live-provider acceptance gate; unsupported routes continue to be
+blocked rather than silently using buffered transport.
+
+The current Logs page reads persisted snapshots through HTTP. Application-level
+real-time log/event WebSockets, physical audio, wake-word detection, and
+full-chain streaming are not implemented yet.
 
 The architecture is designed for:
 
@@ -97,7 +108,10 @@ Copy `.env.example` values into your environment or process manager:
 
 The first administrator password must contain at least 10 characters. Passwords are stored as salted scrypt hashes. Session cookies are `HttpOnly` and `SameSite=Strict`.
 
-Changing the administrator password revokes every active session. Azure OpenAI settings take effect on the next Chat request. The connection-test action sends a small request to the configured deployment and may incur provider usage costs.
+Changing the administrator password revokes every active session. Runtime
+Routing changes apply after a route is successfully tested and activated.
+Route testing sends small requests to every assigned provider and may incur
+provider usage costs.
 
 ## Validation
 
@@ -147,16 +161,18 @@ tests/e2e             Browser end-to-end tests
 
 ## Documentation
 
+- [Documentation Index](docs/README.md)
 - [MVP Development Specification](docs/MVP.md)
 - [Implementation Plan](docs/IMPLEMENTATION_PLAN.md)
 - [Mandatory Development Rules](docs/DEVELOPMENT_RULES.md)
-- [Technology Stack and Development Guide](docs/TECHNOLOGY_STACK.md)
-- [Accessibility Standard and Audit](docs/ACCESSIBILITY.md)
-- [Mock Mode Development Guide](docs/MOCK_MODE.md)
-- [Azure OpenAI Configuration Guide](docs/AZURE_OPENAI.md)
-- [Alibaba Cloud Model Studio Provider Plan](docs/ALIBABA_CLOUD_MODEL_STUDIO.md)
-- [Voice Pipeline Architecture](docs/VOICE_PIPELINES.md)
-- [Runtime Routing Foundation](docs/RUNTIME_ROUTING.md)
+- [Technology Stack and Development Guide](docs/architecture/TECHNOLOGY_STACK.md)
+- [Voice Pipeline Architecture](docs/architecture/VOICE_PIPELINES.md)
+- [Runtime Routing](docs/architecture/RUNTIME_ROUTING.md)
+- [Accessibility Standard and Audit](docs/development/ACCESSIBILITY.md)
+- [Mock Mode Development Guide](docs/development/MOCK_MODE.md)
+- [Azure OpenAI Configuration Guide](docs/providers/AZURE_OPENAI.md)
+- [Alibaba Cloud Model Studio Guide](docs/providers/ALIBABA_CLOUD_MODEL_STUDIO.md)
+- [Security Operations](docs/operations/SECURITY_OPERATIONS.md)
 
 ## Coding Agent Instructions
 

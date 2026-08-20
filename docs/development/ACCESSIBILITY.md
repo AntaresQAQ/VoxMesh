@@ -1,5 +1,7 @@
 # Accessibility Standard and Audit
 
+[Documentation Index](../README.md)
+
 ## 1. Target
 
 VoxMesh Web Console targets WCAG 2.2 Level AA.
@@ -18,7 +20,8 @@ Accessibility is a functional requirement and applies to:
 - Light, Dark, and System appearance
 - desktop and responsive layouts
 
-The mandatory engineering rules are defined in [DEVELOPMENT_RULES.md](./DEVELOPMENT_RULES.md).
+The mandatory engineering rules are defined in
+[Development Rules](../DEVELOPMENT_RULES.md).
 
 ## 2. Required Contrast
 

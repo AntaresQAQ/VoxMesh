@@ -1,6 +1,6 @@
-# VoxBridge — MVP Development Specification
+# VoxMesh — MVP Development Specification
 
-VoxBridge is a platform-independent, voice-first AI agent gateway.
+VoxMesh is a platform-independent, voice-first AI agent gateway.
 
 All contributions to this project MUST follow the mandatory rules in [DEVELOPMENT_RULES.md](./DEVELOPMENT_RULES.md) and the phased roadmap in [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md). If these documents appear to conflict, work MUST pause until the user confirms the intended interpretation.
 
@@ -292,6 +292,31 @@ interface TTSProvider {
 
 The exact interfaces can be adjusted if required by the implementation.
 
+Streaming-capable providers must use separate optional contracts rather than
+changing the buffered contract into an ambiguous union:
+
+```ts
+interface StreamingSTTSession {
+  pushAudio(chunk: AudioChunk): Promise<void>;
+  finish(): Promise<TranscriptionResult>;
+  cancel(reason?: string): Promise<void>;
+}
+
+interface StreamingTTSProvider {
+  synthesizeStream(text: string): AsyncIterable<AudioChunk>;
+}
+
+interface StreamingLLMProvider {
+  completeStream(input: LLMInput): AsyncIterable<LLMStreamEvent>;
+}
+```
+
+The application layer owns browser or physical-audio transport. Agent Core
+owns a provider-independent streaming state machine for text deltas, tool-call
+deltas, validated MCP execution, follow-up completions, cancellation, and one
+final assistant message. It must not depend on HTTP SSE, WebSocket, browser, or
+vendor streaming APIs.
+
 Potential future providers include:
 
 ```text
@@ -411,7 +436,7 @@ Remote servers may use no authentication, static HTTP authorization tokens, or c
 
 MCP servers and discovered tools must be disabled by default. An administrator must explicitly enable each server and tool before Agent Core can use it.
 
-stdio servers may be configured with an executable, arguments, working directory, and environment variables. Because this grants command-execution capability as the VoxBridge service account, the Web Console must show a prominent security warning and require explicit confirmation before saving or enabling such configuration.
+stdio servers may be configured with an executable, arguments, working directory, and environment variables. Because this grants command-execution capability as the VoxMesh service account, the Web Console must show a prominent security warning and require explicit confirmation before saving or enabling such configuration.
 
 Home Assistant is a possible future MCP integration, along with web search, calendars, GitHub, Notion, and custom services. It is not a required MVP integration and must not require Home Assistant-specific logic in Agent Core or the Web Console.
 
@@ -760,10 +785,8 @@ The Agent Core must not care which implementation is being used.
 
 Do NOT implement these yet:
 
-- Wake Word
 - VAD
-- Streaming STT
-- Streaming TTS
+- full-duplex barge-in and interruption
 - Long-term Memory
 - Vector Database
 - Complex permission management
@@ -825,7 +848,7 @@ Implement:
 
 ### Phase 4 — Real AI Providers
 
-Add non-streaming Azure implementations for:
+Add buffered Azure implementations for:
 
 - STT
 - LLM
@@ -833,13 +856,20 @@ Add non-streaming Azure implementations for:
 
 without modifying Agent Core.
 
+After buffered-provider acceptance, add capability-gated full-chain streaming:
+Streaming STT, Streaming Chat LLM, and Streaming TTS. Streaming support is
+independent per pipeline role, must never silently fall back to buffered
+execution, and initially targets OpenAI/Azure-compatible Chat SSE plus Alibaba
+Cloud Model Studio speech WebSockets.
+
 ### Phase 5 — Real MCP
 
 Add generic Streamable HTTP and stdio MCP integrations with explicit server and tool enablement.
 
-### Phase 6 — Linux Audio
+### Phase 6 — Linux Audio and Wake Word
 
-Implement USB audio support through the Linux platform adapter.
+Implement USB audio support and local offline wake-word detection through Linux
+platform adapters.
 
 ### Phase 7 — NanoPi Deployment
 
@@ -890,6 +920,14 @@ Browser
 ```
 
 The same Agent Core must work in both modes.
+
+For providers and models that explicitly support streaming, the Web Console
+must also complete a Composed request through Streaming STT, Streaming Chat
+LLM, Streaming TTS, or any supported independent combination. In a full-chain
+route, assistant text appears incrementally and TTS playback begins before the
+LLM finishes its complete response. Unsupported combinations must remain
+impossible to activate, and streaming failures must never be presented as
+buffered success.
 
 ---
 

@@ -6,9 +6,10 @@ This document explains the technology choices used by VoxMesh, the responsibilit
 
 Read this document together with:
 
-- [MVP Development Specification](./MVP.md)
-- [Implementation Plan](./IMPLEMENTATION_PLAN.md)
-- [Mandatory Development Rules](./DEVELOPMENT_RULES.md)
+- [Documentation Index](../README.md)
+- [MVP Development Specification](../MVP.md)
+- [Implementation Plan](../IMPLEMENTATION_PLAN.md)
+- [Mandatory Development Rules](../DEVELOPMENT_RULES.md)
 
 The package manifests and `pnpm-lock.yaml` are the authoritative source for installed versions. Version ranges below describe the currently selected dependency families.
 
@@ -188,7 +189,8 @@ Current Azure OpenAI Audio adapters support:
 - independent STT/TTS endpoints and write-only API keys
 - language, voice, instructions, deployment, and API version configuration
 
-Configuration and troubleshooting are documented in [AZURE_OPENAI.md](./AZURE_OPENAI.md).
+Configuration and troubleshooting are documented in
+[Azure OpenAI](../providers/AZURE_OPENAI.md).
 
 Azure AI Speech Service remains planned as an optional future adapter.
 
@@ -211,9 +213,12 @@ Current Mock Mode implementations:
 - return a deterministic transcript
 - generate a valid mono 16 kHz PCM WAV tone
 
-The Mock Voice API and browser controls are documented in [MOCK_MODE.md](./MOCK_MODE.md).
+The Mock Voice API and browser controls are documented in
+[Mock Mode](../development/MOCK_MODE.md).
 
-VoxMesh defines two voice pipeline modes: Native Multimodal and Composed. The planned connection, model capability, routing, fallback, and observability architecture is documented in [VOICE_PIPELINES.md](./VOICE_PIPELINES.md).
+VoxMesh defines two voice pipeline modes: Native Multimodal and Composed. The
+planned connection, model capability, routing, fallback, and observability
+architecture is documented in [Voice Pipelines](./VOICE_PIPELINES.md).
 
 The runtime currently implements both modes with deterministic Mock providers. Native Multimodal has a provider-independent audio/tool loop and a Mock provider; a real native multimodal model adapter is not yet implemented.
 
@@ -417,7 +422,7 @@ Fun-ASR and Qwen-Audio-TTS/CosyVoice services use a dedicated WebSocket task
 protocol. VoxMesh therefore uses the generic compatible adapter for Chat and a
 dedicated Alibaba provider for STT/TTS. Browser recordings are normalized to
 mono PCM16 WAV before entering the provider-independent audio boundary. See
-[ALIBABA_CLOUD_MODEL_STUDIO.md](./ALIBABA_CLOUD_MODEL_STUDIO.md).
+[Alibaba Cloud Model Studio](../providers/ALIBABA_CLOUD_MODEL_STUDIO.md).
 
 Provider registrations include a stable ID, display name, capabilities, validation, and factory. The server merges registry metadata into one authenticated Provider Catalog API. Web Console LLM, STT, and TTS selectors filter the same catalog by `llm`, `stt`, or `tts` capability instead of hard-coding separate provider lists. A provider may expose only the capabilities its API actually supports.
 
@@ -425,7 +430,7 @@ Provider Connections, Model Deployments, and Runtime Routes are the sole
 provider configuration source. Declared capabilities are configured per model;
 verified capabilities are recorded after successful route tests and reset when
 the configuration fingerprint changes. See
-[RUNTIME_ROUTING.md](./RUNTIME_ROUTING.md).
+[Runtime Routing](./RUNTIME_ROUTING.md).
 
 Routing CRUD uses runtime-validated shared schemas and SQLite foreign keys.
 Activation requires enabled records and verified role capabilities. Native
