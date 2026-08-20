@@ -30,6 +30,14 @@ export function useRuntimeRoutingMutations() {
     onSuccess: (updated) => {
       queryClient.setQueryData(queryKeys.runtimeRouting, updated);
       void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
+    },
+    onError: (_error, operation) => {
+      if (operation.type === "test-and-activate-route") {
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.runtimeRouting
+        });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
+      }
     }
   });
   return {

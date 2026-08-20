@@ -2,11 +2,13 @@
 
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useQuery } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { RuntimeRoutingSummary } from "@voxmesh/shared";
 
 import { apiClient } from "../../api.js";
+import { runtimeRoutingQueryOptions } from "../../query.js";
 import { renderWithProviders } from "../../test/render.js";
 import { ConnectionManagement } from "./ConnectionManagement.js";
 import { ModelManagement } from "./ModelManagement.js";
@@ -150,6 +152,67 @@ describe("runtime routing management", () => {
         enabled: true
       }
     });
+  });
+
+  it("omits an API key that was entered and then cleared", async () => {
+    const user = userEvent.setup();
+    const execute = vi.fn(
+      async (_operation: RuntimeRoutingOperation): Promise<unknown> => undefined
+    );
+    renderWithProviders(
+      <ConnectionManagement
+        routing={routing}
+        pending={false}
+        execute={execute}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Add connection" }));
+    await user.type(screen.getByLabelText("Display name"), "Provider A");
+    await user.type(
+      screen.getByLabelText("Endpoint or base URL"),
+      "https://provider.example.com/v1"
+    );
+    await user.type(screen.getByLabelText("API key"), "temporary-secret");
+    await user.clear(screen.getByLabelText("API key"));
+    await user.click(screen.getByRole("button", { name: "Create" }));
+
+    const operation = execute.mock.calls[0]?.[0];
+    expect(operation?.type).toBe("create-connection");
+    if (operation?.type !== "create-connection") {
+      throw new Error("Expected a create-connection operation");
+    }
+    expect(operation.input).not.toHaveProperty("apiKey");
+  });
+
+  it("omits a replacement API key when clearing the saved key", async () => {
+    const user = userEvent.setup();
+    const execute = vi.fn(
+      async (_operation: RuntimeRoutingOperation): Promise<unknown> => undefined
+    );
+    renderWithProviders(
+      <ConnectionManagement
+        routing={routing}
+        pending={false}
+        execute={execute}
+      />
+    );
+    const item = screen.getByText("Mock connection").closest("li");
+    if (!item) throw new Error("Expected the connection list item");
+    await user.click(within(item).getByRole("button", { name: "Edit" }));
+    await user.type(within(item).getByLabelText("API key"), "replacement");
+    await user.click(within(item).getByLabelText("Clear saved API key"));
+    await user.click(
+      within(item).getByRole("button", { name: "Save changes" })
+    );
+
+    const operation = execute.mock.calls[0]?.[0];
+    expect(operation?.type).toBe("update-connection");
+    if (operation?.type !== "update-connection") {
+      throw new Error("Expected an update-connection operation");
+    }
+    expect(operation.input.clearApiKey).toBe(true);
+    expect(operation.input).not.toHaveProperty("apiKey");
   });
 
   it("creates a model deployment from capabilities and JSON options", async () => {
@@ -494,6 +557,27 @@ describe("runtime routing management", () => {
     });
     expect(activate).not.toHaveBeenCalled();
   });
+
+  it("refetches routing when testing succeeds but activation fails", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(apiClient, "runtimeRouting").mockResolvedValue(routing);
+    vi.spyOn(apiClient, "testRuntimeRoute").mockResolvedValue(routing);
+    vi.spyOn(apiClient, "activateRuntimeRoute").mockRejectedValue(
+      new Error("Streaming routes cannot be activated")
+    );
+    renderWithProviders(<TestAndActivateWithRoutingProbe />);
+    await waitFor(() =>
+      expect(apiClient.runtimeRouting).toHaveBeenCalledOnce()
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Run test and activate" })
+    );
+
+    await waitFor(() =>
+      expect(apiClient.runtimeRouting).toHaveBeenCalledTimes(2)
+    );
+  });
 });
 
 function TestAndActivateProbe() {
@@ -511,6 +595,11 @@ function TestAndActivateProbe() {
       Run test and activate
     </button>
   );
+}
+
+function TestAndActivateWithRoutingProbe() {
+  useQuery(runtimeRoutingQueryOptions());
+  return <TestAndActivateProbe />;
 }
 
 function model(

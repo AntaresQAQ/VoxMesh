@@ -26,7 +26,7 @@ export function ConnectionEditor(props: {
   const form = useForm({
     defaultValues: defaults,
     onSubmit: async ({ value }) => {
-      await props.onSave(value);
+      await props.onSave(normalizeConnectionInput(value));
       form.reset(defaults);
     }
   });
@@ -134,6 +134,16 @@ export function ConnectionEditor(props: {
       </div>
     </form>
   );
+}
+
+function normalizeConnectionInput(
+  value: ProviderConnectionInput
+): ProviderConnectionInput {
+  const { apiKey, ...input } = value;
+  if (!value.clearApiKey && apiKey?.trim()) {
+    return { ...input, apiKey };
+  }
+  return input;
 }
 
 function Checkbox(props: {
