@@ -35,6 +35,52 @@ afterEach(() => {
 
 describe("feature pages", () => {
   it("renders dashboard provider and tool status", async () => {
+    vi.spyOn(apiClient, "deviceStatus").mockResolvedValue({
+      device: {
+        status: "unavailable",
+        displayName: null,
+        detailCode: "adapter-not-configured",
+        observedAt: null
+      },
+      audio: {
+        input: {
+          status: "unavailable",
+          displayName: null,
+          detailCode: "adapter-not-configured",
+          observedAt: null
+        },
+        output: {
+          status: "unavailable",
+          displayName: null,
+          detailCode: "adapter-not-configured",
+          observedAt: null
+        }
+      },
+      system: {
+        cpuUsage: {
+          status: "unavailable",
+          value: null,
+          unit: "percent",
+          detailCode: "adapter-not-configured",
+          observedAt: null
+        },
+        memoryUsage: {
+          status: "unavailable",
+          value: null,
+          unit: "bytes",
+          detailCode: "adapter-not-configured",
+          observedAt: null
+        },
+        temperature: {
+          status: "unavailable",
+          value: null,
+          unit: "celsius",
+          detailCode: "adapter-not-configured",
+          observedAt: null
+        }
+      }
+    });
+
     vi.spyOn(apiClient, "dashboard").mockResolvedValue({
       status: "online",
       uptimeSeconds: 10,
@@ -107,11 +153,73 @@ describe("feature pages", () => {
     expect(screen.getByText("Fun-ASR")).toBeVisible();
     expect(screen.getByText("Qwen TTS")).toBeVisible();
     expect(
+      screen.getByRole("heading", { name: "Device and physical audio" })
+    ).toBeVisible();
+    expect(screen.getAllByText("Unavailable")).toHaveLength(6);
+    expect(
       screen.getByRole("link", { name: "Manage routing" })
     ).toHaveAttribute("href", "/settings?section=providers");
     expect(screen.getAllByText("Required capabilities verified")).toHaveLength(
       3
     );
+  });
+
+  it("keeps device status visible when the main Dashboard request fails", async () => {
+    vi.spyOn(apiClient, "dashboard").mockRejectedValue(
+      new Error("Dashboard unavailable")
+    );
+    vi.spyOn(apiClient, "deviceStatus").mockResolvedValue({
+      device: {
+        status: "ready",
+        displayName: "Mock edge device",
+        detailCode: null,
+        observedAt: "2026-08-21T00:00:00.000Z"
+      },
+      audio: {
+        input: {
+          status: "unavailable",
+          displayName: null,
+          detailCode: "adapter-not-configured",
+          observedAt: null
+        },
+        output: {
+          status: "unavailable",
+          displayName: null,
+          detailCode: "adapter-not-configured",
+          observedAt: null
+        }
+      },
+      system: {
+        cpuUsage: {
+          status: "unavailable",
+          value: null,
+          unit: "percent",
+          detailCode: "adapter-not-configured",
+          observedAt: null
+        },
+        memoryUsage: {
+          status: "unavailable",
+          value: null,
+          unit: "bytes",
+          detailCode: "adapter-not-configured",
+          observedAt: null
+        },
+        temperature: {
+          status: "unavailable",
+          value: null,
+          unit: "celsius",
+          detailCode: "adapter-not-configured",
+          observedAt: null
+        }
+      }
+    });
+    renderWithProviders(<DashboardPage />);
+
+    expect(await screen.findByText("Dashboard unavailable")).toBeVisible();
+    expect(screen.getByText("Mock edge device")).toBeVisible();
+    expect(
+      screen.queryByText("Loading device status...")
+    ).not.toBeInTheDocument();
   });
 
   function dashboardModel(

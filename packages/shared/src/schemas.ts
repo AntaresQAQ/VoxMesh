@@ -368,6 +368,105 @@ export const DashboardSchema = Type.Object({
   routing: RuntimeRoutingSummarySchema
 });
 
+export const AvailabilityStatusSchema = Type.Union([
+  Type.Literal("ready"),
+  Type.Literal("unavailable"),
+  Type.Literal("stale"),
+  Type.Literal("degraded"),
+  Type.Literal("failed")
+]);
+
+export const DeviceStatusDetailCodeSchema = Type.Union([
+  Type.Literal("adapter-not-configured"),
+  Type.Literal("device-disconnected"),
+  Type.Literal("permission-denied"),
+  Type.Literal("observation-failed"),
+  Type.Literal("stale-sample"),
+  Type.Literal("thermal-throttling"),
+  Type.Literal("playback-unavailable"),
+  Type.Literal("sensor-unavailable")
+]);
+
+const NullableDeviceStatusDetailCodeSchema = Type.Union([
+  DeviceStatusDetailCodeSchema,
+  Type.Null()
+]);
+
+export const DeviceResourceStatusSchema = Type.Union([
+  Type.Object({
+    status: Type.Literal("unavailable"),
+    displayName: Type.Null(),
+    detailCode: NullableDeviceStatusDetailCodeSchema,
+    observedAt: Type.Null()
+  }),
+  Type.Object({
+    status: Type.Union([
+      Type.Literal("ready"),
+      Type.Literal("stale"),
+      Type.Literal("degraded")
+    ]),
+    displayName: Type.String({ minLength: 1 }),
+    detailCode: NullableDeviceStatusDetailCodeSchema,
+    observedAt: Type.String({ format: "date-time" })
+  }),
+  Type.Object({
+    status: Type.Literal("failed"),
+    displayName: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+    detailCode: NullableDeviceStatusDetailCodeSchema,
+    observedAt: Type.Union([Type.String({ format: "date-time" }), Type.Null()])
+  })
+]);
+
+function deviceMetricStatusSchema(unit: "percent" | "bytes" | "celsius") {
+  return Type.Union([
+    Type.Object({
+      status: Type.Literal("unavailable"),
+      value: Type.Null(),
+      unit: Type.Literal(unit),
+      detailCode: NullableDeviceStatusDetailCodeSchema,
+      observedAt: Type.Null()
+    }),
+    Type.Object({
+      status: Type.Union([
+        Type.Literal("ready"),
+        Type.Literal("stale"),
+        Type.Literal("degraded")
+      ]),
+      value: Type.Number(),
+      unit: Type.Literal(unit),
+      detailCode: NullableDeviceStatusDetailCodeSchema,
+      observedAt: Type.String({ format: "date-time" })
+    }),
+    Type.Object({
+      status: Type.Literal("failed"),
+      value: Type.Null(),
+      unit: Type.Literal(unit),
+      detailCode: NullableDeviceStatusDetailCodeSchema,
+      observedAt: Type.Union([
+        Type.String({ format: "date-time" }),
+        Type.Null()
+      ])
+    })
+  ]);
+}
+
+export const CpuUsageStatusSchema = deviceMetricStatusSchema("percent");
+export const MemoryUsageStatusSchema = deviceMetricStatusSchema("bytes");
+export const TemperatureStatusSchema = deviceMetricStatusSchema("celsius");
+
+export const DeviceStatusSchema = Type.Object({
+  device: DeviceResourceStatusSchema,
+  audio: Type.Object({
+    input: DeviceResourceStatusSchema,
+    output: DeviceResourceStatusSchema
+  }),
+  system: Type.Object({
+    cpuUsage: CpuUsageStatusSchema,
+    memoryUsage: MemoryUsageStatusSchema,
+    temperature: TemperatureStatusSchema
+  })
+});
+
 export const ProviderConnectionInputSchema = Type.Object({
   providerId: Type.String({ minLength: 1, maxLength: 128 }),
   displayName: Type.String({ minLength: 1, maxLength: 128 }),
@@ -417,6 +516,14 @@ export type PasswordInput = Static<typeof PasswordSchema>;
 export type PasswordChange = Static<typeof PasswordChangeSchema>;
 export type Session = Static<typeof SessionSchema>;
 export type Dashboard = Static<typeof DashboardSchema>;
+export type AvailabilityStatus = Static<typeof AvailabilityStatusSchema>;
+export type DeviceStatusDetailCode = Static<
+  typeof DeviceStatusDetailCodeSchema
+>;
+export type DeviceResourceStatus = Static<typeof DeviceResourceStatusSchema>;
+export type DeviceStatus = Static<typeof DeviceStatusSchema>;
+export type DeviceMetricStatus =
+  DeviceStatus["system"][keyof DeviceStatus["system"]];
 export type ChatRequest = Static<typeof ChatRequestSchema>;
 export type ChatRetryRequest = Static<typeof ChatRetryRequestSchema>;
 export type ChatResponse = Static<typeof ChatResponseSchema>;

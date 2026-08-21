@@ -86,7 +86,7 @@ Current implementation branch: `feat/realtime-observability`, based on
 - [x] Chat cancellation, retry, and conversation continuity
 - [x] Conversation Inspector duration, safe metadata, correlation identifiers,
       and complete in-progress/failed/cancelled states
-- [ ] Dashboard device and physical-audio status with explicit unavailable,
+- [x] Dashboard device and physical-audio status with explicit unavailable,
       stale, degraded, and failed states
 - [ ] generic Mock MCP inspection and manual execution UI without
       service-specific logic

@@ -21,6 +21,7 @@ interpretation before changing behavior.
 - [Runtime Routing](./architecture/RUNTIME_ROUTING.md)
 - [WebSocket Event Delivery](./architecture/WEBSOCKET.md)
 - [Conversation Run Lifecycle](./architecture/CONVERSATION_LIFECYCLE.md)
+- [Device and Physical Audio Status](./architecture/DEVICE_STATUS.md)
 
 Architecture documents describe current boundaries and planned extensions.
 Sections explicitly marked as planned are not claims of implemented behavior.

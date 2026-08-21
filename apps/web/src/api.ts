@@ -4,6 +4,7 @@ import type {
   ConversationDetail,
   ConversationSummary,
   Dashboard,
+  DeviceStatus,
   LogEntry,
   ModelDeploymentInput,
   ProviderConnectionInput,
@@ -126,6 +127,7 @@ export const apiClient = {
       body: JSON.stringify({ routeId })
     }),
   dashboard: () => api<Dashboard>("/api/dashboard"),
+  deviceStatus: () => api<DeviceStatus>("/api/device"),
   chat: (
     runId: string,
     message: string,

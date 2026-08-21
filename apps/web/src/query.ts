@@ -6,6 +6,7 @@ export const queryKeys = {
   setup: ["setup"] as const,
   session: ["session"] as const,
   dashboard: ["dashboard"] as const,
+  deviceStatus: ["device-status"] as const,
   conversations: ["conversations"] as const,
   conversation: (id: string) => ["conversations", id] as const,
   logs: ["logs"] as const,
@@ -43,6 +44,14 @@ export const dashboardQueryOptions = () =>
   queryOptions({
     queryKey: queryKeys.dashboard,
     queryFn: apiClient.dashboard
+  });
+
+export const deviceStatusQueryOptions = () =>
+  queryOptions({
+    queryKey: queryKeys.deviceStatus,
+    queryFn: apiClient.deviceStatus,
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false
   });
 
 export const conversationsQueryOptions = () =>

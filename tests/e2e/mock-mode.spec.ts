@@ -128,6 +128,11 @@ test("completes setup, tool-assisted chat, inspection, and logout", async ({
   await expect(page.getByText("STT · Mock STT")).toBeVisible();
   await expect(page.getByText("TTS · Mock TTS")).toBeVisible();
   await expect(page.getByText("Required capabilities verified")).toHaveCount(3);
+  await expect(
+    page.getByRole("heading", { name: "Device and physical audio" })
+  ).toBeVisible();
+  await expect(page.getByText("Unavailable", { exact: true })).toHaveCount(6);
+  await expect(page.getByText("Adapter is not configured")).toHaveCount(6);
   await expectAccessible(page, "English dark dashboard");
   await page.keyboard.press("Tab");
   await expect(
