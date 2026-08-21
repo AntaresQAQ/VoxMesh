@@ -32,10 +32,12 @@ export const SessionSchema = Type.Object({
 });
 
 export const ChatRequestSchema = Type.Object({
+  runId: Type.String({ format: "uuid" }),
   message: Type.String({ minLength: 1, maxLength: 8_000 })
 });
 
 export const ChatResponseSchema = Type.Object({
+  runId: Type.String({ format: "uuid" }),
   conversationId: Type.String({ minLength: 1 }),
   response: Type.String(),
   usedTools: Type.Array(Type.String())
@@ -48,6 +50,7 @@ export const MessageSchema = Type.Object({
     Type.Literal("assistant"),
     Type.Literal("tool")
   ]),
+  runId: Type.Union([Type.String({ format: "uuid" }), Type.Null()]),
   content: Type.String(),
   createdAt: Type.String({ format: "date-time" })
 });
@@ -64,15 +67,50 @@ export const ConversationListSchema = Type.Object({
   conversations: Type.Array(ConversationSummarySchema)
 });
 
+export const ConversationRunKindSchema = Type.Union([
+  Type.Literal("chat"),
+  Type.Literal("voice-composed"),
+  Type.Literal("voice-native")
+]);
+
+export const ConversationRunStatusSchema = Type.Union([
+  Type.Literal("in_progress"),
+  Type.Literal("completed"),
+  Type.Literal("failed"),
+  Type.Literal("cancelled")
+]);
+
+export const ConversationRunSchema = Type.Object({
+  id: Type.String({ format: "uuid" }),
+  conversationId: Type.String(),
+  kind: ConversationRunKindSchema,
+  status: ConversationRunStatusSchema,
+  correlationId: Type.String({ format: "uuid" }),
+  inputMessageId: Type.Union([Type.String(), Type.Null()]),
+  retryOfRunId: Type.Union([Type.String({ format: "uuid" }), Type.Null()]),
+  startedAt: Type.String({ format: "date-time" }),
+  completedAt: Type.Union([Type.String({ format: "date-time" }), Type.Null()]),
+  durationMs: Type.Union([Type.Integer({ minimum: 0 }), Type.Null()]),
+  errorCode: Type.Union([Type.String(), Type.Null()])
+});
+
 export const PipelineEventSchema = Type.Object({
   id: Type.String(),
+  runId: Type.Union([Type.String({ format: "uuid" }), Type.Null()]),
+  correlationId: Type.Union([Type.String({ format: "uuid" }), Type.Null()]),
   stage: Type.Union([
     Type.Literal("STT"),
     Type.Literal("AGENT"),
     Type.Literal("MCP"),
     Type.Literal("TTS")
   ]),
-  status: Type.Union([Type.Literal("completed"), Type.Literal("failed")]),
+  status: Type.Union([
+    Type.Literal("started"),
+    Type.Literal("completed"),
+    Type.Literal("failed"),
+    Type.Literal("cancelled")
+  ]),
+  durationMs: Type.Union([Type.Integer({ minimum: 0 }), Type.Null()]),
   message: Type.String(),
   createdAt: Type.String({ format: "date-time" })
 });
@@ -81,7 +119,8 @@ export const ConversationDetailSchema = Type.Intersect([
   ConversationSummarySchema,
   Type.Object({
     messages: Type.Array(MessageSchema),
-    events: Type.Array(PipelineEventSchema)
+    events: Type.Array(PipelineEventSchema),
+    runs: Type.Array(ConversationRunSchema)
   })
 ]);
 
@@ -131,6 +170,40 @@ export const RealtimeEventSchema = Type.Union([
     type: Type.Literal("log.created"),
     payload: Type.Object({
       log: LogEntrySchema
+    })
+  }),
+  Type.Object({
+    version: Type.Literal(1),
+    streamId: Type.String(),
+    sequence: Type.Integer({ minimum: 1 }),
+    eventId: Type.String(),
+    emittedAt: Type.String({ format: "date-time" }),
+    type: Type.Literal("run.created"),
+    payload: Type.Object({
+      run: ConversationRunSchema
+    })
+  }),
+  Type.Object({
+    version: Type.Literal(1),
+    streamId: Type.String(),
+    sequence: Type.Integer({ minimum: 1 }),
+    eventId: Type.String(),
+    emittedAt: Type.String({ format: "date-time" }),
+    type: Type.Literal("run.updated"),
+    payload: Type.Object({
+      run: ConversationRunSchema
+    })
+  }),
+  Type.Object({
+    version: Type.Literal(1),
+    streamId: Type.String(),
+    sequence: Type.Integer({ minimum: 1 }),
+    eventId: Type.String(),
+    emittedAt: Type.String({ format: "date-time" }),
+    type: Type.Literal("message.created"),
+    payload: Type.Object({
+      conversationId: Type.String(),
+      message: MessageSchema
     })
   }),
   Type.Object({
@@ -344,6 +417,9 @@ export type ChatResponse = Static<typeof ChatResponseSchema>;
 export type Message = Static<typeof MessageSchema>;
 export type ConversationSummary = Static<typeof ConversationSummarySchema>;
 export type ConversationDetail = Static<typeof ConversationDetailSchema>;
+export type ConversationRunKind = Static<typeof ConversationRunKindSchema>;
+export type ConversationRunStatus = Static<typeof ConversationRunStatusSchema>;
+export type ConversationRun = Static<typeof ConversationRunSchema>;
 export type PipelineEvent = Static<typeof PipelineEventSchema>;
 export type VoiceResponse = Static<typeof VoiceResponseSchema>;
 export type LogEntry = Static<typeof LogEntrySchema>;

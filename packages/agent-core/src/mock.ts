@@ -1,6 +1,7 @@
 import type { ToolDefinition } from "@voxmesh/shared";
 
 import type { LlmProvider, LlmResponse, McpServer } from "./types.js";
+import { throwIfAgentRunCancelled } from "./types.js";
 
 const MOCK_TOOLS: ToolDefinition[] = [
   {
@@ -18,14 +19,17 @@ const MOCK_TOOLS: ToolDefinition[] = [
 export class MockMcpServer implements McpServer {
   public readonly name = "Mock MCP";
 
-  public async listTools(): Promise<ToolDefinition[]> {
+  public async listTools(signal?: AbortSignal): Promise<ToolDefinition[]> {
+    throwIfAgentRunCancelled(signal);
     return MOCK_TOOLS;
   }
 
   public async callTool(
     name: string,
-    arguments_: Record<string, unknown>
+    arguments_: Record<string, unknown>,
+    signal?: AbortSignal
   ): Promise<unknown> {
+    throwIfAgentRunCancelled(signal);
     if (name !== "mock.get_device_status") {
       throw new Error(`Unknown mock tool: ${name}`);
     }
@@ -46,7 +50,9 @@ export class MockLlmProvider implements LlmProvider {
   public async complete(input: {
     messages: Parameters<LlmProvider["complete"]>[0]["messages"];
     tools: ToolDefinition[];
+    signal?: AbortSignal;
   }): Promise<LlmResponse> {
+    throwIfAgentRunCancelled(input.signal);
     const toolResult = [...input.messages]
       .reverse()
       .find((message) => message.role === "tool");

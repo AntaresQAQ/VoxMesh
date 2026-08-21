@@ -17,6 +17,18 @@ export function PipelineTimeline({ events }: { events: PipelineEvent[] }) {
               <span>{formatTime(event.createdAt)}</span>
             </div>
             <p>{event.message}</p>
+            {event.correlationId ? (
+              <span className="muted">
+                {t("conversations.correlationId")}: {event.correlationId}
+              </span>
+            ) : null}
+            {event.durationMs !== null ? (
+              <span className="muted">
+                {t("conversations.durationMs", {
+                  duration: event.durationMs
+                })}
+              </span>
+            ) : null}
             <span className={`pipeline-status ${event.status}`}>
               {t(`conversations.status.${event.status}`)}
             </span>

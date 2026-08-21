@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 
+import type { LlmProvider } from "@voxmesh/agent-core";
 import type {
   ConversationDetail,
   Dashboard,
@@ -171,10 +172,14 @@ describe("server API", () => {
       method: "POST",
       url: "/api/chat",
       headers: { cookie },
-      payload: { message: "Check the light status" }
+      payload: {
+        runId: "11111111-1111-4111-8111-111111111111",
+        message: "Check the light status"
+      }
     });
     expect(chat.statusCode).toBe(200);
     expect(chat.json()).toMatchObject({
+      runId: "11111111-1111-4111-8111-111111111111",
       usedTools: ["mock.get_device_status"]
     });
 
@@ -205,6 +210,7 @@ describe("server API", () => {
       url: "/api/setup",
       payload: { password: "original administrator password" }
     });
+
     const login = await app.inject({
       method: "POST",
       url: "/api/auth/login",
@@ -239,6 +245,172 @@ describe("server API", () => {
       payload: { password: "replacement administrator password" }
     });
     expect(newLogin.statusCode).toBe(200);
+    await app.close();
+  });
+
+  it("cancels an active Chat run idempotently", async () => {
+    store = new VoxMeshStore(":memory:");
+    const delayedLlm: LlmProvider = {
+      complete: async ({ signal }) =>
+        new Promise((_resolve, reject) => {
+          signal?.addEventListener(
+            "abort",
+            () => reject(new DOMException("Aborted", "AbortError")),
+            { once: true }
+          );
+        })
+    };
+    const app = await buildServer({
+      config,
+      store,
+      createLlm: () => delayedLlm
+    });
+    await app.inject({
+      method: "POST",
+      url: "/api/setup",
+      payload: { password: "a secure administrator password" }
+    });
+    const login = await app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      payload: { password: "a secure administrator password" }
+    });
+    const setCookie = login.headers["set-cookie"];
+    const cookie = (Array.isArray(setCookie) ? setCookie[0] : setCookie)?.split(
+      ";"
+    )[0];
+    const runId = "44444444-4444-4444-8444-444444444444";
+    const chatRequest = app.inject({
+      method: "POST",
+      url: "/api/chat",
+      headers: { cookie },
+      payload: { runId, message: "Wait until cancelled" }
+    });
+    let runStarted = false;
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      try {
+        store.getConversationRun(runId);
+        runStarted = true;
+        break;
+      } catch (error) {
+        if (
+          typeof error !== "object" ||
+          error === null ||
+          !("statusCode" in error) ||
+          error.statusCode !== 404
+        ) {
+          throw error;
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    expect(runStarted).toBe(true);
+
+    const cancellation = await app.inject({
+      method: "POST",
+      url: `/api/chat/runs/${runId}/cancel`,
+      headers: { cookie }
+    });
+    const repeatedCancellation = await app.inject({
+      method: "POST",
+      url: `/api/chat/runs/${runId}/cancel`,
+      headers: { cookie }
+    });
+    const chat = await chatRequest;
+    const run = await app.inject({
+      method: "GET",
+      url: `/api/chat/runs/${runId}`,
+      headers: { cookie }
+    });
+
+    expect(cancellation.statusCode).toBe(200);
+    expect(cancellation.json()).toMatchObject({
+      status: "cancelled",
+      errorCode: "RUN_CANCELLED"
+    });
+    expect(repeatedCancellation.statusCode).toBe(200);
+    expect(repeatedCancellation.json()).toMatchObject({
+      status: "cancelled"
+    });
+    expect(chat.statusCode).toBe(409);
+    expect(chat.json()).toMatchObject({
+      error: { code: "RUN_CANCELLED" }
+    });
+    expect(run.statusCode).toBe(200);
+    expect(run.json()).toMatchObject({
+      id: runId,
+      status: "cancelled"
+    });
+
+    await app.close();
+  });
+
+  it("cancels an active Chat run when the HTTP client disconnects", async () => {
+    store = new VoxMeshStore(":memory:");
+    let providerSignal: AbortSignal | undefined;
+    const delayedLlm: LlmProvider = {
+      complete: async ({ signal }) => {
+        providerSignal = signal;
+        return new Promise((_resolve, reject) => {
+          signal?.addEventListener(
+            "abort",
+            () => reject(new DOMException("Aborted", "AbortError")),
+            { once: true }
+          );
+        });
+      }
+    };
+    const app = await buildServer({
+      config,
+      store,
+      createLlm: () => delayedLlm
+    });
+    await app.inject({
+      method: "POST",
+      url: "/api/setup",
+      payload: { password: "a secure administrator password" }
+    });
+    const login = await app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      payload: { password: "a secure administrator password" }
+    });
+    const setCookie = login.headers["set-cookie"];
+    const cookie = (Array.isArray(setCookie) ? setCookie[0] : setCookie)?.split(
+      ";"
+    )[0];
+    const address = await app.listen({ host: "127.0.0.1", port: 0 });
+    const runId = "55555555-5555-4555-8555-555555555555";
+    const controller = new AbortController();
+    const request = fetch(`${address}/api/chat`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie: cookie ?? ""
+      },
+      body: JSON.stringify({ runId, message: "Disconnect this request" }),
+      signal: controller.signal
+    });
+    for (let attempt = 0; attempt < 40 && !providerSignal; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    expect(providerSignal).toBeDefined();
+
+    controller.abort();
+    await expect(request).rejects.toThrow();
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      if (store.getConversationRun(runId).status === "cancelled") {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+
+    expect(providerSignal?.aborted).toBe(true);
+    expect(store.getConversationRun(runId)).toMatchObject({
+      status: "cancelled",
+      errorCode: "RUN_CANCELLED"
+    });
+
     await app.close();
   });
 

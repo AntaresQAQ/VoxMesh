@@ -11,10 +11,11 @@ const config = {
 
 describe("AzureOpenAiProvider", () => {
   it("maps a successful text response", async () => {
-    const fetcher = vi.fn(async () =>
-      Response.json({
-        choices: [{ message: { content: "Hello from Azure" } }]
-      })
+    const fetcher = vi.fn(
+      async (_input: string | URL | Request, _init?: RequestInit) =>
+        Response.json({
+          choices: [{ message: { content: "Hello from Azure" } }]
+        })
     );
     const provider = new AzureOpenAiProvider(config, fetcher);
 
@@ -103,5 +104,24 @@ describe("AzureOpenAiProvider", () => {
         tools: []
       })
     ).rejects.toThrow("Azure OpenAI returned invalid JSON tool arguments");
+  });
+
+  it("passes caller cancellation to fetch", async () => {
+    const fetcher = vi.fn(
+      async (_input: string | URL | Request, _init?: RequestInit) =>
+        Response.json({
+          choices: [{ message: { content: "Hello from Azure" } }]
+        })
+    );
+    const provider = new AzureOpenAiProvider(config, fetcher);
+    const controller = new AbortController();
+
+    await provider.complete({
+      messages: [{ role: "user", content: "Hello" }],
+      tools: [],
+      signal: controller.signal
+    });
+
+    expect(fetcher.mock.calls[0]?.[1]?.signal).toBe(controller.signal);
   });
 });

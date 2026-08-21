@@ -30,7 +30,9 @@ export class OpenAiCompatibleProvider implements LlmProvider {
   public async complete(input: {
     messages: AgentMessage[];
     tools: ToolDefinition[];
+    signal?: AbortSignal;
   }): Promise<LlmResponse> {
+    const timeout = AbortSignal.timeout(this.config.timeoutMs ?? 30_000);
     const response = await this.fetcher(this.url(), {
       method: "POST",
       headers: {
@@ -43,7 +45,7 @@ export class OpenAiCompatibleProvider implements LlmProvider {
           ? { max_tokens: this.config.maxOutputTokens }
           : {})
       }),
-      signal: AbortSignal.timeout(this.config.timeoutMs ?? 30_000)
+      signal: input.signal ? AbortSignal.any([input.signal, timeout]) : timeout
     });
     if (!response.ok) {
       const detail = await response.text();

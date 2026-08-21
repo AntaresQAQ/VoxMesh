@@ -1,6 +1,8 @@
 import type {
   EventStreamMessage,
+  ConversationRun,
   LogEntry,
+  Message,
   PipelineEvent,
   RealtimeEvent
 } from "./schemas.js";
@@ -81,7 +83,52 @@ function isRealtimeEvent(value: unknown): value is RealtimeEvent {
       isPipelineEvent(value.payload.event)
     );
   }
+  if (value.type === "run.created" || value.type === "run.updated") {
+    return isConversationRun(value.payload.run);
+  }
+  if (value.type === "message.created") {
+    return (
+      typeof value.payload.conversationId === "string" &&
+      isMessage(value.payload.message)
+    );
+  }
   return false;
+}
+
+function isConversationRun(value: unknown): value is ConversationRun {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.conversationId === "string" &&
+    (value.kind === "chat" ||
+      value.kind === "voice-composed" ||
+      value.kind === "voice-native") &&
+    (value.status === "in_progress" ||
+      value.status === "completed" ||
+      value.status === "failed" ||
+      value.status === "cancelled") &&
+    typeof value.correlationId === "string" &&
+    (value.inputMessageId === null ||
+      typeof value.inputMessageId === "string") &&
+    (value.retryOfRunId === null || typeof value.retryOfRunId === "string") &&
+    isDateTimeString(value.startedAt) &&
+    (value.completedAt === null || isDateTimeString(value.completedAt)) &&
+    (value.durationMs === null || isNonNegativeInteger(value.durationMs)) &&
+    (value.errorCode === null || typeof value.errorCode === "string")
+  );
+}
+
+function isMessage(value: unknown): value is Message {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    (value.role === "user" ||
+      value.role === "assistant" ||
+      value.role === "tool") &&
+    (value.runId === null || typeof value.runId === "string") &&
+    typeof value.content === "string" &&
+    isDateTimeString(value.createdAt)
+  );
 }
 
 function isLogEntry(value: unknown): value is LogEntry {
@@ -101,8 +148,14 @@ function isPipelineEvent(value: unknown): value is PipelineEvent {
   return (
     isRecord(value) &&
     typeof value.id === "string" &&
+    (value.runId === null || typeof value.runId === "string") &&
+    (value.correlationId === null || typeof value.correlationId === "string") &&
     isPipelineStage(value.stage) &&
-    (value.status === "completed" || value.status === "failed") &&
+    (value.status === "started" ||
+      value.status === "completed" ||
+      value.status === "failed" ||
+      value.status === "cancelled") &&
+    (value.durationMs === null || isNonNegativeInteger(value.durationMs)) &&
     typeof value.message === "string" &&
     isDateTimeString(value.createdAt)
   );

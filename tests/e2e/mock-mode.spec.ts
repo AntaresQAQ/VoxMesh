@@ -137,6 +137,62 @@ test("completes setup, tool-assisted chat, inspection, and logout", async ({
   await page.getByRole("link", { name: "Chat" }).click();
   await expect(page).toHaveURL(/\/chat$/);
   await expect(page.getByRole("heading", { name: "Chat" })).toBeFocused();
+  await page.evaluate(() => {
+    const originalFetch = globalThis.fetch;
+    Object.assign(globalThis, {
+      __restoreChatFetch: () => {
+        globalThis.fetch = originalFetch;
+      }
+    });
+    globalThis.fetch = async (input, init) => {
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : input.url;
+      if (url === "/api/chat") {
+        return new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener(
+            "abort",
+            () => reject(new DOMException("Aborted", "AbortError")),
+            { once: true }
+          );
+        });
+      }
+      if (/^\/api\/chat\/runs\/[^/]+\/cancel$/.test(url)) {
+        const runId = url.split("/").at(-2);
+        return Response.json({
+          id: runId,
+          conversationId: "cancelled-conversation",
+          kind: "chat",
+          status: "cancelled",
+          correlationId: "22222222-2222-4222-8222-222222222222",
+          inputMessageId: "cancelled-message",
+          retryOfRunId: null,
+          startedAt: "2026-08-19T00:00:00.000Z",
+          completedAt: "2026-08-19T00:00:01.000Z",
+          durationMs: 1000,
+          errorCode: "RUN_CANCELLED"
+        });
+      }
+      return originalFetch(input, init);
+    };
+  });
+  await page.getByLabel("Message").fill("Cancel this request");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.getByText("Conversation run in progress...")).toBeVisible();
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await expect(page.getByText("Conversation run cancelled.")).toBeVisible();
+  await expectAccessible(page, "English dark cancelled Chat run");
+  await page.evaluate(() => {
+    (
+      globalThis as typeof globalThis & {
+        __restoreChatFetch?: () => void;
+      }
+    ).__restoreChatFetch?.();
+  });
+
   await page.getByLabel("Message").fill("Check the light status");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(
@@ -165,13 +221,24 @@ test("completes setup, tool-assisted chat, inspection, and logout", async ({
   await page.getByRole("link", { name: "Conversations" }).click();
   await page
     .getByRole("link", { name: /Check the light status/ })
-    .first()
+    .last()
     .click();
   await expect(page).toHaveURL(/\/conversations\/[^/]+$/);
   await expect(page.getByText("living-room-light is on.")).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Processing pipeline" })
   ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Conversation runs" })
+  ).toBeVisible();
+  await expect(page.getByText("Correlation ID").first()).toBeVisible();
+  await expect(page.getByText("Completed").first()).toBeVisible();
+  await page.goBack();
+  await expect(page).toHaveURL(/\/conversations$/);
+  await page
+    .getByRole("link", { name: /Check the light status/ })
+    .first()
+    .click();
   await expect(page.getByText("Text to speech")).toBeVisible();
   await page.goBack();
   await expect(page).toHaveURL(/\/conversations$/);
@@ -184,7 +251,10 @@ test("completes setup, tool-assisted chat, inspection, and logout", async ({
         fetch("/api/chat", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ message: `Overflow test ${index}` })
+          body: JSON.stringify({
+            runId: crypto.randomUUID(),
+            message: `Overflow test ${index}`
+          })
         })
       )
     );
@@ -202,7 +272,10 @@ test("completes setup, tool-assisted chat, inspection, and logout", async ({
     const response = await fetch("/api/chat", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ message: "Check live device status" })
+      body: JSON.stringify({
+        runId: crypto.randomUUID(),
+        message: "Check live device status"
+      })
     });
     if (!response.ok) throw new Error("Failed to create a live log event");
   });

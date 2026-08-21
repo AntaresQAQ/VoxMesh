@@ -13,15 +13,21 @@ describe("PipelineTimeline", () => {
         events={[
           {
             id: "event-1",
+            runId: null,
+            correlationId: null,
             stage: "STT",
             status: "completed",
+            durationMs: 100,
             message: "Audio transcribed",
             createdAt: "2026-08-19T00:00:00.000Z"
           },
           {
             id: "event-2",
+            runId: null,
+            correlationId: null,
             stage: "TTS",
             status: "failed",
+            durationMs: null,
             message: "Synthesis failed",
             createdAt: "2026-08-19T00:00:01.000Z"
           }

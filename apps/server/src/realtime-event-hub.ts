@@ -93,13 +93,36 @@ function toRealtimeEvent(
     eventId: randomUUID(),
     emittedAt: new Date().toISOString()
   };
-  return event.type === "log.created"
-    ? {
+  switch (event.type) {
+    case "log.created":
+      return {
         ...common,
         type: "log.created",
         payload: { log: event.log }
-      }
-    : {
+      };
+    case "run.created":
+      return {
+        ...common,
+        type: "run.created",
+        payload: { run: event.run }
+      };
+    case "run.updated":
+      return {
+        ...common,
+        type: "run.updated",
+        payload: { run: event.run }
+      };
+    case "message.created":
+      return {
+        ...common,
+        type: "message.created",
+        payload: {
+          conversationId: event.conversationId,
+          message: event.message
+        }
+      };
+    case "pipeline.created":
+      return {
         ...common,
         type: "pipeline.created",
         payload: {
@@ -107,4 +130,5 @@ function toRealtimeEvent(
           event: event.event
         }
       };
+  }
 }
