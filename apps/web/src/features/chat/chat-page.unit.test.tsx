@@ -153,6 +153,27 @@ describe("ChatPage", () => {
     );
   });
 
+  it("recovers the durable conversation after an initial provider failure", async () => {
+    vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(runId);
+    vi.spyOn(apiClient, "chat").mockRejectedValue(
+      new Error("Provider unavailable")
+    );
+    vi.spyOn(apiClient, "chatRun").mockResolvedValue(run("failed"));
+    const onConversationChange = vi.fn();
+    renderWithProviders(
+      <ChatPage onConversationChange={onConversationChange} />
+    );
+
+    submitMessage();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Provider unavailable"
+    );
+    await waitFor(() =>
+      expect(onConversationChange).toHaveBeenCalledWith("conversation-1")
+    );
+  });
+
   it("cancels an active run and suppresses the aborted request error", async () => {
     vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(runId);
     vi.spyOn(apiClient, "chat").mockImplementation(
@@ -200,6 +221,43 @@ describe("ChatPage", () => {
         "The run completed before cancellation took effect."
       )
     ).toBeVisible();
+  });
+
+  it("clears transient cancellation state for a new conversation", async () => {
+    vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(runId);
+    vi.spyOn(apiClient, "conversation").mockResolvedValue({
+      id: "conversation-1",
+      title: "Existing conversation",
+      messageCount: 0,
+      createdAt: "2026-08-19T00:00:00.000Z",
+      updatedAt: "2026-08-19T00:00:00.000Z",
+      messages: [],
+      events: [],
+      runs: []
+    });
+    vi.spyOn(apiClient, "chat").mockImplementation(
+      async (_runId, _message, signal) =>
+        new Promise((_resolve, reject) => {
+          signal?.addEventListener(
+            "abort",
+            () => reject(new DOMException("Aborted", "AbortError")),
+            { once: true }
+          );
+        })
+    );
+    vi.spyOn(apiClient, "cancelChatRun").mockResolvedValue(run("cancelled"));
+    renderWithProviders(<ChatPage conversationId="conversation-1" />);
+
+    submitMessage();
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
+    expect(
+      await screen.findByText("Conversation run cancelled.")
+    ).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "New conversation" }));
+
+    expect(
+      screen.queryByText("Conversation run cancelled.")
+    ).not.toBeInTheDocument();
   });
 
   it("keeps the active run available after cancellation fails", async () => {

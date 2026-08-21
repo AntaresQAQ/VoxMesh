@@ -237,7 +237,10 @@ Retry creates a new run with `retry_of_run_id` and reuses the original
 
 Prior tool messages are not blindly replayed. The initial continuity context
 uses durable user and final assistant messages; provider-specific tool-call
-transcripts remain scoped to their original run.
+transcripts remain scoped to their original run. Provider requests use a
+bounded recent-history window (up to 32 messages and 24,000 characters) so
+long-lived Conversations do not grow request cost or exceed context limits
+without bound.
 
 The Web Console stores the active Conversation in
 `/chat?conversationId=<id>`. Refreshing that URL reloads the durable transcript.

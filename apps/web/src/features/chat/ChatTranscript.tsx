@@ -21,7 +21,11 @@ export function ChatTranscript({
   );
 
   return (
-    <section aria-labelledby="chat-transcript-title">
+    <section
+      aria-labelledby="chat-transcript-title"
+      aria-live="polite"
+      aria-atomic="false"
+    >
       <h3 id="chat-transcript-title">{t("chat.transcript")}</h3>
       <ol className="chat-transcript">
         {messages.map((message) => (

@@ -238,7 +238,24 @@ test("completes setup, tool-assisted chat, inspection, and logout", async ({
             completedAt: "2026-08-19T00:00:01.000Z",
             durationMs: 1000,
             errorCode: "RUN_CANCELLED"
-          }
+          },
+          ...(retryCompleted
+            ? [
+                {
+                  id: "44444444-4444-4444-8444-444444444444",
+                  conversationId: "retry-conversation",
+                  kind: "chat",
+                  status: "completed",
+                  correlationId: "66666666-6666-4666-8666-666666666666",
+                  inputMessageId: "retry-message",
+                  retryOfRunId: "33333333-3333-4333-8333-333333333333",
+                  startedAt: "2026-08-19T00:00:01.000Z",
+                  completedAt: "2026-08-19T00:00:02.000Z",
+                  durationMs: 1000,
+                  errorCode: null
+                }
+              ]
+            : [])
         ]
       })
     });
@@ -261,6 +278,7 @@ test("completes setup, tool-assisted chat, inspection, and logout", async ({
   await expect(page.getByText("Retry this request")).toBeVisible();
   await page.getByRole("button", { name: "Retry" }).click();
   await expect(page.getByText("Retry completed")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Retry" })).toHaveCount(0);
   await expectAccessible(page, "English dark retried Chat run");
   await page.unroute("**/api/conversations/retry-conversation");
   await page.unroute("**/api/chat/runs/*/retry");

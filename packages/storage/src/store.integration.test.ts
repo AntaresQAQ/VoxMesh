@@ -1,3 +1,10 @@
+import { spawn } from "node:child_process";
+import { once } from "node:events";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import Database from "better-sqlite3";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { VoxMeshStore } from "./store.js";
@@ -61,12 +68,20 @@ it("rejects a database owned by another live process", async () => {
            id, owner_id, process_id, claimed_at
          ) VALUES (1, ?, ?, ?)`
       )
-      .run("external-owner", child.pid, "2026-08-19T00:00:00.000Z");
+      .run("external-owner", child.pid, new Date().toISOString());
     database.close();
 
     expect(() => new VoxMeshStore(databasePath)).toThrow(
       "VoxMesh database is active in another process"
     );
+
+    const staleDatabase = new Database(databasePath);
+    staleDatabase
+      .prepare("UPDATE storage_process_owner SET claimed_at = ? WHERE id = 1")
+      .run("2026-08-19T00:00:00.000Z");
+    staleDatabase.close();
+    store = new VoxMeshStore(databasePath);
+    expect(store.hasAdmin()).toBe(false);
   } finally {
     const exited = once(child, "exit");
     child.kill();
@@ -347,6 +362,33 @@ describe("VoxMeshStore", () => {
     ).toThrow("Conversation already has an active run");
   });
 
+  it("bounds durable Chat history to the most recent turns", () => {
+    store = new VoxMeshStore(":memory:");
+    const conversationId = store.createConversation("Question 0");
+    store.addMessage(conversationId, "assistant", "Answer 0");
+    for (let index = 1; index <= 40; index += 1) {
+      store.addMessage(conversationId, "user", `Question ${index}`);
+      store.addMessage(conversationId, "assistant", `Answer ${index}`);
+    }
+    const run = store.createChatRun(
+      "89898989-8989-4989-8989-898989898989",
+      "Current question",
+      conversationId
+    );
+
+    const context = store.getChatContext(run.id);
+
+    expect(context.history).toHaveLength(32);
+    expect(context.history[0]).toEqual({
+      role: "user",
+      content: "Question 25"
+    });
+    expect(context.history.at(-1)).toEqual({
+      role: "assistant",
+      content: "Answer 40"
+    });
+  });
+
   it("retries a cancelled run without duplicating its user message", () => {
     store = new VoxMeshStore(":memory:");
     const source = store.createChatRun(
@@ -421,6 +463,39 @@ describe("VoxMeshStore", () => {
       secondStore?.close();
       store?.close();
       store = undefined;
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("releases database ownership when initialization fails", () => {
+    const directory = mkdtempSync(join(tmpdir(), "voxmesh-init-failure-"));
+    const databasePath = join(directory, "voxmesh.sqlite");
+    try {
+      const database = new Database(databasePath);
+      database.exec("CREATE TABLE provider_connections (id TEXT PRIMARY KEY)");
+      database.close();
+
+      expect(() => new VoxMeshStore(databasePath)).toThrow();
+
+      const inspected = new Database(databasePath);
+      const ownerCount = inspected
+        .prepare("SELECT COUNT(*) AS count FROM storage_process_owner")
+        .get() as { count: number };
+      inspected.close();
+      expect(ownerCount.count).toBe(0);
+    } finally {
+      store?.close();
+      store = undefined;
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("does not acquire a local lease when opening SQLite fails", () => {
+    const directory = mkdtempSync(join(tmpdir(), "voxmesh-open-failure-"));
+    try {
+      expect(() => new VoxMeshStore(directory)).toThrow();
+      expect(() => new VoxMeshStore(directory)).toThrow();
+    } finally {
       rmSync(directory, { recursive: true, force: true });
     }
   });
@@ -994,9 +1069,3 @@ function routeInput(
     enabled: route.enabled
   };
 }
-import { spawn } from "node:child_process";
-import { once } from "node:events";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import Database from "better-sqlite3";

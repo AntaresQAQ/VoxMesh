@@ -748,6 +748,7 @@ export async function buildServer(
         response: {
           200: ChatResponseSchema,
           401: ApiErrorSchema,
+          404: ApiErrorSchema,
           409: ApiErrorSchema
         }
       }

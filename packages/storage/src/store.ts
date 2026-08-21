@@ -102,6 +102,10 @@ interface LocalDatabaseLease {
 }
 
 const localDatabaseLeases = new Map<string, LocalDatabaseLease>();
+const OWNER_HEARTBEAT_MS = 5_000;
+const OWNER_STALE_MS = 30_000;
+const MAX_CHAT_HISTORY_MESSAGES = 32;
+const MAX_CHAT_HISTORY_CHARACTERS = 24_000;
 
 export interface StoredLlmConfiguration {
   mode: LlmMode;
@@ -196,6 +200,7 @@ export class VoxMeshStore {
   private readonly runtimeRouting: RuntimeRoutingStore;
   private readonly leaseKey: string;
   private readonly ownerId: string;
+  private ownershipHeartbeat: NodeJS.Timeout | null = null;
   private closed = false;
   private readonly observabilityListeners = new Set<
     (event: StorageObservabilityEvent) => void
@@ -205,22 +210,30 @@ export class VoxMeshStore {
     if (path !== ":memory:") {
       mkdirSync(dirname(path), { recursive: true });
     }
+    const database = new Database(path);
     const lease = acquireLocalDatabaseLease(path);
     this.leaseKey = lease.key;
     this.ownerId = lease.ownerId;
-    this.database = new Database(path);
+    this.database = database;
+    let ownershipClaimed = false;
     try {
       this.database.pragma("journal_mode = WAL");
       this.database.pragma("foreign_keys = ON");
+      this.bootstrapProcessOwner();
+      ownershipClaimed = this.claimDatabaseOwnership();
       this.migrate();
-      if (this.claimDatabaseOwnership()) {
+      if (ownershipClaimed) {
         this.reconcileInterruptedRuns();
       }
       this.runtimeRouting = new RuntimeRoutingStore(this.database);
       this.runtimeRouting.initializeDefaults();
+      this.startOwnershipHeartbeat();
     } catch (error) {
+      const lastLease = releaseLocalDatabaseLease(this.leaseKey);
+      if (ownershipClaimed && lastLease) {
+        this.releaseDatabaseOwnership();
+      }
       this.database.close();
-      releaseLocalDatabaseLease(this.leaseKey);
       throw error;
     }
   }
@@ -228,12 +241,12 @@ export class VoxMeshStore {
   public close(): void {
     if (this.closed) return;
     this.closed = true;
+    if (this.ownershipHeartbeat) {
+      clearInterval(this.ownershipHeartbeat);
+      this.ownershipHeartbeat = null;
+    }
     if (releaseLocalDatabaseLease(this.leaseKey)) {
-      this.database
-        .prepare(
-          "DELETE FROM storage_process_owner WHERE id = 1 AND owner_id = ?"
-        )
-        .run(this.ownerId);
+      this.releaseDatabaseOwnership();
     }
     this.database.close();
   }
@@ -619,22 +632,27 @@ export class VoxMeshStore {
       .get(run.inputMessageId, run.conversationId) as
       { content: string } | undefined;
     if (!input) throw new Error("Conversation run input message was not found");
-    const history = this.database
+    const recentHistory = this.database
       .prepare(
         `SELECT role, content
          FROM messages
          WHERE conversation_id = ?
            AND role IN ('user', 'assistant')
            AND rowid < (SELECT rowid FROM messages WHERE id = ?)
-         ORDER BY rowid`
+         ORDER BY rowid DESC
+         LIMIT ?`
       )
-      .all(run.conversationId, run.inputMessageId) as Array<{
+      .all(
+        run.conversationId,
+        run.inputMessageId,
+        MAX_CHAT_HISTORY_MESSAGES * 2
+      ) as Array<{
       role: "user" | "assistant";
       content: string;
     }>;
     return {
       inputMessage: input.content,
-      history
+      history: selectChatHistory(recentHistory)
     };
   }
 
@@ -1345,17 +1363,35 @@ export class VoxMeshStore {
    * Claims exclusive process ownership while allowing multiple Store
    * connections inside the same Node.js process.
    */
+  private bootstrapProcessOwner(): void {
+    this.database.exec(`
+      CREATE TABLE IF NOT EXISTS storage_process_owner (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        owner_id TEXT NOT NULL,
+        process_id INTEGER NOT NULL,
+        claimed_at TEXT NOT NULL
+      );
+    `);
+  }
+
   private claimDatabaseOwnership(): boolean {
     const claim = this.database.transaction(() => {
       const existing = this.database
         .prepare(
-          "SELECT owner_id, process_id FROM storage_process_owner WHERE id = 1"
+          `SELECT owner_id, process_id, claimed_at
+           FROM storage_process_owner WHERE id = 1`
         )
-        .get() as { owner_id: string; process_id: number } | undefined;
+        .get() as
+        | { owner_id: string; process_id: number; claimed_at: string }
+        | undefined;
       if (existing?.owner_id === this.ownerId) return false;
+      const heartbeatAge = existing
+        ? Date.now() - Date.parse(existing.claimed_at)
+        : Number.POSITIVE_INFINITY;
       if (
         existing &&
         existing.process_id !== process.pid &&
+        heartbeatAge < OWNER_STALE_MS &&
         isProcessAlive(existing.process_id)
       ) {
         throw conflict("VoxMesh database is active in another process");
@@ -1374,6 +1410,31 @@ export class VoxMeshStore {
       return true;
     });
     return claim.immediate();
+  }
+
+  private startOwnershipHeartbeat(): void {
+    this.ownershipHeartbeat = setInterval(() => {
+      try {
+        this.database
+          .prepare(
+            `UPDATE storage_process_owner
+             SET claimed_at = ?
+             WHERE id = 1 AND owner_id = ?`
+          )
+          .run(new Date().toISOString(), this.ownerId);
+      } catch (error) {
+        console.error("Database ownership heartbeat failed", error);
+      }
+    }, OWNER_HEARTBEAT_MS);
+    this.ownershipHeartbeat.unref();
+  }
+
+  private releaseDatabaseOwnership(): void {
+    this.database
+      .prepare(
+        "DELETE FROM storage_process_owner WHERE id = 1 AND owner_id = ?"
+      )
+      .run(this.ownerId);
   }
 
   private reconcileInterruptedRuns(): void {
@@ -1567,6 +1628,25 @@ function isProcessAlive(processId: number): boolean {
       error.code === "EPERM"
     );
   }
+}
+
+function selectChatHistory(newestFirst: AgentMessage[]): AgentMessage[] {
+  const selected: AgentMessage[] = [];
+  let characters = 0;
+  for (const message of newestFirst) {
+    if (selected.length >= MAX_CHAT_HISTORY_MESSAGES) break;
+    if (
+      selected.length > 0 &&
+      characters + message.content.length > MAX_CHAT_HISTORY_CHARACTERS
+    ) {
+      break;
+    }
+    selected.push(message);
+    characters += message.content.length;
+  }
+  selected.reverse();
+  while (selected[0]?.role === "assistant") selected.shift();
+  return selected;
 }
 
 function conversationTitle(message: string): string {

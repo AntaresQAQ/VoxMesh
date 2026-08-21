@@ -55,6 +55,9 @@ describe("ChatTranscript", () => {
       />
     );
 
+    expect(
+      screen.getByRole("region", { name: "Conversation transcript" })
+    ).toHaveAttribute("aria-live", "polite");
     expect(screen.getByText("Question")).toBeVisible();
     expect(screen.queryByText("Internal tool result")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
