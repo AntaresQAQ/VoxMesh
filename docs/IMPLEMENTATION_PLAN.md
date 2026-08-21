@@ -587,6 +587,19 @@ Phase 3 implementation requires a new explicit user confirmation after Phase 2 a
 ### 7.2 Chat and Browser Voice Test
 
 - Provide text chat with loading, cancellation, error, retry, and conversation continuity.
+- Deliver Chat lifecycle in two stages:
+  1. Conversation Run identity, status, correlation, cancellation, and
+     inspection.
+  2. Multi-turn continuity and retry without duplicate user messages.
+- Keep the first lifecycle API buffered and backward-compatible apart from the
+  required client-generated run ID.
+- Use conditional transactional terminal transitions so completion, failure,
+  timeout, disconnect, and cancellation races produce one terminal outcome.
+- Propagate `AbortSignal` through the application service, Agent Core, LLM, and
+  MCP boundaries.
+- See
+  [Conversation Run Lifecycle](./architecture/CONVERSATION_LIFECYCLE.md) for
+  the data model, API, state machine, observability, retry, and validation plan.
 - Add browser recording controls behind an audio interface.
 - Route browser audio through STT -> Agent -> TTS and allow response playback.
 - Handle permission denial, unsupported browsers, timeouts, and unavailable devices.
@@ -595,6 +608,8 @@ Phase 3 implementation requires a new explicit user confirmation after Phase 2 a
 ### 7.3 Conversation Inspector
 
 - Display the ordered User -> STT -> Agent -> MCP -> LLM -> TTS -> Assistant timeline.
+- Group execution metadata by Conversation Run rather than assigning one
+  ambiguous status to a multi-turn Conversation.
 - Show safe metadata, duration, status, error code, and correlation identifiers.
 - Never render secrets or unredacted provider or MCP payloads.
 - Support empty, in-progress, failed, cancelled, and completed conversations.
