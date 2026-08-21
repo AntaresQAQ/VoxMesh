@@ -9,9 +9,10 @@ This document is the project-visible implementation roadmap. It does not authori
 
 ## Implementation Progress
 
-Last updated: 2026-08-20
+Last updated: 2026-08-21
 
-Current merged baseline: `91eaa81` (`feat: add runtime routing management (#7)`).
+Current implementation branch: `feat/realtime-observability`, based on
+`1a668a7` (`docs: reorganize project documentation (#8)`).
 
 ### Completed foundation and vertical slices
 
@@ -25,7 +26,7 @@ Current merged baseline: `91eaa81` (`feat: add runtime routing management (#7)`)
 - [x] provider-independent Agent Core with bounded Mock MCP tool execution
 - [x] deterministic Mock Chat, Mock Native Multimodal, and complete buffered
       browser voice pipelines
-- [x] Dashboard, Chat, Conversations, HTTP snapshot Logs, Settings,
+- [x] Dashboard, Chat, Conversations, live replayable Logs, Settings,
       authentication, stable Browser History routes, localization, themes, and
       representative accessibility automation; manual WCAG 2.2 AA review
       remains required
@@ -36,6 +37,10 @@ Current merged baseline: `91eaa81` (`feat: add runtime routing management (#7)`)
       WebSocket protocols
 - [x] buffered browser recording normalization to mono 16 kHz PCM16 WAV and a
       live local microphone loudness meter
+- [x] authenticated versioned WebSocket delivery for persisted logs and
+      pipeline events with bounded replay, gap indication, heartbeat,
+      backpressure, session revocation, redaction, reconnect, and URL-backed
+      Logs filters
 
 ### Completed Runtime Routing
 
@@ -64,8 +69,9 @@ Current merged baseline: `91eaa81` (`feat: add runtime routing management (#7)`)
 - Alibaba speech adapters use WebSockets internally, but VoxMesh does not yet
   expose an application-level streaming voice session.
 - Native Multimodal is implemented with a deterministic Mock provider only.
-- The Logs page loads persisted data through `GET /api/logs`; it is not
-  real-time.
+- The Logs page loads a durable `GET /api/logs` snapshot and merges
+  authenticated real-time log events. Application-level bidirectional voice
+  streaming remains planned separately.
 - Conversation list/detail and persisted pipeline events are implemented, but
   complete duration, correlation, in-progress, failed, and cancelled metadata
   remain.
@@ -77,9 +83,6 @@ Current merged baseline: `91eaa81` (`feat: add runtime routing management (#7)`)
 
 ### Remaining Phase 3 acceptance work
 
-- [ ] authenticated WebSocket real-time logs and domain events with versioned
-      envelopes, reconnection, gap indication, bounded buffering, backpressure,
-      URL-backed filters, and redaction
 - [ ] Chat cancellation, retry, and conversation continuity
 - [ ] Conversation Inspector duration, safe metadata, correlation identifiers,
       and complete in-progress/failed/cancelled states
@@ -143,13 +146,12 @@ verified, activation must continue to reject routes that request streaming.
 
 ### Next execution order
 
-1. Implement Phase 3 real-time observability.
-2. Close the remaining Phase 3 Web Console and end-to-end acceptance gaps.
-3. Complete the Phase 4 opt-in live-provider acceptance gate.
-4. Implement capability-gated full-chain Streaming STT/Chat LLM/TTS.
-5. Implement Phase 5 generic MCP.
-6. Implement Phase 6 ALSA physical audio and offline wake-word detection.
-7. Implement Phase 7 packaging, deployment, backup, rollback, and NanoPi
+1. Close the remaining Phase 3 Web Console and end-to-end acceptance gaps.
+2. Complete the Phase 4 opt-in live-provider acceptance gate.
+3. Implement capability-gated full-chain Streaming STT/Chat LLM/TTS.
+4. Implement Phase 5 generic MCP.
+5. Implement Phase 6 ALSA physical audio and offline wake-word detection.
+6. Implement Phase 7 packaging, deployment, backup, rollback, and NanoPi
    qualification.
 
 ## 1. Current State and Approach
@@ -157,9 +159,9 @@ verified, activation must continue to reject routes that request streaming.
 The repository contains validated Mock and real-provider buffered voice
 vertical slices, protected Runtime Routing, and a bilingual Web Console with
 representative accessibility automation. The implementation is intentionally
-incomplete: application-level streaming, real-time observability, complete
-MCP integration, physical audio, manual accessibility evidence, deployment,
-and final hardware qualification remain.
+incomplete: application-level voice streaming, complete MCP integration,
+physical audio, manual accessibility evidence, deployment, and final hardware
+qualification remain.
 
 The implementation follows the seven phases defined in the MVP specification
 while preserving a platform-independent Agent Core. Some provider work was

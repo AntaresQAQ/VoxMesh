@@ -19,7 +19,7 @@ VoxMesh has an initial Mock Mode vertical slice for development and architecture
 - selectable Composed and Mock Native Multimodal voice pipeline modes
 - system-managed provider connections, model deployments, runtime routes, and capability verification
 - editable routing CRUD, explicit Native fallback, and independent capability-gated STT/TTS streaming switches
-- Dashboard, Chat, Conversations, and Logs pages
+- Dashboard, Chat, Conversations, and live Logs pages
 - Settings page for password rotation and Runtime Routing configuration
 - write-only provider credentials and route-bound capability verification
 - generic OpenAI-compatible LLM configuration, including Alibaba Cloud Model Studio
@@ -42,9 +42,10 @@ Capability-gated full-chain Streaming STT/Chat LLM/TTS is also planned after
 the buffered live-provider acceptance gate; unsupported routes continue to be
 blocked rather than silently using buffered transport.
 
-The current Logs page reads persisted snapshots through HTTP. Application-level
-real-time log/event WebSockets, physical audio, wake-word detection, and
-full-chain streaming are not implemented yet.
+The Logs page combines a persisted HTTP snapshot with authenticated real-time
+log and pipeline-event WebSocket delivery, replay, gap indication, and
+URL-backed filters. Physical audio, wake-word detection, and full-chain voice
+streaming are not implemented yet.
 
 The architecture is designed for:
 
@@ -168,6 +169,7 @@ tests/e2e             Browser end-to-end tests
 - [Technology Stack and Development Guide](docs/architecture/TECHNOLOGY_STACK.md)
 - [Voice Pipeline Architecture](docs/architecture/VOICE_PIPELINES.md)
 - [Runtime Routing](docs/architecture/RUNTIME_ROUTING.md)
+- [WebSocket Event Delivery](docs/architecture/WEBSOCKET.md)
 - [Accessibility Standard and Audit](docs/development/ACCESSIBILITY.md)
 - [Mock Mode Development Guide](docs/development/MOCK_MODE.md)
 - [Azure OpenAI Configuration Guide](docs/providers/AZURE_OPENAI.md)

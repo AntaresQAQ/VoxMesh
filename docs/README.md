@@ -19,6 +19,7 @@ interpretation before changing behavior.
 - [Technology Stack and Development Guide](./architecture/TECHNOLOGY_STACK.md)
 - [Voice Pipeline Architecture](./architecture/VOICE_PIPELINES.md)
 - [Runtime Routing](./architecture/RUNTIME_ROUTING.md)
+- [WebSocket Event Delivery](./architecture/WEBSOCKET.md)
 
 Architecture documents describe current boundaries and planned extensions.
 Sections explicitly marked as planned are not claims of implemented behavior.
@@ -45,9 +46,9 @@ Runtime Routing.
 
 - [Security Operations](./operations/SECURITY_OPERATIONS.md)
 
-Future deployment, backup, recovery, WebSocket, MCP, physical-audio, wake-word,
-and streaming runbooks should be added to the relevant section when those
-features enter implementation.
+Future deployment, backup, recovery, MCP, physical-audio, wake-word, and
+full-chain voice-streaming runbooks should be added to the relevant section
+when those features enter implementation.
 
 ## Documentation Conventions
 

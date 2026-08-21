@@ -156,6 +156,9 @@ Playwright injects deterministic fake `getUserMedia` and `MediaRecorder` impleme
 - enabled playback control
 - conversation pipeline display
 - accessibility axe scans
+- authenticated live log delivery without refresh
+- URL-backed log category and severity filters
+- event-stream replay connection status
 
 ## 8. Extending Mock Mode
 

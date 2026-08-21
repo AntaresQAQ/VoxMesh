@@ -193,7 +193,32 @@ test("completes setup, tool-assisted chat, inspection, and logout", async ({
     }
   });
   await page.getByRole("link", { name: "Logs" }).click();
+  await expect(page.getByRole("status")).toContainText(
+    "Live updates connected"
+  );
   await expect(page.getByText("Calling MCP tool").first()).toBeVisible();
+  const toolLogCount = await page.getByText("Calling MCP tool").count();
+  await page.evaluate(async () => {
+    const response = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ message: "Check live device status" })
+    });
+    if (!response.ok) throw new Error("Failed to create a live log event");
+  });
+  await expect
+    .poll(() => page.getByText("Calling MCP tool").count())
+    .toBeGreaterThan(toolLogCount);
+  await page.getByLabel("Category").selectOption("MCP");
+  await page.getByLabel("Level").selectOption("INFO");
+  await expect(page).toHaveURL(/category=MCP/);
+  await expect(page).toHaveURL(/level=INFO/);
+  await page.reload();
+  await expect(page.getByLabel("Category")).toHaveValue("MCP");
+  await expect(page.getByLabel("Level")).toHaveValue("INFO");
+  await expectAccessible(page, "English dark live logs");
+  await page.getByLabel("Category").selectOption("ALL");
+  await page.getByLabel("Level").selectOption("ALL");
   const layout = await page.evaluate(() => {
     const sidebar = document.querySelector("aside");
     const main = document.querySelector("main");

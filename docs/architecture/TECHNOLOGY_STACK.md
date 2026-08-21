@@ -402,9 +402,10 @@ CI uses a workflow-and-PR concurrency group with `cancel-in-progress: true`. Whe
 
 Linux-only audio, packaging, and hardware checks must remain separate from the cross-platform development workflow.
 
-## 10. Planned Integration Technologies
+## 10. Integration Technologies
 
-The following areas are planned but their final implementation dependency must be confirmed immediately before development:
+The following areas include current and planned integrations. New dependencies
+must still be confirmed immediately before implementation:
 
 | Area                  | Planned direction                                                           |
 | --------------------- | --------------------------------------------------------------------------- |
@@ -413,9 +414,13 @@ The following areas are planned but their final implementation dependency must b
 | OpenAI-compatible LLM | Generic adapter; Alibaba Cloud Model Studio is the first supported provider |
 | Linux audio           | ALSA adapter for standard USB Audio Class devices                           |
 | Deployment            | Multi-architecture Docker Compose, systemd, Debian packages, scripts        |
-| Real-time events      | Authenticated WebSocket protocol with versioned envelopes                   |
+| Real-time events      | Implemented authenticated WebSocket protocol with versioned envelopes       |
 
 Do not select an SDK solely because it is popular. Confirm maintenance status, license, platform support, security posture, bundle impact, and compatibility with project boundaries.
+
+The implemented observability protocol, replay window, authentication,
+backpressure, browser reconnection, and Logs cache behavior are documented in
+[WebSocket Event Delivery](./WEBSOCKET.md).
 
 Alibaba Cloud Model Studio exposes an OpenAI-compatible Chat interface, but its
 Fun-ASR and Qwen-Audio-TTS/CosyVoice services use a dedicated WebSocket task

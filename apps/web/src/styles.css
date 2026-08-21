@@ -404,6 +404,41 @@ main > header {
   gap: 0.75rem;
 }
 
+.log-toolbar {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(180px, 1fr)) minmax(220px, auto);
+  gap: 1rem;
+  align-items: end;
+  margin-bottom: 1rem;
+}
+
+.connection-status {
+  align-self: center;
+  margin: 0;
+  color: var(--color-text-soft);
+}
+
+.connection-status.connected {
+  color: var(--color-success);
+}
+
+.connection-status.failed {
+  color: var(--color-error);
+}
+
+.log-gap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.log-gap p {
+  margin: 0;
+}
+
 .list button,
 .list-link {
   display: grid;
@@ -747,6 +782,10 @@ main > header {
     min-height: 100vh;
     min-height: 100dvh;
     overflow: visible;
+  }
+
+  .log-toolbar {
+    grid-template-columns: 1fr;
   }
 
   aside {
