@@ -53,6 +53,7 @@ describe("LogsPage", () => {
     const clearGap = vi.fn();
     renderWithProviders(
       <LogsPage
+        onFiltersChange={vi.fn()}
         realtimeState={{
           status: "connected",
           gap: {
@@ -85,6 +86,7 @@ describe("LogsPage", () => {
     const clearGap = vi.fn();
     renderWithProviders(
       <LogsPage
+        onFiltersChange={vi.fn()}
         realtimeState={{
           status: "connected",
           gap: {
@@ -115,6 +117,7 @@ describe("LogsPage", () => {
     const clearStreamRestart = vi.fn();
     renderWithProviders(
       <LogsPage
+        onFiltersChange={vi.fn()}
         realtimeState={{
           status: "connected",
           gap: null,

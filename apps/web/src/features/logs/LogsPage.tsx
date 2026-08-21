@@ -27,7 +27,7 @@ const levels: LogLevelFilter[] = ["ALL", "INFO", "WARN", "ERROR"];
 export function LogsPage(props: {
   category?: LogEntry["category"];
   level?: LogEntry["level"];
-  onFiltersChange?: (
+  onFiltersChange: (
     category: LogEntry["category"] | undefined,
     level: LogEntry["level"] | undefined
   ) => void;
@@ -48,7 +48,7 @@ export function LogsPage(props: {
     nextCategory: LogCategoryFilter,
     nextLevel: LogLevelFilter
   ) =>
-    props.onFiltersChange?.(
+    props.onFiltersChange(
       nextCategory === "ALL" ? undefined : nextCategory,
       nextLevel === "ALL" ? undefined : nextLevel
     );
