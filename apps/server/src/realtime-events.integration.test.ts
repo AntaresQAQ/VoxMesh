@@ -78,6 +78,13 @@ describe("real-time observability WebSocket", () => {
     expect(await client.next("stream.event")).toMatchObject({
       event: {
         sequence: 5,
+        type: "message.created",
+        payload: { conversationId }
+      }
+    });
+    expect(await client.next("stream.event")).toMatchObject({
+      event: {
+        sequence: 6,
         type: "pipeline.created",
         payload: {
           conversationId,

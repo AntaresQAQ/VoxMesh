@@ -101,4 +101,27 @@ describe("OpenAiCompatibleProvider", () => {
       "OpenAI-compatible request failed (401): invalid api key"
     );
   });
+
+  it("combines provider timeout and caller cancellation signals", async () => {
+    const fetcher = vi.fn(
+      async (_input: string | URL | Request, init?: RequestInit) => {
+        expect(init?.signal).toBeInstanceOf(AbortSignal);
+        expect(init?.signal).not.toBe(controller.signal);
+        return Response.json({
+          choices: [{ message: { content: "Cancelled-safe response" } }]
+        });
+      }
+    );
+    const provider = new OpenAiCompatibleProvider(config, fetcher);
+    const controller = new AbortController();
+
+    await provider.complete({
+      messages: [{ role: "user", content: "Hello" }],
+      tools: [],
+      signal: controller.signal
+    });
+
+    controller.abort();
+    expect(fetcher.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
+  });
 });

@@ -20,6 +20,7 @@ interpretation before changing behavior.
 - [Voice Pipeline Architecture](./architecture/VOICE_PIPELINES.md)
 - [Runtime Routing](./architecture/RUNTIME_ROUTING.md)
 - [WebSocket Event Delivery](./architecture/WEBSOCKET.md)
+- [Conversation Run Lifecycle](./architecture/CONVERSATION_LIFECYCLE.md)
 
 Architecture documents describe current boundaries and planned extensions.
 Sections explicitly marked as planned are not claims of implemented behavior.

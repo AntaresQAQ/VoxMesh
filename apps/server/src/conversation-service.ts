@@ -1,5 +1,6 @@
 import {
   AgentRuntime,
+  AgentRunCancelledError,
   NativeVoiceRuntime,
   type LlmProvider,
   type McpServer,
@@ -11,6 +12,7 @@ import type {
   TextToSpeechProvider,
   TranscriptionResult
 } from "@voxmesh/audio";
+import type { ConversationRun } from "@voxmesh/shared";
 import type {
   StoredVoicePipelineConfiguration,
   VoxMeshStore
@@ -20,6 +22,10 @@ export interface ConversationResult {
   conversationId: string;
   response: string;
   usedTools: string[];
+}
+
+export interface TextConversationResult extends ConversationResult {
+  runId: string;
 }
 
 export interface VoiceConversationResult extends ConversationResult {
@@ -45,9 +51,50 @@ export class ConversationService {
     ) => NativeVoiceProvider
   ) {}
 
-  public async runText(message: string): Promise<ConversationResult> {
-    const conversationId = this.store.createConversation(message);
-    return this.runAgent(conversationId, message);
+  public startTextRun(runId: string, message: string): ConversationRun {
+    return this.store.createChatRun(runId, message);
+  }
+
+  public async executeTextRun(
+    run: ConversationRun,
+    message: string,
+    signal: AbortSignal
+  ): Promise<TextConversationResult> {
+    const agent = new AgentRuntime(this.createLlm(), this.mcp);
+    try {
+      const result = await agent.run(message, { signal });
+      const finalized = this.store.completeChatRun({
+        runId: run.id,
+        messages: result.transcript
+          .slice(1)
+          .filter((entry) => !entry.toolCall)
+          .map((entry) => ({ role: entry.role, content: entry.content })),
+        events: result.events
+      });
+      if (!finalized.transitioned) {
+        if (finalized.run.status === "cancelled") {
+          throw new AgentRunCancelledError();
+        }
+        throw new Error(
+          `Conversation run ended as ${finalized.run.status} before completion`
+        );
+      }
+      return {
+        runId: run.id,
+        conversationId: run.conversationId,
+        response: result.response,
+        usedTools: result.usedTools
+      };
+    } catch (error) {
+      if (signal.aborted || error instanceof AgentRunCancelledError) {
+        this.store.cancelChatRun(run.id);
+        throw new AgentRunCancelledError();
+      }
+      const message =
+        error instanceof Error ? error.message : "Agent run failed";
+      this.store.failChatRun(run.id, "AGENT_FAILED", message);
+      throw error;
+    }
   }
 
   public async runVoice(audio: AudioData): Promise<VoiceConversationResult> {

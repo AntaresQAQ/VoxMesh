@@ -136,6 +136,7 @@ describe("feature pages", () => {
   it("submits chat and renders tool-assisted output", async () => {
     const user = userEvent.setup();
     vi.spyOn(apiClient, "chat").mockResolvedValue({
+      runId: "11111111-1111-4111-8111-111111111111",
       conversationId: "conversation-1",
       response: "The light is on.",
       usedTools: ["mock.get_device_status"]

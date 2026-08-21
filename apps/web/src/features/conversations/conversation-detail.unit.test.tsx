@@ -31,6 +31,7 @@ describe("ConversationDetailPage", () => {
         {
           id: "message-1",
           role: "assistant",
+          runId: "11111111-1111-4111-8111-111111111111",
           content: "Loaded from route parameter",
           createdAt: "2026-08-19T00:00:01.000Z"
         }
@@ -38,10 +39,28 @@ describe("ConversationDetailPage", () => {
       events: [
         {
           id: "event-1",
+          runId: "11111111-1111-4111-8111-111111111111",
+          correlationId: "22222222-2222-4222-8222-222222222222",
           stage: "AGENT",
           status: "completed",
+          durationMs: 125,
           message: "Agent completed",
           createdAt: "2026-08-19T00:00:01.000Z"
+        }
+      ],
+      runs: [
+        {
+          id: "11111111-1111-4111-8111-111111111111",
+          conversationId: "conversation-1",
+          kind: "chat",
+          status: "completed",
+          correlationId: "22222222-2222-4222-8222-222222222222",
+          inputMessageId: "message-0",
+          retryOfRunId: null,
+          startedAt: "2026-08-19T00:00:00.000Z",
+          completedAt: "2026-08-19T00:00:01.000Z",
+          durationMs: 1000,
+          errorCode: null
         }
       ]
     });
@@ -52,6 +71,7 @@ describe("ConversationDetailPage", () => {
     ).toBeVisible();
     expect(screen.getByText("Loaded from route parameter")).toBeVisible();
     expect(screen.getByText("Agent completed")).toBeVisible();
+    expect(screen.getByText("Correlation ID")).toBeVisible();
     expect(screen.getByRole("link", { name: "Conversations" })).toHaveAttribute(
       "href",
       "/conversations"

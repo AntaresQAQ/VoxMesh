@@ -1,5 +1,6 @@
 import type {
   ChatResponse,
+  ConversationRun,
   ConversationDetail,
   ConversationSummary,
   Dashboard,
@@ -125,10 +126,16 @@ export const apiClient = {
       body: JSON.stringify({ routeId })
     }),
   dashboard: () => api<Dashboard>("/api/dashboard"),
-  chat: (message: string) =>
+  chat: (runId: string, message: string, signal?: AbortSignal) =>
     api<ChatResponse>("/api/chat", {
       method: "POST",
-      body: JSON.stringify({ message })
+      body: JSON.stringify({ runId, message }),
+      ...(signal ? { signal } : {})
+    }),
+  chatRun: (runId: string) => api<ConversationRun>(`/api/chat/runs/${runId}`),
+  cancelChatRun: (runId: string) =>
+    api<ConversationRun>(`/api/chat/runs/${runId}/cancel`, {
+      method: "POST"
     }),
   voice: (audio: Blob) =>
     api<VoiceResponse>("/api/voice", {

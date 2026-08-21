@@ -500,6 +500,53 @@ main > header {
   color: var(--color-error);
 }
 
+.pipeline-status.cancelled {
+  color: var(--color-text-soft);
+}
+
+.pipeline-status.in_progress,
+.pipeline-status.started {
+  color: var(--color-accent);
+}
+
+.conversation-runs {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0;
+  list-style: none;
+}
+
+.conversation-runs li {
+  padding: 1rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+}
+
+.conversation-runs li > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.conversation-runs dl {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0.4rem 1rem;
+  margin-bottom: 0;
+}
+
+.conversation-runs dt {
+  color: var(--color-text-muted);
+}
+
+.conversation-runs dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 .logs article {
   display: grid;
   grid-template-columns: 90px 80px 70px 1fr;

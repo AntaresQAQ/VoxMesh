@@ -6,12 +6,16 @@ import Database from "better-sqlite3";
 
 import type {
   ConversationDetail,
+  ConversationRun,
+  ConversationRunKind,
+  ConversationRunStatus,
   ConversationSummary,
   LogCategory,
   LogEntry,
   LogLevel,
   LlmMode,
   MessageRole,
+  Message,
   ModelDeploymentInput,
   PipelineEvent,
   PipelineStage,
@@ -52,6 +56,7 @@ interface ConversationRow {
 interface MessageRow {
   id: string;
   role: MessageRole;
+  run_id: string | null;
   content: string;
   created_at: string;
 }
@@ -67,10 +72,27 @@ interface LogRow {
 
 interface PipelineEventRow {
   id: string;
+  run_id: string | null;
+  correlation_id: string | null;
   stage: PipelineStage;
   status: PipelineStatus;
+  duration_ms: number | null;
   message: string;
   created_at: string;
+}
+
+interface ConversationRunRow {
+  id: string;
+  conversation_id: string;
+  kind: ConversationRunKind;
+  status: ConversationRunStatus;
+  correlation_id: string;
+  input_message_id: string | null;
+  retry_of_run_id: string | null;
+  started_at: string;
+  completed_at: string | null;
+  duration_ms: number | null;
+  error_code: string | null;
 }
 
 export interface StoredLlmConfiguration {
@@ -143,6 +165,13 @@ const DEFAULT_VOICE_CONFIGURATION: StoredVoicePipelineConfiguration = {
 
 export type StorageObservabilityEvent =
   | { type: "log.created"; log: LogEntry }
+  | { type: "run.created"; run: ConversationRun }
+  | { type: "run.updated"; run: ConversationRun }
+  | {
+      type: "message.created";
+      conversationId: string;
+      message: Message;
+    }
   | {
       type: "pipeline.created";
       conversationId: string;
@@ -164,6 +193,7 @@ export class VoxMeshStore {
     this.database.pragma("journal_mode = WAL");
     this.database.pragma("foreign_keys = ON");
     this.migrate();
+    this.reconcileInterruptedRuns();
     this.runtimeRouting = new RuntimeRoutingStore(this.database);
     this.runtimeRouting.initializeDefaults();
   }
@@ -342,12 +372,25 @@ export class VoxMeshStore {
   }
 
   public createConversation(userMessage: string): string {
-    let id = "";
-    this.database.transaction(() => {
-      id = this.createPendingConversation(conversationTitle(userMessage));
-      this.addMessage(id, "user", userMessage);
+    const result = this.database.transaction(() => {
+      const conversationId = this.createPendingConversation(
+        conversationTitle(userMessage)
+      );
+      const message = this.insertMessage(
+        conversationId,
+        "user",
+        userMessage,
+        null,
+        new Date().toISOString()
+      );
+      return { conversationId, message };
     })();
-    return id;
+    this.emitObservabilityEvent({
+      type: "message.created",
+      conversationId: result.conversationId,
+      message: result.message
+    });
+    return result.conversationId;
   }
 
   /** Creates a conversation record before a provider produces user text. */
@@ -362,6 +405,161 @@ export class VoxMeshStore {
     return id;
   }
 
+  public createChatRun(runId: string, userMessage: string): ConversationRun {
+    const conversationId = randomUUID();
+    const correlationId = randomUUID();
+    const startedAt = new Date().toISOString();
+    let run: ConversationRun | undefined;
+    let message: Message | undefined;
+    let event: PipelineEvent | undefined;
+    this.database.transaction(() => {
+      this.database
+        .prepare(
+          "INSERT INTO conversations (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)"
+        )
+        .run(
+          conversationId,
+          conversationTitle(userMessage),
+          startedAt,
+          startedAt
+        );
+      const inserted = this.database
+        .prepare(
+          `INSERT INTO conversation_runs (
+             id, conversation_id, kind, status, correlation_id,
+             input_message_id, retry_of_run_id, started_at, completed_at,
+             duration_ms, error_code
+           ) VALUES (?, ?, 'chat', 'in_progress', ?, NULL, NULL, ?, NULL, NULL, NULL)
+           ON CONFLICT(id) DO NOTHING`
+        )
+        .run(runId, conversationId, correlationId, startedAt);
+      if (inserted.changes !== 1) {
+        throw Object.assign(new Error("Conversation run ID already exists"), {
+          statusCode: 409
+        });
+      }
+      message = this.insertMessage(
+        conversationId,
+        "user",
+        userMessage,
+        runId,
+        startedAt
+      );
+      this.database
+        .prepare(
+          "UPDATE conversation_runs SET input_message_id = ? WHERE id = ?"
+        )
+        .run(message.id, runId);
+      run = this.getConversationRun(runId);
+      event = this.insertPipelineEvent({
+        conversationId,
+        runId,
+        correlationId,
+        stage: "AGENT",
+        status: "started",
+        message: "Agent run started",
+        durationMs: null
+      });
+    })();
+    if (!run || !message || !event) {
+      throw new Error("Conversation run transaction did not produce records");
+    }
+    this.emitObservabilityEvent({ type: "run.created", run });
+    this.emitObservabilityEvent({
+      type: "message.created",
+      conversationId,
+      message
+    });
+    this.emitObservabilityEvent({
+      type: "pipeline.created",
+      conversationId,
+      event
+    });
+    return run;
+  }
+
+  public getConversationRun(runId: string): ConversationRun {
+    const row = this.database
+      .prepare(
+        `SELECT id, conversation_id, kind, status, correlation_id,
+                input_message_id, retry_of_run_id, started_at, completed_at,
+                duration_ms, error_code
+         FROM conversation_runs WHERE id = ?`
+      )
+      .get(runId) as ConversationRunRow | undefined;
+    if (!row) throw notFound("Conversation run was not found");
+    return mapConversationRun(row);
+  }
+
+  public listConversationRuns(conversationId: string): ConversationRun[] {
+    return (
+      this.database
+        .prepare(
+          `SELECT id, conversation_id, kind, status, correlation_id,
+                  input_message_id, retry_of_run_id, started_at, completed_at,
+                  duration_ms, error_code
+           FROM conversation_runs
+           WHERE conversation_id = ?
+           ORDER BY started_at, rowid`
+        )
+        .all(conversationId) as ConversationRunRow[]
+    ).map(mapConversationRun);
+  }
+
+  public completeChatRun(input: {
+    runId: string;
+    messages: Array<{ role: MessageRole; content: string }>;
+    events: Array<{
+      category: LogCategory;
+      level: LogLevel;
+      message: string;
+    }>;
+  }): { run: ConversationRun; transitioned: boolean } {
+    return this.finalizeChatRun({
+      runId: input.runId,
+      status: "completed",
+      errorCode: null,
+      terminalMessage: "Agent run completed",
+      messages: input.messages,
+      events: input.events
+    });
+  }
+
+  public failChatRun(
+    runId: string,
+    errorCode: string,
+    message: string
+  ): { run: ConversationRun; transitioned: boolean } {
+    return this.finalizeChatRun({
+      runId,
+      status: "failed",
+      errorCode,
+      terminalMessage: message,
+      messages: [],
+      events: [{ category: "ERROR", level: "ERROR", message }]
+    });
+  }
+
+  public cancelChatRun(runId: string): {
+    run: ConversationRun;
+    transitioned: boolean;
+  } {
+    return this.finalizeChatRun({
+      runId,
+      status: "cancelled",
+      errorCode: "RUN_CANCELLED",
+      terminalMessage: "Agent run cancelled",
+      messages: [],
+      events: [
+        {
+          category: "AGENT",
+          level: "WARN",
+          message: "Agent run cancelled"
+        }
+      ]
+    });
+  }
+
   public updateConversationTitle(
     conversationId: string,
     userMessage: string
@@ -374,17 +572,22 @@ export class VoxMeshStore {
   public addMessage(
     conversationId: string,
     role: MessageRole,
-    content: string
-  ): void {
-    const now = new Date().toISOString();
-    this.database
-      .prepare(
-        "INSERT INTO messages (id, conversation_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)"
-      )
-      .run(randomUUID(), conversationId, role, content, now);
-    this.database
-      .prepare("UPDATE conversations SET updated_at = ? WHERE id = ?")
-      .run(now, conversationId);
+    content: string,
+    runId: string | null = null
+  ): Message {
+    const message = this.insertMessage(
+      conversationId,
+      role,
+      content,
+      runId,
+      new Date().toISOString()
+    );
+    this.emitObservabilityEvent({
+      type: "message.created",
+      conversationId,
+      message
+    });
+    return message;
   }
 
   public listConversations(): ConversationSummary[] {
@@ -417,12 +620,16 @@ export class VoxMeshStore {
     }
     const messages = this.database
       .prepare(
-        "SELECT id, role, content, created_at FROM messages WHERE conversation_id = ? ORDER BY created_at, rowid"
+        "SELECT id, role, run_id, content, created_at FROM messages WHERE conversation_id = ? ORDER BY created_at, rowid"
       )
       .all(id) as MessageRow[];
     const events = this.database
       .prepare(
-        "SELECT id, stage, status, message, created_at FROM conversation_events WHERE conversation_id = ? ORDER BY created_at, rowid"
+        `SELECT id, run_id, correlation_id, stage, status, duration_ms,
+                message, created_at
+         FROM conversation_events
+         WHERE conversation_id = ?
+         ORDER BY created_at, rowid`
       )
       .all(id) as PipelineEventRow[];
     return {
@@ -430,38 +637,33 @@ export class VoxMeshStore {
       messages: messages.map((message) => ({
         id: message.id,
         role: message.role,
+        runId: message.run_id,
         content: message.content,
         createdAt: message.created_at
       })),
-      events: events.map(mapPipelineEvent)
+      events: events.map(mapPipelineEvent),
+      runs: this.listConversationRuns(id)
     };
   }
 
   public addPipelineEvent(input: {
     conversationId: string;
+    runId?: string | null;
+    correlationId?: string | null;
     stage: PipelineStage;
     status: PipelineStatus;
+    durationMs?: number | null;
     message: string;
   }): void {
-    const event: PipelineEvent = {
-      id: randomUUID(),
+    const event = this.insertPipelineEvent({
+      conversationId: input.conversationId,
+      runId: input.runId ?? null,
+      correlationId: input.correlationId ?? null,
       stage: input.stage,
       status: input.status,
-      message: redactObservabilityText(input.message),
-      createdAt: new Date().toISOString()
-    };
-    this.database
-      .prepare(
-        "INSERT INTO conversation_events (id, conversation_id, stage, status, message, created_at) VALUES (?, ?, ?, ?, ?, ?)"
-      )
-      .run(
-        event.id,
-        input.conversationId,
-        event.stage,
-        event.status,
-        event.message,
-        event.createdAt
-      );
+      durationMs: input.durationMs ?? null,
+      message: input.message
+    });
     this.emitObservabilityEvent({
       type: "pipeline.created",
       conversationId: input.conversationId,
@@ -475,26 +677,12 @@ export class VoxMeshStore {
     message: string;
     conversationId?: string;
   }): void {
-    const log: LogEntry = {
-      id: randomUUID(),
+    const log = this.insertLog({
       category: input.category,
       level: input.level,
-      message: redactObservabilityText(input.message),
-      conversationId: input.conversationId ?? null,
-      createdAt: new Date().toISOString()
-    };
-    this.database
-      .prepare(
-        "INSERT INTO logs (id, category, level, message, conversation_id, created_at) VALUES (?, ?, ?, ?, ?, ?)"
-      )
-      .run(
-        log.id,
-        log.category,
-        log.level,
-        log.message,
-        log.conversationId,
-        log.createdAt
-      );
+      message: input.message,
+      conversationId: input.conversationId ?? null
+    });
     this.emitObservabilityEvent({ type: "log.created", log });
   }
 
@@ -533,6 +721,227 @@ export class VoxMeshStore {
     return row.count;
   }
 
+  private finalizeChatRun(input: {
+    runId: string;
+    status: Exclude<ConversationRunStatus, "in_progress">;
+    errorCode: string | null;
+    terminalMessage: string;
+    messages: Array<{ role: MessageRole; content: string }>;
+    events: Array<{
+      category: LogCategory;
+      level: LogLevel;
+      message: string;
+    }>;
+  }): { run: ConversationRun; transitioned: boolean } {
+    const emittedMessages: Message[] = [];
+    const emittedLogs: LogEntry[] = [];
+    const emittedEvents: PipelineEvent[] = [];
+    let transitioned = false;
+    let run: ConversationRun | undefined;
+    this.database.transaction(() => {
+      const current = this.getConversationRun(input.runId);
+      if (current.status !== "in_progress") {
+        run = current;
+        return;
+      }
+      const completedAt = new Date().toISOString();
+      const durationMs = Math.max(
+        0,
+        Date.parse(completedAt) - Date.parse(current.startedAt)
+      );
+      const update = this.database
+        .prepare(
+          `UPDATE conversation_runs
+           SET status = ?, completed_at = ?, duration_ms = ?, error_code = ?
+           WHERE id = ? AND status = 'in_progress'`
+        )
+        .run(
+          input.status,
+          completedAt,
+          durationMs,
+          input.errorCode,
+          input.runId
+        );
+      if (update.changes !== 1) {
+        run = this.getConversationRun(input.runId);
+        return;
+      }
+      transitioned = true;
+      for (const message of input.messages) {
+        emittedMessages.push(
+          this.insertMessage(
+            current.conversationId,
+            message.role,
+            message.content,
+            current.id,
+            completedAt
+          )
+        );
+      }
+      for (const event of input.events) {
+        emittedLogs.push(
+          this.insertLog({
+            ...event,
+            conversationId: current.conversationId
+          })
+        );
+        if (event.category === "MCP") {
+          emittedEvents.push(
+            this.insertPipelineEvent({
+              conversationId: current.conversationId,
+              runId: current.id,
+              correlationId: current.correlationId,
+              stage: "MCP",
+              status: "completed",
+              message: event.message,
+              durationMs: null
+            })
+          );
+        }
+      }
+      emittedEvents.push(
+        this.insertPipelineEvent({
+          conversationId: current.conversationId,
+          runId: current.id,
+          correlationId: current.correlationId,
+          stage: "AGENT",
+          status: input.status,
+          message: input.terminalMessage,
+          durationMs
+        })
+      );
+      this.database
+        .prepare("UPDATE conversations SET updated_at = ? WHERE id = ?")
+        .run(completedAt, current.conversationId);
+      run = this.getConversationRun(input.runId);
+    })();
+    if (!run) throw new Error("Conversation run finalization produced no run");
+    if (transitioned) {
+      this.emitObservabilityEvent({ type: "run.updated", run });
+      for (const message of emittedMessages) {
+        this.emitObservabilityEvent({
+          type: "message.created",
+          conversationId: run.conversationId,
+          message
+        });
+      }
+      for (const log of emittedLogs) {
+        this.emitObservabilityEvent({ type: "log.created", log });
+      }
+      for (const event of emittedEvents) {
+        this.emitObservabilityEvent({
+          type: "pipeline.created",
+          conversationId: run.conversationId,
+          event
+        });
+      }
+    }
+    return { run, transitioned };
+  }
+
+  private insertMessage(
+    conversationId: string,
+    role: MessageRole,
+    content: string,
+    runId: string | null,
+    createdAt: string
+  ): Message {
+    const message: Message = {
+      id: randomUUID(),
+      role,
+      runId,
+      content,
+      createdAt
+    };
+    this.database
+      .prepare(
+        `INSERT INTO messages (
+           id, conversation_id, run_id, role, content, created_at
+         ) VALUES (?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        message.id,
+        conversationId,
+        message.runId,
+        message.role,
+        message.content,
+        message.createdAt
+      );
+    this.database
+      .prepare("UPDATE conversations SET updated_at = ? WHERE id = ?")
+      .run(createdAt, conversationId);
+    return message;
+  }
+
+  private insertPipelineEvent(input: {
+    conversationId: string;
+    runId: string | null;
+    correlationId: string | null;
+    stage: PipelineStage;
+    status: PipelineStatus;
+    durationMs: number | null;
+    message: string;
+  }): PipelineEvent {
+    const event: PipelineEvent = {
+      id: randomUUID(),
+      runId: input.runId,
+      correlationId: input.correlationId,
+      stage: input.stage,
+      status: input.status,
+      durationMs: input.durationMs,
+      message: redactObservabilityText(input.message),
+      createdAt: new Date().toISOString()
+    };
+    this.database
+      .prepare(
+        `INSERT INTO conversation_events (
+           id, conversation_id, run_id, correlation_id, stage, status,
+           duration_ms, message, created_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        event.id,
+        input.conversationId,
+        event.runId,
+        event.correlationId,
+        event.stage,
+        event.status,
+        event.durationMs,
+        event.message,
+        event.createdAt
+      );
+    return event;
+  }
+
+  private insertLog(input: {
+    category: LogCategory;
+    level: LogLevel;
+    message: string;
+    conversationId: string | null;
+  }): LogEntry {
+    const log: LogEntry = {
+      id: randomUUID(),
+      category: input.category,
+      level: input.level,
+      message: redactObservabilityText(input.message),
+      conversationId: input.conversationId,
+      createdAt: new Date().toISOString()
+    };
+    this.database
+      .prepare(
+        "INSERT INTO logs (id, category, level, message, conversation_id, created_at) VALUES (?, ?, ?, ?, ?, ?)"
+      )
+      .run(
+        log.id,
+        log.category,
+        log.level,
+        log.message,
+        log.conversationId,
+        log.createdAt
+      );
+    return log;
+  }
+
   private migrate(): void {
     this.database.exec(`
       CREATE TABLE IF NOT EXISTS admin_credentials (
@@ -557,9 +966,24 @@ export class VoxMeshStore {
       CREATE TABLE IF NOT EXISTS messages (
         id TEXT PRIMARY KEY,
         conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+        run_id TEXT REFERENCES conversation_runs(id) ON DELETE SET NULL,
         role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'tool')),
         content TEXT NOT NULL,
         created_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS conversation_runs (
+        id TEXT PRIMARY KEY,
+        conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL CHECK (kind IN ('chat', 'voice-composed', 'voice-native')),
+        status TEXT NOT NULL CHECK (status IN ('in_progress', 'completed', 'failed', 'cancelled')),
+        correlation_id TEXT NOT NULL,
+        input_message_id TEXT REFERENCES messages(id) ON DELETE SET NULL,
+        retry_of_run_id TEXT REFERENCES conversation_runs(id) ON DELETE SET NULL,
+        started_at TEXT NOT NULL,
+        completed_at TEXT,
+        duration_ms INTEGER CHECK (duration_ms IS NULL OR duration_ms >= 0),
+        error_code TEXT
       );
 
       CREATE TABLE IF NOT EXISTS logs (
@@ -627,11 +1051,28 @@ export class VoxMeshStore {
       CREATE TABLE IF NOT EXISTS conversation_events (
         id TEXT PRIMARY KEY,
         conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+        run_id TEXT REFERENCES conversation_runs(id) ON DELETE SET NULL,
+        correlation_id TEXT,
         stage TEXT NOT NULL CHECK (stage IN ('STT', 'AGENT', 'MCP', 'TTS')),
-        status TEXT NOT NULL CHECK (status IN ('completed', 'failed')),
+        status TEXT NOT NULL CHECK (status IN ('started', 'completed', 'failed', 'cancelled')),
+        duration_ms INTEGER CHECK (duration_ms IS NULL OR duration_ms >= 0),
         message TEXT NOT NULL,
         created_at TEXT NOT NULL
       );
+    `);
+    this.ensureColumn(
+      "messages",
+      "run_id",
+      "TEXT REFERENCES conversation_runs(id) ON DELETE SET NULL"
+    );
+    this.migrateConversationEvents();
+    this.database.exec(`
+      CREATE INDEX IF NOT EXISTS idx_conversation_runs_conversation
+      ON conversation_runs(conversation_id, started_at);
+      CREATE INDEX IF NOT EXISTS idx_messages_run
+      ON messages(run_id);
+      CREATE INDEX IF NOT EXISTS idx_conversation_events_run
+      ON conversation_events(run_id, created_at);
     `);
     this.ensureColumn(
       "provider_connections",
@@ -673,6 +1114,64 @@ export class VoxMeshStore {
         `ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`
       );
     }
+  }
+
+  private migrateConversationEvents(): void {
+    const columns = this.database
+      .prepare("PRAGMA table_info(conversation_events)")
+      .all() as Array<{ name: string }>;
+    const definition = this.database
+      .prepare(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'conversation_events'"
+      )
+      .get() as { sql: string } | undefined;
+    const current =
+      columns.some((column) => column.name === "run_id") &&
+      columns.some((column) => column.name === "correlation_id") &&
+      columns.some((column) => column.name === "duration_ms") &&
+      definition?.sql.includes("'cancelled'");
+    if (current) return;
+    this.database.transaction(() => {
+      this.database.exec(`
+        CREATE TABLE conversation_events_next (
+          id TEXT PRIMARY KEY,
+          conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+          run_id TEXT REFERENCES conversation_runs(id) ON DELETE SET NULL,
+          correlation_id TEXT,
+          stage TEXT NOT NULL CHECK (stage IN ('STT', 'AGENT', 'MCP', 'TTS')),
+          status TEXT NOT NULL CHECK (status IN ('started', 'completed', 'failed', 'cancelled')),
+          duration_ms INTEGER CHECK (duration_ms IS NULL OR duration_ms >= 0),
+          message TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        );
+        INSERT INTO conversation_events_next (
+          id, conversation_id, run_id, correlation_id, stage, status,
+          duration_ms, message, created_at
+        )
+        SELECT id, conversation_id, NULL, NULL, stage, status,
+               NULL, message, created_at
+        FROM conversation_events;
+        DROP TABLE conversation_events;
+        ALTER TABLE conversation_events_next RENAME TO conversation_events;
+      `);
+    })();
+  }
+
+  private reconcileInterruptedRuns(): void {
+    const completedAt = new Date().toISOString();
+    this.database
+      .prepare(
+        `UPDATE conversation_runs
+         SET status = 'failed',
+             completed_at = ?,
+             duration_ms = MAX(
+               0,
+               CAST((julianday(?) - julianday(started_at)) * 86400000 AS INTEGER)
+             ),
+             error_code = 'SERVER_RESTARTED'
+         WHERE status = 'in_progress'`
+      )
+      .run(completedAt, completedAt);
   }
 
   private emitObservabilityEvent(event: StorageObservabilityEvent): void {
@@ -779,11 +1278,34 @@ function mapConversation(row: ConversationRow): ConversationSummary {
 function mapPipelineEvent(row: PipelineEventRow): PipelineEvent {
   return {
     id: row.id,
+    runId: row.run_id,
+    correlationId: row.correlation_id,
     stage: row.stage,
     status: row.status,
+    durationMs: row.duration_ms,
     message: row.message,
     createdAt: row.created_at
   };
+}
+
+function mapConversationRun(row: ConversationRunRow): ConversationRun {
+  return {
+    id: row.id,
+    conversationId: row.conversation_id,
+    kind: row.kind,
+    status: row.status,
+    correlationId: row.correlation_id,
+    inputMessageId: row.input_message_id,
+    retryOfRunId: row.retry_of_run_id,
+    startedAt: row.started_at,
+    completedAt: row.completed_at,
+    durationMs: row.duration_ms,
+    errorCode: row.error_code
+  };
+}
+
+function notFound(message: string): Error & { statusCode: number } {
+  return Object.assign(new Error(message), { statusCode: 404 });
 }
 
 function conversationTitle(message: string): string {

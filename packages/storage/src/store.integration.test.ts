@@ -9,6 +9,37 @@ afterEach(() => {
   store = undefined;
 });
 
+it("does not publish a message event when conversation creation rolls back", () => {
+  const directory = mkdtempSync(join(tmpdir(), "voxmesh-rollback-"));
+  const databasePath = join(directory, "voxmesh.sqlite");
+  try {
+    store = new VoxMeshStore(databasePath);
+    const database = new Database(databasePath);
+    database
+      .prepare(
+        `CREATE TRIGGER reject_test_message
+         BEFORE INSERT ON messages
+         BEGIN
+           SELECT RAISE(ABORT, 'rejected test message');
+         END`
+      )
+      .run();
+    database.close();
+    const observed: string[] = [];
+    store.subscribeObservability((event) => observed.push(event.type));
+
+    expect(() => store?.createConversation("Rollback")).toThrow(
+      "rejected test message"
+    );
+    expect(store.listConversations()).toEqual([]);
+    expect(observed).toEqual([]);
+  } finally {
+    store?.close();
+    store = undefined;
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 describe("VoxMeshStore", () => {
   it("creates an administrator only once", () => {
     store = new VoxMeshStore(":memory:");
@@ -92,6 +123,7 @@ describe("VoxMeshStore", () => {
     unsubscribe();
 
     expect(events.map((event) => event.type)).toEqual([
+      "message.created",
       "log.created",
       "pipeline.created",
       "log.created",
@@ -135,6 +167,206 @@ describe("VoxMeshStore", () => {
       mode: "composed",
       routeId: "system-route-composed"
     });
+  });
+
+  it("persists exactly one terminal state for a Chat run", () => {
+    store = new VoxMeshStore(":memory:");
+    const observed: string[] = [];
+    store.subscribeObservability((event) => observed.push(event.type));
+    const runId = "11111111-1111-4111-8111-111111111111";
+    const run = store.createChatRun(runId, "Check the light");
+
+    expect(run).toMatchObject({
+      id: runId,
+      kind: "chat",
+      status: "in_progress",
+      errorCode: null
+    });
+    const completed = store.completeChatRun({
+      runId,
+      messages: [
+        { role: "tool", content: '{"state":"on"}' },
+        { role: "assistant", content: "The light is on." }
+      ],
+      events: [
+        {
+          category: "MCP",
+          level: "INFO",
+          message: "Calling MCP tool mock.get_device_status"
+        },
+        {
+          category: "AGENT",
+          level: "INFO",
+          message: "Agent run completed"
+        }
+      ]
+    });
+    const lateCancel = store.cancelChatRun(runId);
+    const detail = store.getConversation(run.conversationId);
+
+    expect(completed.transitioned).toBe(true);
+    expect(completed.run.status).toBe("completed");
+    expect(completed.run.durationMs).not.toBeNull();
+    expect(lateCancel).toMatchObject({
+      transitioned: false,
+      run: { status: "completed" }
+    });
+    expect(detail?.messages.map((message) => message.role)).toEqual([
+      "user",
+      "tool",
+      "assistant"
+    ]);
+    expect(detail?.runs).toHaveLength(1);
+    expect(
+      detail?.events.filter((event) => event.status === "completed")
+    ).toHaveLength(2);
+    expect(observed).toEqual(
+      expect.arrayContaining([
+        "run.created",
+        "message.created",
+        "pipeline.created",
+        "run.updated"
+      ])
+    );
+    const conversationCount = store.conversationCount();
+    try {
+      store.createChatRun(runId, "Duplicate");
+      throw new Error("Expected duplicate run creation to fail");
+    } catch (error) {
+      expect(error).toMatchObject({
+        message: "Conversation run ID already exists",
+        statusCode: 409
+      });
+    }
+    expect(store.conversationCount()).toBe(conversationCount);
+  });
+
+  it("prevents late completion from overwriting cancellation", () => {
+    store = new VoxMeshStore(":memory:");
+    const runId = "22222222-2222-4222-8222-222222222222";
+    const run = store.createChatRun(runId, "Cancel this run");
+
+    const cancelled = store.cancelChatRun(runId);
+    const lateCompletion = store.completeChatRun({
+      runId,
+      messages: [{ role: "assistant", content: "Too late" }],
+      events: []
+    });
+
+    expect(cancelled).toMatchObject({
+      transitioned: true,
+      run: { status: "cancelled", errorCode: "RUN_CANCELLED" }
+    });
+    expect(lateCompletion).toMatchObject({
+      transitioned: false,
+      run: { status: "cancelled" }
+    });
+    expect(store.getConversation(run.conversationId)?.messages).toHaveLength(1);
+  });
+
+  it("marks interrupted runs as failed after restart", () => {
+    const directory = mkdtempSync(join(tmpdir(), "voxmesh-runs-"));
+    const databasePath = join(directory, "voxmesh.sqlite");
+    try {
+      store = new VoxMeshStore(databasePath);
+      const runId = "33333333-3333-4333-8333-333333333333";
+      store.createChatRun(runId, "Interrupted run");
+      store.close();
+      store = new VoxMeshStore(databasePath);
+
+      const restartedRun = store.getConversationRun(runId);
+      expect(restartedRun).toMatchObject({
+        status: "failed",
+        errorCode: "SERVER_RESTARTED"
+      });
+      expect(typeof restartedRun.completedAt).toBe("string");
+      expect(typeof restartedRun.durationMs).toBe("number");
+    } finally {
+      store?.close();
+      store = undefined;
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("migrates legacy messages and pipeline events without losing data", () => {
+    const directory = mkdtempSync(join(tmpdir(), "voxmesh-migration-"));
+    const databasePath = join(directory, "voxmesh.sqlite");
+    try {
+      store = new VoxMeshStore(databasePath);
+      const conversationId = store.createConversation("Legacy message");
+      store.addPipelineEvent({
+        conversationId,
+        stage: "AGENT",
+        status: "completed",
+        message: "Legacy event"
+      });
+      store.close();
+      store = undefined;
+
+      const database = new Database(databasePath);
+      database.pragma("foreign_keys = OFF");
+      database.exec(`
+        DROP INDEX idx_messages_run;
+        DROP INDEX idx_conversation_events_run;
+        DROP INDEX idx_conversation_runs_conversation;
+        DROP TABLE conversation_runs;
+
+        ALTER TABLE messages RENAME TO messages_current;
+        CREATE TABLE messages (
+          id TEXT PRIMARY KEY,
+          conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+          role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'tool')),
+          content TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        );
+        INSERT INTO messages (id, conversation_id, role, content, created_at)
+        SELECT id, conversation_id, role, content, created_at
+        FROM messages_current;
+        DROP TABLE messages_current;
+
+        ALTER TABLE conversation_events RENAME TO conversation_events_current;
+        CREATE TABLE conversation_events (
+          id TEXT PRIMARY KEY,
+          conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+          stage TEXT NOT NULL CHECK (stage IN ('STT', 'AGENT', 'MCP', 'TTS')),
+          status TEXT NOT NULL CHECK (status IN ('completed', 'failed')),
+          message TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        );
+        INSERT INTO conversation_events (
+          id, conversation_id, stage, status, message, created_at
+        )
+        SELECT id, conversation_id, stage, status, message, created_at
+        FROM conversation_events_current;
+        DROP TABLE conversation_events_current;
+      `);
+      database.close();
+
+      store = new VoxMeshStore(databasePath);
+      const detail = store.getConversation(conversationId);
+
+      expect(detail?.messages).toEqual([
+        expect.objectContaining({
+          role: "user",
+          runId: null,
+          content: "Legacy message"
+        })
+      ]);
+      expect(detail?.events).toEqual([
+        expect.objectContaining({
+          runId: null,
+          correlationId: null,
+          durationMs: null,
+          status: "completed",
+          message: "Legacy event"
+        })
+      ]);
+      expect(detail?.runs).toEqual([]);
+    } finally {
+      store?.close();
+      store = undefined;
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it("allows deleting an inactive seeded route without recreating it", () => {
@@ -604,3 +836,4 @@ function routeInput(
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import Database from "better-sqlite3";

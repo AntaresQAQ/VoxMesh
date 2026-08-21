@@ -2,7 +2,7 @@ export type MessageRole = "user" | "assistant" | "tool";
 export type LogCategory = "AGENT" | "MCP" | "AUTH" | "SYSTEM" | "ERROR";
 export type LogLevel = "INFO" | "WARN" | "ERROR";
 export type PipelineStage = "STT" | "AGENT" | "MCP" | "TTS";
-export type PipelineStatus = "completed" | "failed";
+export type PipelineStatus = "started" | "completed" | "failed" | "cancelled";
 
 export interface AgentMessage {
   role: MessageRole;

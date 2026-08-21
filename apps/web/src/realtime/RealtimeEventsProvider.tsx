@@ -170,8 +170,12 @@ function applyRealtimeEvent(
     }
     return;
   }
+  const conversationId =
+    event.type === "run.created" || event.type === "run.updated"
+      ? event.payload.run.conversationId
+      : event.payload.conversationId;
   void queryClient.invalidateQueries({ queryKey: queryKeys.conversations });
   void queryClient.invalidateQueries({
-    queryKey: queryKeys.conversation(event.payload.conversationId)
+    queryKey: queryKeys.conversation(conversationId)
   });
 }

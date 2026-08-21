@@ -28,6 +28,7 @@ export class AzureOpenAiProvider implements LlmProvider {
   public async complete(input: {
     messages: AgentMessage[];
     tools: ToolDefinition[];
+    signal?: AbortSignal;
   }): Promise<LlmResponse> {
     const response = await this.fetcher(this.url(), {
       method: "POST",
@@ -35,7 +36,8 @@ export class AzureOpenAiProvider implements LlmProvider {
         "api-key": this.config.apiKey,
         "content-type": "application/json"
       },
-      body: JSON.stringify(createOpenAiChatBody(input))
+      body: JSON.stringify(createOpenAiChatBody(input)),
+      ...(input.signal ? { signal: input.signal } : {})
     });
 
     if (!response.ok) {

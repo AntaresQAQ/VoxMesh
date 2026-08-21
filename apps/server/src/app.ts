@@ -10,12 +10,18 @@ import Fastify, {
   type FastifyRequest
 } from "fastify";
 
-import { MockMcpServer, NativeVoiceRuntime } from "@voxmesh/agent-core";
+import {
+  MockMcpServer,
+  NativeVoiceRuntime,
+  type LlmProvider,
+  type McpServer
+} from "@voxmesh/agent-core";
 import {
   ApiErrorSchema,
   ActiveRuntimeRouteUpdateSchema,
   ChatRequestSchema,
   ChatResponseSchema,
+  ConversationRunSchema,
   ConversationDetailSchema,
   ConversationListSchema,
   DashboardSchema,
@@ -34,6 +40,7 @@ import {
 import { VoxMeshStore } from "@voxmesh/storage";
 
 import type { ServerConfig } from "./config.js";
+import { ActiveRunRegistry } from "./active-run-registry.js";
 import { ConversationService } from "./conversation-service.js";
 import { createLlmProvider } from "./llm-providers.js";
 import { LoginRateLimiter } from "./login-rate-limiter.js";
@@ -62,6 +69,8 @@ export interface AppDependencies {
   eventHeartbeatMs?: number;
   eventMaxClients?: number;
   eventMaxBufferedBytes?: number;
+  mcp?: McpServer;
+  createLlm?: (routeId?: string) => LlmProvider;
 }
 
 export async function buildServer(
@@ -75,11 +84,13 @@ export async function buildServer(
   }).withTypeProvider<TypeBoxTypeProvider>();
   const store =
     dependencies.store ?? new VoxMeshStore(dependencies.config.databasePath);
-  const mcp = new MockMcpServer();
+  const mcp = dependencies.mcp ?? new MockMcpServer();
   const conversationService = new ConversationService(
     store,
     mcp,
-    (routeId) => createLlmProvider(store.getRuntimeLlmConfiguration(routeId)),
+    dependencies.createLlm ??
+      ((routeId) =>
+        createLlmProvider(store.getRuntimeLlmConfiguration(routeId))),
     (routeId) =>
       createSpeechToTextProvider(store.getRuntimeSpeechConfiguration(routeId)),
     (routeId) =>
@@ -87,6 +98,7 @@ export async function buildServer(
     createNativeVoiceProvider
   );
   const loginRateLimiter = new LoginRateLimiter();
+  const activeRuns = new ActiveRunRegistry();
   const startedAt = Date.now();
   const eventHub = new RealtimeEventHub(dependencies.eventBufferCapacity);
   const unsubscribeObservability = store.subscribeObservability((event) =>
@@ -733,11 +745,90 @@ export async function buildServer(
         body: ChatRequestSchema,
         response: {
           200: ChatResponseSchema,
-          401: ApiErrorSchema
+          401: ApiErrorSchema,
+          409: ApiErrorSchema
         }
       }
     },
-    async (request) => conversationService.runText(request.body.message)
+    async (request, reply) => {
+      const run = conversationService.startTextRun(
+        request.body.runId,
+        request.body.message
+      );
+      const controller = activeRuns.start(run.id);
+      if (store.getConversationRun(run.id).status !== "in_progress") {
+        activeRuns.cancel(run.id);
+      }
+      const cancel = () => {
+        const cancelled = store.cancelChatRun(run.id);
+        if (cancelled.transitioned) activeRuns.cancel(run.id);
+      };
+      const cancelOnDisconnect = () => {
+        if (!reply.raw.writableEnded) cancel();
+      };
+      reply.raw.once("close", cancelOnDisconnect);
+      try {
+        return await conversationService.executeTextRun(
+          run,
+          request.body.message,
+          controller.signal
+        );
+      } catch (error) {
+        if (error instanceof Error && error.name === "AgentRunCancelledError") {
+          return reply.status(409).send({
+            error: {
+              code: "RUN_CANCELLED",
+              message: "Conversation run was cancelled",
+              requestId: request.id
+            }
+          });
+        }
+        throw error;
+      } finally {
+        reply.raw.off("close", cancelOnDisconnect);
+        activeRuns.finish(run.id, controller);
+      }
+    }
+  );
+
+  app.get(
+    "/api/chat/runs/:runId",
+    {
+      preHandler: authenticate,
+      schema: {
+        params: Type.Object({
+          runId: Type.String({ format: "uuid" })
+        }),
+        response: {
+          200: ConversationRunSchema,
+          401: ApiErrorSchema,
+          404: ApiErrorSchema
+        }
+      }
+    },
+    async (request) => store.getConversationRun(request.params.runId)
+  );
+
+  app.post(
+    "/api/chat/runs/:runId/cancel",
+    {
+      preHandler: authenticate,
+      schema: {
+        params: Type.Object({
+          runId: Type.String({ format: "uuid" })
+        }),
+        response: {
+          200: ConversationRunSchema,
+          401: ApiErrorSchema,
+          404: ApiErrorSchema
+        }
+      }
+    },
+    async (request) => {
+      const result = store.cancelChatRun(request.params.runId);
+      if (result.transitioned) activeRuns.cancel(request.params.runId);
+      return result.run;
+    }
   );
 
   app.post(

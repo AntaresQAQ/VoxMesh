@@ -14,13 +14,18 @@ export interface LlmProvider {
   complete(input: {
     messages: AgentMessage[];
     tools: ToolDefinition[];
+    signal?: AbortSignal;
   }): Promise<LlmResponse>;
 }
 
 export interface McpServer {
   readonly name: string;
-  listTools(): Promise<ToolDefinition[]>;
-  callTool(name: string, arguments_: Record<string, unknown>): Promise<unknown>;
+  listTools(signal?: AbortSignal): Promise<ToolDefinition[]>;
+  callTool(
+    name: string,
+    arguments_: Record<string, unknown>,
+    signal?: AbortSignal
+  ): Promise<unknown>;
 }
 
 export interface AgentEvent {
@@ -34,4 +39,17 @@ export interface AgentRunResult {
   usedTools: string[];
   events: AgentEvent[];
   transcript: AgentMessage[];
+}
+
+export class AgentRunCancelledError extends Error {
+  public readonly code = "RUN_CANCELLED";
+
+  public constructor() {
+    super("Agent run cancelled");
+    this.name = "AgentRunCancelledError";
+  }
+}
+
+export function throwIfAgentRunCancelled(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new AgentRunCancelledError();
 }
