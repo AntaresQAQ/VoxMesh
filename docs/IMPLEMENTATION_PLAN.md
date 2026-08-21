@@ -23,18 +23,18 @@ Recent merged milestones:
 
 ### Phase Status
 
-| Phase | Scope                            | Status                                 |
-| ----- | -------------------------------- | -------------------------------------- |
-| 1     | Project skeleton and secure base | Complete                               |
-| 2     | Agent Core and Mock pipeline     | Complete                               |
-| 3     | Web Console                      | In progress: closeout evidence remains |
-| 4     | Buffered real AI providers       | Implemented; live acceptance pending   |
-| 5     | Full-chain streaming voice       | Planned; requires Phase 4 acceptance   |
-| 6     | Cross-platform audio devices     | Planned; requires Phase 5 acceptance   |
-| 7     | Offline wake word                | Planned; requires Phase 6 acceptance   |
-| 8     | Generic third-party MCP          | Planned; requires Phase 7 acceptance   |
-| 9     | Scripted deployment and NanoPi   | Planned; requires Phase 8 acceptance   |
-| Gate  | Final MVP acceptance and release | Pending                                |
+| Phase | Scope                            | Status                               |
+| ----- | -------------------------------- | ------------------------------------ |
+| 1     | Project skeleton and secure base | Complete                             |
+| 2     | Agent Core and Mock pipeline     | Complete                             |
+| 3     | Web Console                      | Complete                             |
+| 4     | Buffered real AI providers       | Implemented; live acceptance pending |
+| 5     | Full-chain streaming voice       | Planned; requires Phase 4 acceptance |
+| 6     | Cross-platform audio devices     | Planned; requires Phase 5 acceptance |
+| 7     | Offline wake word                | Planned; requires Phase 6 acceptance |
+| 8     | Generic third-party MCP          | Planned; requires Phase 7 acceptance |
+| 9     | Scripted deployment and NanoPi   | Planned; requires Phase 8 acceptance |
+| Gate  | Final MVP acceptance and release | Pending                              |
 
 ### Completed foundation and vertical slices
 
@@ -122,7 +122,7 @@ Recent merged milestones:
       and complete in-progress/failed/cancelled states
 - [x] Dashboard device and physical-audio status with explicit unavailable,
       stale, degraded, and failed states
-- [ ] remaining Phase 3 failure/recovery, locale, theme, keyboard, zoom, and
+- [x] remaining Phase 3 failure/recovery, locale, theme, keyboard, zoom, and
       accessibility evidence
 
 The executable scope, PR split, acceptance criteria, and exclusions are defined
@@ -185,16 +185,14 @@ verified, activation must continue to reject routes that request streaming.
 
 ### Next execution order
 
-1. Close the remaining Phase 3 Web Console, end-to-end, and manual
-   accessibility evidence.
-2. Complete the Phase 4 opt-in live-provider acceptance gate.
-3. Implement Phase 5 capability-gated full-chain Streaming STT/Chat LLM/TTS.
-4. Implement Phase 6 cross-platform audio devices.
-5. Implement Phase 7 offline wake-word detection.
-6. Implement Phase 8 generic third-party MCP and the full MCP Console.
-7. Implement Phase 9 scripted deployment, backup, rollback, and NanoPi
+1. Complete the Phase 4 opt-in live-provider acceptance gate.
+2. Implement Phase 5 capability-gated full-chain Streaming STT/Chat LLM/TTS.
+3. Implement Phase 6 cross-platform audio devices.
+4. Implement Phase 7 offline wake-word detection.
+5. Implement Phase 8 generic third-party MCP and the full MCP Console.
+6. Implement Phase 9 scripted deployment, backup, rollback, and NanoPi
    qualification.
-8. Complete the Final MVP Acceptance Gate.
+7. Complete the Final MVP Acceptance Gate.
 
 ## 1. Current State and Approach
 
@@ -203,15 +201,16 @@ implemented buffered real-provider adapters, protected Runtime Routing,
 real-time observability, durable Chat lifecycle and continuity,
 platform-independent device-status foundations, and a bilingual Web Console
 with representative accessibility automation. The implementation is
-intentionally incomplete: Phase 3 closeout evidence, live-provider
-qualification, application-level voice streaming, physical audio, Wake Word,
-third-party MCP, scripted deployment, and final hardware qualification remain.
+intentionally incomplete: live-provider qualification, application-level voice
+streaming, physical audio, Wake Word, third-party MCP, scripted deployment, and
+final hardware qualification remain.
 
 The implementation follows the nine phases defined in the MVP specification
 while preserving a platform-independent Agent Core. Some provider work was
-delivered before all Phase 3 acceptance items; the next work completes the
-Phase 3 closeout matrix before the separately gated live-provider, streaming,
-physical-audio, Wake Word, third-party MCP, and deployment phases.
+delivered before all Phase 3 acceptance items. Phase 3 is now closed through
+deterministic failure/recovery fixtures, the expanded browser matrix, and
+documented remaining release-only manual checks. The next work is the
+separately gated Phase 4 live-provider acceptance.
 Every behavior-changing work package remains gated by explicit user
 confirmation.
 

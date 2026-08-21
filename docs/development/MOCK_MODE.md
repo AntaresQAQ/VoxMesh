@@ -147,28 +147,43 @@ Unsupported browsers and permission failures are shown as accessible errors.
 
 ### End-to-end
 
-Playwright injects deterministic fake `getUserMedia` and `MediaRecorder` implementations. The browser test verifies:
+Playwright injects deterministic fake browser media implementations and uses
+test-local HTTP and WebSocket interception. No production API or environment
+switch enables these fixtures.
+
+The browser test verifies:
 
 - start recording
 - stop recording
+- microphone permission denial and recovery
 - Mock Voice request
 - transcript and assistant response
 - enabled playback control
 - conversation pipeline display
+- initial Chat provider failure, durable URL recovery, refresh, and Retry
+- cancellation and completion races
+- Dashboard partial failure while device status remains visible
+- ready, unavailable, stale, degraded, and failed device states
 - accessibility axe scans
 - authenticated live log delivery without refresh
+- event-stream replay gap and process-restart snapshot recovery
 - URL-backed log category and severity filters
 - event-stream replay connection status
+- English and Simplified Chinese representative routes
+- Light, Dark, and System themes
+- narrow and 200%-zoom-equivalent viewport overflow checks
 
 ## 8. Extending Mock Mode
 
-New failure scenarios should remain deterministic and configurable. Useful future scenarios include:
+Test-only failure fixtures are implemented in
+`tests/e2e/phase3-fixtures.ts` and page-local route interception. They must
+remain deterministic, bounded, and unavailable to production code.
 
-- microphone permission denied
+Useful future scenarios include:
+
 - empty recording
 - audio size limit exceeded
 - STT timeout or failure
-- LLM failure
 - MCP failure
 - TTS failure
 - playback failure
