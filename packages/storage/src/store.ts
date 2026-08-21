@@ -406,14 +406,6 @@ export class VoxMeshStore {
   }
 
   public createChatRun(runId: string, userMessage: string): ConversationRun {
-    const existing = this.database
-      .prepare("SELECT 1 FROM conversation_runs WHERE id = ?")
-      .get(runId);
-    if (existing) {
-      throw Object.assign(new Error("Conversation run ID already exists"), {
-        statusCode: 409
-      });
-    }
     const conversationId = randomUUID();
     const correlationId = randomUUID();
     const startedAt = new Date().toISOString();
@@ -431,15 +423,21 @@ export class VoxMeshStore {
           startedAt,
           startedAt
         );
-      this.database
+      const inserted = this.database
         .prepare(
           `INSERT INTO conversation_runs (
              id, conversation_id, kind, status, correlation_id,
              input_message_id, retry_of_run_id, started_at, completed_at,
              duration_ms, error_code
-           ) VALUES (?, ?, 'chat', 'in_progress', ?, NULL, NULL, ?, NULL, NULL, NULL)`
+           ) VALUES (?, ?, 'chat', 'in_progress', ?, NULL, NULL, ?, NULL, NULL, NULL)
+           ON CONFLICT(id) DO NOTHING`
         )
         .run(runId, conversationId, correlationId, startedAt);
+      if (inserted.changes !== 1) {
+        throw Object.assign(new Error("Conversation run ID already exists"), {
+          statusCode: 409
+        });
+      }
       message = this.insertMessage(
         conversationId,
         "user",

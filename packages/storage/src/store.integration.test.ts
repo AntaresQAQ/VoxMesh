@@ -228,9 +228,17 @@ describe("VoxMeshStore", () => {
         "run.updated"
       ])
     );
-    expect(() => store?.createChatRun(runId, "Duplicate")).toThrow(
-      "already exists"
-    );
+    const conversationCount = store.conversationCount();
+    try {
+      store.createChatRun(runId, "Duplicate");
+      throw new Error("Expected duplicate run creation to fail");
+    } catch (error) {
+      expect(error).toMatchObject({
+        message: "Conversation run ID already exists",
+        statusCode: 409
+      });
+    }
+    expect(store.conversationCount()).toBe(conversationCount);
   });
 
   it("prevents late completion from overwriting cancellation", () => {
