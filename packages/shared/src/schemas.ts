@@ -121,6 +121,71 @@ export const LogListSchema = Type.Object({
   logs: Type.Array(LogEntrySchema)
 });
 
+export const RealtimeEventSchema = Type.Union([
+  Type.Object({
+    version: Type.Literal(1),
+    streamId: Type.String(),
+    sequence: Type.Integer({ minimum: 1 }),
+    eventId: Type.String(),
+    emittedAt: Type.String({ format: "date-time" }),
+    type: Type.Literal("log.created"),
+    payload: Type.Object({
+      log: LogEntrySchema
+    })
+  }),
+  Type.Object({
+    version: Type.Literal(1),
+    streamId: Type.String(),
+    sequence: Type.Integer({ minimum: 1 }),
+    eventId: Type.String(),
+    emittedAt: Type.String({ format: "date-time" }),
+    type: Type.Literal("pipeline.created"),
+    payload: Type.Object({
+      conversationId: Type.String(),
+      event: PipelineEventSchema
+    })
+  })
+]);
+
+export const EventStreamMessageSchema = Type.Union([
+  Type.Object({
+    version: Type.Literal(1),
+    type: Type.Literal("stream.ready"),
+    streamId: Type.String(),
+    latestSequence: Type.Integer({ minimum: 0 }),
+    oldestAvailableSequence: Type.Union([
+      Type.Integer({ minimum: 1 }),
+      Type.Null()
+    ])
+  }),
+  Type.Object({
+    version: Type.Literal(1),
+    type: Type.Literal("stream.event"),
+    event: RealtimeEventSchema
+  }),
+  Type.Object({
+    version: Type.Literal(1),
+    type: Type.Literal("stream.gap"),
+    streamId: Type.String(),
+    requestedAfter: Type.Integer({ minimum: 0 }),
+    oldestAvailableSequence: Type.Integer({ minimum: 1 }),
+    latestSequence: Type.Integer({ minimum: 1 })
+  }),
+  Type.Object({
+    version: Type.Literal(1),
+    type: Type.Literal("stream.heartbeat"),
+    streamId: Type.String(),
+    emittedAt: Type.String({ format: "date-time" }),
+    latestSequence: Type.Integer({ minimum: 0 })
+  }),
+  Type.Object({
+    version: Type.Literal(1),
+    type: Type.Literal("stream.error"),
+    code: Type.String(),
+    message: Type.String()
+  })
+]);
+
 export const LlmModeSchema = Type.Union([
   Type.Literal("mock"),
   Type.Literal("azure-openai"),
@@ -282,6 +347,8 @@ export type ConversationDetail = Static<typeof ConversationDetailSchema>;
 export type PipelineEvent = Static<typeof PipelineEventSchema>;
 export type VoiceResponse = Static<typeof VoiceResponseSchema>;
 export type LogEntry = Static<typeof LogEntrySchema>;
+export type RealtimeEvent = Static<typeof RealtimeEventSchema>;
+export type EventStreamMessage = Static<typeof EventStreamMessageSchema>;
 export type LlmMode = Static<typeof LlmModeSchema>;
 export type SpeechProviderMode = Static<typeof SpeechProviderModeSchema>;
 export type VoicePipelineMode = Static<typeof VoicePipelineModeSchema>;

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -178,11 +178,14 @@ describe("feature pages", () => {
         createdAt: "2026-08-19T00:00:00.000Z"
       }
     ]);
-    renderWithProviders(<LogsPage />);
+    renderWithProviders(<LogsPage onFiltersChange={vi.fn()} />);
 
-    expect(await screen.findByText("Test log message")).toBeVisible();
-    expect(screen.getByText("Authentication")).toBeVisible();
-    expect(screen.getByText("Warning")).toBeVisible();
+    const log = (await screen.findByText("Test log message")).closest(
+      "article"
+    );
+    if (!log) throw new Error("Expected a log article");
+    expect(within(log).getByText("Authentication")).toBeVisible();
+    expect(within(log).getByText("Warning")).toBeVisible();
     await waitFor(() => expect(apiClient.logs).toHaveBeenCalledOnce());
   });
 });

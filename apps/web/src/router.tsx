@@ -21,6 +21,10 @@ import { ConversationDetailPage } from "./features/conversations/ConversationDet
 import { ConversationsPage } from "./features/conversations/ConversationsPage.js";
 import { DashboardPage } from "./features/dashboard/DashboardPage.js";
 import { LogsPage } from "./features/logs/LogsPage.js";
+import type {
+  LogCategoryFilter,
+  LogLevelFilter
+} from "./features/logs/LogsPage.js";
 import { SettingsPage } from "./features/settings/SettingsPage.js";
 import type { SettingsSection } from "./features/settings/SettingsSectionNav.js";
 import { useI18n } from "./i18n/i18n.js";
@@ -138,7 +142,11 @@ const conversationDetailRoute = createRoute({
 const logsRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: "/logs",
-  component: LogsPage
+  validateSearch: (search: Record<string, unknown>) => ({
+    category: logCategory(search.category),
+    level: logLevel(search.level)
+  }),
+  component: LogsRoute
 });
 const settingsRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
@@ -248,6 +256,24 @@ function SettingsRoute() {
   );
 }
 
+function LogsRoute() {
+  const navigate = useNavigate();
+  const search = logsRoute.useSearch();
+  return (
+    <LogsPage
+      {...(search.category ? { category: search.category } : {})}
+      {...(search.level ? { level: search.level } : {})}
+      onFiltersChange={(category, level) => {
+        void navigate({
+          to: "/logs",
+          search: { category, level },
+          replace: true
+        });
+      }}
+    />
+  );
+}
+
 function NotFoundPage() {
   const { t } = useI18n();
   const pathname = useRouterState({
@@ -299,6 +325,24 @@ function safeReturnTo(value: string): string {
 
 function settingsSection(value: unknown): SettingsSection {
   return value === "providers" || value === "security" ? value : "general";
+}
+
+function logCategory(
+  value: unknown
+): Exclude<LogCategoryFilter, "ALL"> | undefined {
+  return value === "AGENT" ||
+    value === "MCP" ||
+    value === "AUTH" ||
+    value === "SYSTEM" ||
+    value === "ERROR"
+    ? value
+    : undefined;
+}
+
+function logLevel(value: unknown): Exclude<LogLevelFilter, "ALL"> | undefined {
+  return value === "INFO" || value === "WARN" || value === "ERROR"
+    ? value
+    : undefined;
 }
 
 function routeTitle(pathname: string, t: ReturnType<typeof useI18n>["t"]) {

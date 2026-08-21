@@ -141,9 +141,20 @@ const DEFAULT_VOICE_CONFIGURATION: StoredVoicePipelineConfiguration = {
   nativeProviderId: "mock-native"
 };
 
+export type StorageObservabilityEvent =
+  | { type: "log.created"; log: LogEntry }
+  | {
+      type: "pipeline.created";
+      conversationId: string;
+      event: PipelineEvent;
+    };
+
 export class VoxMeshStore {
   private readonly database: Database.Database;
   private readonly runtimeRouting: RuntimeRoutingStore;
+  private readonly observabilityListeners = new Set<
+    (event: StorageObservabilityEvent) => void
+  >();
 
   public constructor(path: string) {
     if (path !== ":memory:") {
@@ -432,18 +443,30 @@ export class VoxMeshStore {
     status: PipelineStatus;
     message: string;
   }): void {
+    const event: PipelineEvent = {
+      id: randomUUID(),
+      stage: input.stage,
+      status: input.status,
+      message: redactObservabilityText(input.message),
+      createdAt: new Date().toISOString()
+    };
     this.database
       .prepare(
         "INSERT INTO conversation_events (id, conversation_id, stage, status, message, created_at) VALUES (?, ?, ?, ?, ?, ?)"
       )
       .run(
-        randomUUID(),
+        event.id,
         input.conversationId,
-        input.stage,
-        input.status,
-        input.message,
-        new Date().toISOString()
+        event.stage,
+        event.status,
+        event.message,
+        event.createdAt
       );
+    this.emitObservabilityEvent({
+      type: "pipeline.created",
+      conversationId: input.conversationId,
+      event
+    });
   }
 
   public addLog(input: {
@@ -452,18 +475,39 @@ export class VoxMeshStore {
     message: string;
     conversationId?: string;
   }): void {
+    const log: LogEntry = {
+      id: randomUUID(),
+      category: input.category,
+      level: input.level,
+      message: redactObservabilityText(input.message),
+      conversationId: input.conversationId ?? null,
+      createdAt: new Date().toISOString()
+    };
     this.database
       .prepare(
         "INSERT INTO logs (id, category, level, message, conversation_id, created_at) VALUES (?, ?, ?, ?, ?, ?)"
       )
       .run(
-        randomUUID(),
-        input.category,
-        input.level,
-        input.message,
-        input.conversationId ?? null,
-        new Date().toISOString()
+        log.id,
+        log.category,
+        log.level,
+        log.message,
+        log.conversationId,
+        log.createdAt
       );
+    this.emitObservabilityEvent({ type: "log.created", log });
+  }
+
+  /**
+   * Subscribes to already-persisted safe observability events.
+   *
+   * Listener failures are isolated from successful database writes.
+   */
+  public subscribeObservability(
+    listener: (event: StorageObservabilityEvent) => void
+  ): () => void {
+    this.observabilityListeners.add(listener);
+    return () => this.observabilityListeners.delete(listener);
   }
 
   public listLogs(limit = 200): LogEntry[] {
@@ -630,6 +674,96 @@ export class VoxMeshStore {
       );
     }
   }
+
+  private emitObservabilityEvent(event: StorageObservabilityEvent): void {
+    for (const listener of this.observabilityListeners) {
+      try {
+        listener(event);
+      } catch (error) {
+        console.error("Storage observability listener failed", error);
+      }
+    }
+  }
+}
+
+function redactObservabilityText(value: string): string {
+  const structured = redactStructuredJson(value);
+  if (structured !== null) return structured;
+  return redactObservabilityTextValue(value);
+}
+
+function redactObservabilityTextValue(value: string): string {
+  return value
+    .replace(
+      /(["'])(authorization|api[-_ ]?key|token|secret)\1(\s*:\s*)(["'])[^"']*\4/gi,
+      redactQuotedCredential
+    )
+    .replace(/\bAuthorization\s*[:=]\s*[^\r\n]*/gi, "Authorization: [REDACTED]")
+    .replace(/\bBearer\s+\S+/gi, "Bearer [REDACTED]")
+    .replace(
+      /\b(authorization|api[-_ ]?key|token|secret)\b(\s*[:=]\s*)[^\s,;]+/gi,
+      "$1$2[REDACTED]"
+    )
+    .replace(/([?&])([a-z0-9_-]+)=([^&\s]+)/gi, redactSensitiveQueryParameter);
+}
+
+function redactSensitiveQueryParameter(
+  match: string,
+  prefix: string,
+  key: string
+): string {
+  return isSensitiveObservabilityKey(key)
+    ? `${prefix}${key}=[REDACTED]`
+    : match;
+}
+
+function redactStructuredJson(value: string): string | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    return null;
+  }
+  if (parsed === null || typeof parsed !== "object") return null;
+  return JSON.stringify(redactStructuredValue(parsed));
+}
+
+function redactStructuredValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(redactStructuredValue);
+  if (typeof value === "string") return redactObservabilityTextValue(value);
+  if (value === null || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([key, entry]) => [
+      key,
+      isSensitiveObservabilityKey(key)
+        ? "[REDACTED]"
+        : redactStructuredValue(entry)
+    ])
+  );
+}
+
+function isSensitiveObservabilityKey(key: string): boolean {
+  const normalized = key.toLowerCase().replaceAll(/[-_ ]/g, "");
+  return (
+    normalized.endsWith("authorization") ||
+    normalized.endsWith("apikey") ||
+    normalized.endsWith("accesskey") ||
+    normalized.endsWith("privatekey") ||
+    normalized.endsWith("token") ||
+    normalized.endsWith("secret") ||
+    normalized.endsWith("password") ||
+    normalized.endsWith("credential")
+  );
+}
+
+function redactQuotedCredential(
+  _match: string,
+  keyQuote: string,
+  key: string,
+  separator: string,
+  valueQuote: string
+): string {
+  return `${keyQuote}${key}${keyQuote}${separator}${valueQuote}[REDACTED]${valueQuote}`;
 }
 
 function mapConversation(row: ConversationRow): ConversationSummary {

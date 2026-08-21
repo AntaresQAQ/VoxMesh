@@ -38,6 +38,8 @@ import { ConversationService } from "./conversation-service.js";
 import { createLlmProvider } from "./llm-providers.js";
 import { LoginRateLimiter } from "./login-rate-limiter.js";
 import { createNativeVoiceProvider } from "./native-voice-providers.js";
+import { RealtimeEventHub } from "./realtime-event-hub.js";
+import { registerRealtimeEventStream } from "./realtime-event-stream.js";
 import {
   createSessionToken,
   hashPassword,
@@ -56,6 +58,10 @@ const SESSION_COOKIE = "voxmesh_session";
 export interface AppDependencies {
   config: ServerConfig;
   store?: VoxMeshStore;
+  eventBufferCapacity?: number;
+  eventHeartbeatMs?: number;
+  eventMaxClients?: number;
+  eventMaxBufferedBytes?: number;
 }
 
 export async function buildServer(
@@ -82,8 +88,26 @@ export async function buildServer(
   );
   const loginRateLimiter = new LoginRateLimiter();
   const startedAt = Date.now();
+  const eventHub = new RealtimeEventHub(dependencies.eventBufferCapacity);
+  const unsubscribeObservability = store.subscribeObservability((event) =>
+    eventHub.publish(event)
+  );
 
   await app.register(fastifyCookie);
+  const eventStream = registerRealtimeEventStream({
+    app,
+    store,
+    hub: eventHub,
+    ...(dependencies.eventHeartbeatMs
+      ? { heartbeatMs: dependencies.eventHeartbeatMs }
+      : {}),
+    ...(dependencies.eventMaxClients
+      ? { maxClients: dependencies.eventMaxClients }
+      : {}),
+    ...(dependencies.eventMaxBufferedBytes
+      ? { maxBufferedBytes: dependencies.eventMaxBufferedBytes }
+      : {})
+  });
   app.addContentTypeParser(
     /^audio\/.+/,
     { parseAs: "buffer", bodyLimit: 5 * 1024 * 1024 },
@@ -95,6 +119,10 @@ export async function buildServer(
     (_request, body, done) => done(null, body)
   );
 
+  app.addHook("preClose", async () => {
+    eventStream.close();
+    unsubscribeObservability();
+  });
   app.addHook("onClose", async () => {
     if (!dependencies.store) {
       store.close();

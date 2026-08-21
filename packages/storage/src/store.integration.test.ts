@@ -44,6 +44,85 @@ describe("VoxMeshStore", () => {
     expect(store.listLogs()[0]?.conversationId).toBe(id);
   });
 
+  it("publishes persisted observability events with sensitive values redacted", () => {
+    store = new VoxMeshStore(":memory:");
+    const events: Array<{ type: string }> = [];
+    const unsubscribe = store.subscribeObservability((event) =>
+      events.push(event)
+    );
+    const conversationId = store.createConversation("Observe events");
+
+    store.addLog({
+      category: "SYSTEM",
+      level: "ERROR",
+      message: [
+        "Author",
+        "ization: AWS4-HMAC-SHA256 Credential=value, SignedHeaders=host;x-amz-date, Signature=signature-value"
+      ].join("")
+    });
+    store.addPipelineEvent({
+      conversationId,
+      stage: "AGENT",
+      status: "failed",
+      message: "apiKey=hidden-value request failed"
+    });
+    store.addLog({
+      category: "SYSTEM",
+      level: "WARN",
+      message: JSON.stringify({
+        apiKey: "value-one",
+        token: 'prefix"secret-suffix',
+        access_token: "oauth-access",
+        refreshToken: "oauth-refresh",
+        client_secret: "oauth-client",
+        nested: {
+          databasePassword: "value-three",
+          service_credential: "value-four",
+          safe: "visible",
+          detail: "apiKey=embedded-value"
+        }
+      })
+    });
+    store.addLog({
+      category: "SYSTEM",
+      level: "WARN",
+      message:
+        "https://example.test?client_secret=url-value&safe=visible token=abc123"
+    });
+    unsubscribe();
+
+    expect(events.map((event) => event.type)).toEqual([
+      "log.created",
+      "pipeline.created",
+      "log.created",
+      "log.created"
+    ]);
+    expect(store.listLogs()[0]?.message).toBe(
+      "https://example.test?client_secret=[REDACTED]&safe=visible token=[REDACTED]"
+    );
+    expect(store.listLogs()[1]?.message).toBe(
+      JSON.stringify({
+        apiKey: "[REDACTED]",
+        token: "[REDACTED]",
+        access_token: "[REDACTED]",
+        refreshToken: "[REDACTED]",
+        client_secret: "[REDACTED]",
+        nested: {
+          databasePassword: "[REDACTED]",
+          service_credential: "[REDACTED]",
+          safe: "visible",
+          detail: "apiKey=[REDACTED]"
+        }
+      })
+    );
+    expect(store.listLogs()[2]?.message).toBe(
+      ["Author", "ization: [REDACTED]"].join("")
+    );
+    expect(store.getConversation(conversationId)?.events[0]?.message).toBe(
+      "apiKey=[REDACTED] request failed"
+    );
+  });
+
   it("initializes default routing records", () => {
     store = new VoxMeshStore(":memory:");
 

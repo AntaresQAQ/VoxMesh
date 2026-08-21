@@ -1,9 +1,11 @@
+import { useCallback } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, Outlet, useNavigate } from "@tanstack/react-router";
 
 import { apiClient } from "./api.js";
 import { useI18n } from "./i18n/i18n.js";
 import { queryKeys } from "./query.js";
+import { RealtimeEventsProvider } from "./realtime/RealtimeEventsProvider.js";
 
 const pages = [
   { to: "/dashboard", key: "nav.dashboard" },
@@ -27,6 +29,14 @@ export function Console() {
       });
     }
   });
+  const handleAuthenticationRequired = useCallback(() => {
+    queryClient.removeQueries({ queryKey: queryKeys.session });
+    void navigate({
+      to: "/login",
+      search: { redirect: null },
+      replace: true
+    });
+  }, [navigate, queryClient]);
 
   return (
     <div className="shell">
@@ -62,7 +72,11 @@ export function Console() {
         </button>
       </aside>
       <main id="main-content" tabIndex={-1}>
-        <Outlet />
+        <RealtimeEventsProvider
+          onAuthenticationRequired={handleAuthenticationRequired}
+        >
+          <Outlet />
+        </RealtimeEventsProvider>
       </main>
     </div>
   );

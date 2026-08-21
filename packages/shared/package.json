@@ -3,7 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "exports": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./event-stream": "./src/event-stream.ts"
+  },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json"
   },
