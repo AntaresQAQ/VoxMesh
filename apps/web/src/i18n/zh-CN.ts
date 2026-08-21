@@ -80,6 +80,10 @@ export const zhCN = {
   "chat.assistant": "助手",
   "chat.tools": "工具：{tools}",
   "chat.failed": "聊天请求失败",
+  "chat.transcript": "会话记录",
+  "chat.newConversation": "新建会话",
+  "chat.retry": "重试",
+  "chat.retrying": "正在重试...",
   "voice.title": "语音测试",
   "voice.description":
     "在浏览器中录音，并通过当前 Runtime Route 运行语音流程。",
@@ -101,6 +105,7 @@ export const zhCN = {
   "conversations.count": "{count} 条消息",
   "conversations.select": "请选择一个会话。",
   "conversations.loadingFailed": "加载失败",
+  "conversations.continueChat": "在聊天中继续",
   "conversations.role.user": "用户",
   "conversations.role.assistant": "助手",
   "conversations.role.tool": "工具",

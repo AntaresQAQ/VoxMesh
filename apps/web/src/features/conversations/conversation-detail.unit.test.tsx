@@ -9,8 +9,24 @@ import { renderWithProviders } from "../../test/render.js";
 import { ConversationDetailPage } from "./ConversationDetailPage.js";
 
 vi.mock("@tanstack/react-router", () => ({
-  Link: ({ children }: { children: ReactNode }) => (
-    <a href="/conversations">{children}</a>
+  Link: ({
+    children,
+    to,
+    search
+  }: {
+    children: ReactNode;
+    to: string;
+    search?: { conversationId: string };
+  }) => (
+    <a
+      href={
+        search
+          ? `${to}?conversationId=${search.conversationId}`
+          : "/conversations"
+      }
+    >
+      {children}
+    </a>
   ),
   useParams: () => ({ conversationId: "conversation-1" })
 }));
@@ -76,5 +92,8 @@ describe("ConversationDetailPage", () => {
       "href",
       "/conversations"
     );
+    expect(
+      screen.getByRole("link", { name: "Continue in Chat" })
+    ).toHaveAttribute("href", "/chat?conversationId=conversation-1");
   });
 });

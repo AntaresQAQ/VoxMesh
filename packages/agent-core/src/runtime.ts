@@ -4,6 +4,7 @@ import {
   AgentRunCancelledError,
   throwIfAgentRunCancelled,
   type AgentEvent,
+  type AgentRunOptions,
   type AgentRunResult,
   type LlmProvider,
   type McpServer
@@ -18,11 +19,14 @@ export class AgentRuntime {
 
   public async run(
     userMessage: string,
-    options: { signal?: AbortSignal } = {}
+    options: AgentRunOptions = {}
   ): Promise<AgentRunResult> {
-    const { signal } = options;
+    const { history = [], signal } = options;
     throwIfAgentRunCancelled(signal);
-    const messages: AgentMessage[] = [{ role: "user", content: userMessage }];
+    const messages: AgentMessage[] = [
+      ...history,
+      { role: "user", content: userMessage }
+    ];
     const events: AgentEvent[] = [
       { category: "AGENT", level: "INFO", message: "Agent run started" }
     ];

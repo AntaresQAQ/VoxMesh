@@ -4,9 +4,10 @@
 
 ## 1. Purpose
 
-VoxMesh currently creates one Conversation for each Chat request and waits for
-the complete Agent result. It does not have a run identity, end-to-end
-cancellation, retry semantics, or multi-turn continuity.
+VoxMesh models Chat as durable multi-turn Conversations with one identifiable
+Conversation Run per processing attempt. Runs support cancellation, retry,
+continuity, correlation, and terminal inspection while the initial transport
+continues to return a complete buffered response.
 
 The implementation is split into two reviewable stages:
 
@@ -31,7 +32,7 @@ Conversation
         └── terminal status
 ```
 
-Planned `conversation_runs` fields:
+`conversation_runs` fields:
 
 | Field              | Purpose                                              |
 | ------------------ | ---------------------------------------------------- |
@@ -98,8 +99,8 @@ Request:
 }
 ```
 
-The first lifecycle PR requires `runId` and continues returning the complete
-buffered response. `conversationId` remains absent until the continuity PR.
+`runId` is required and the endpoint continues returning the complete buffered
+response. `conversationId` is optional; omitting it creates a new Conversation.
 
 Response adds:
 
@@ -202,9 +203,27 @@ After completion, failure, or cancellation, Conversation and Run queries are
 invalidated. The real-time event stream provides prompt UI updates, while HTTP
 queries remain the durable recovery path.
 
+### Retry Run
+
+```text
+POST /api/chat/runs/:runId/retry
+```
+
+Request:
+
+```json
+{
+  "runId": "new-client-generated-uuid"
+}
+```
+
+The path run is the failed or cancelled source attempt. The request `runId`
+identifies the new attempt early enough for cancellation. Completed and
+in-progress source runs fail with `409`.
+
 ## 8. Continuity and Retry Stage
 
-The follow-up PR adds:
+The continuity stage adds:
 
 - optional `conversationId` in Chat requests
 - prior user/assistant message history supplied to Agent Core
@@ -219,6 +238,22 @@ Retry creates a new run with `retry_of_run_id` and reuses the original
 Prior tool messages are not blindly replayed. The initial continuity context
 uses durable user and final assistant messages; provider-specific tool-call
 transcripts remain scoped to their original run.
+
+The Web Console stores the active Conversation in
+`/chat?conversationId=<id>`. Refreshing that URL reloads the durable transcript.
+Conversation Inspector provides a Continue in Chat link. Starting a new
+Conversation clears the URL state without deleting persisted history.
+
+Run creation uses an immediate SQLite transaction and a partial unique index so
+only one `in_progress` run can exist for a Conversation across concurrent
+connections. Connections in one Node.js process share a database owner.
+A second live process cannot open the same database; after a crashed process is
+gone, the next owner reconciles its interrupted runs. A conflicting Send or
+Retry fails explicitly with `409`.
+
+Only the latest failed or cancelled attempt for the latest user turn is
+retryable. Once a retry starts, completes, or a later user turn exists, older
+attempts remain inspectable but cannot append out-of-order assistant history.
 
 ## 9. Failure Behavior
 

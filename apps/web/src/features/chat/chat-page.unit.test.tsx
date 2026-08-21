@@ -60,7 +60,96 @@ describe("ChatPage", () => {
     expect(chat).toHaveBeenCalledWith(
       runId,
       "Check the light status",
-      expect.any(AbortSignal)
+      expect.any(AbortSignal),
+      undefined
+    );
+  });
+
+  it("continues the conversation from the stable Chat URL state", async () => {
+    vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(runId);
+    vi.spyOn(apiClient, "conversation").mockResolvedValue({
+      id: "conversation-1",
+      title: "Existing conversation",
+      messageCount: 2,
+      createdAt: "2026-08-19T00:00:00.000Z",
+      updatedAt: "2026-08-19T00:00:01.000Z",
+      messages: [
+        {
+          id: "message-1",
+          role: "user",
+          runId,
+          content: "Previous question",
+          createdAt: "2026-08-19T00:00:00.000Z"
+        },
+        {
+          id: "message-2",
+          role: "assistant",
+          runId,
+          content: "Previous answer",
+          createdAt: "2026-08-19T00:00:01.000Z"
+        }
+      ],
+      events: [],
+      runs: [run("completed")]
+    });
+    const chat = vi.spyOn(apiClient, "chat").mockResolvedValue({
+      runId,
+      conversationId: "conversation-1",
+      response: "Current answer",
+      usedTools: []
+    });
+    renderWithProviders(<ChatPage conversationId="conversation-1" />);
+
+    expect(await screen.findByText("Previous answer")).toBeVisible();
+    submitMessage("Current question");
+
+    await waitFor(() =>
+      expect(chat).toHaveBeenCalledWith(
+        runId,
+        "Current question",
+        expect.any(AbortSignal),
+        "conversation-1"
+      )
+    );
+  });
+
+  it("retries a cancelled run with a new client run ID", async () => {
+    const retryRunId = "33333333-3333-4333-8333-333333333333";
+    vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(retryRunId);
+    vi.spyOn(apiClient, "conversation").mockResolvedValue({
+      id: "conversation-1",
+      title: "Cancelled conversation",
+      messageCount: 1,
+      createdAt: "2026-08-19T00:00:00.000Z",
+      updatedAt: "2026-08-19T00:00:01.000Z",
+      messages: [
+        {
+          id: "message-1",
+          role: "user",
+          runId,
+          content: "Retry this",
+          createdAt: "2026-08-19T00:00:00.000Z"
+        }
+      ],
+      events: [],
+      runs: [run("cancelled")]
+    });
+    const retry = vi.spyOn(apiClient, "retryChatRun").mockResolvedValue({
+      runId: retryRunId,
+      conversationId: "conversation-1",
+      response: "Retry succeeded",
+      usedTools: []
+    });
+    renderWithProviders(<ChatPage conversationId="conversation-1" />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Retry" }));
+
+    await waitFor(() =>
+      expect(retry).toHaveBeenCalledWith(
+        runId,
+        retryRunId,
+        expect.any(AbortSignal)
+      )
     );
   });
 

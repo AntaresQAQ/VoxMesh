@@ -40,6 +40,43 @@ it("does not publish a message event when conversation creation rolls back", () 
   }
 });
 
+it("rejects a database owned by another live process", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "voxmesh-owner-"));
+  const databasePath = join(directory, "voxmesh.sqlite");
+  const child = spawn(
+    process.execPath,
+    ["-e", "setTimeout(() => undefined, 30000)"],
+    { stdio: "ignore" }
+  );
+  try {
+    await once(child, "spawn");
+    if (!child.pid) throw new Error("Child process did not expose a PID");
+    store = new VoxMeshStore(databasePath);
+    store.close();
+    store = undefined;
+    const database = new Database(databasePath);
+    database
+      .prepare(
+        `INSERT INTO storage_process_owner (
+           id, owner_id, process_id, claimed_at
+         ) VALUES (1, ?, ?, ?)`
+      )
+      .run("external-owner", child.pid, "2026-08-19T00:00:00.000Z");
+    database.close();
+
+    expect(() => new VoxMeshStore(databasePath)).toThrow(
+      "VoxMesh database is active in another process"
+    );
+  } finally {
+    const exited = once(child, "exit");
+    child.kill();
+    await exited;
+    store?.close();
+    store = undefined;
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 describe("VoxMeshStore", () => {
   it("creates an administrator only once", () => {
     store = new VoxMeshStore(":memory:");
@@ -262,6 +299,130 @@ describe("VoxMeshStore", () => {
       run: { status: "cancelled" }
     });
     expect(store.getConversation(run.conversationId)?.messages).toHaveLength(1);
+  });
+
+  it("reuses a conversation and selects only durable prior Chat history", () => {
+    store = new VoxMeshStore(":memory:");
+    const firstRun = store.createChatRun(
+      "66666666-6666-4666-8666-666666666666",
+      "First question"
+    );
+    store.completeChatRun({
+      runId: firstRun.id,
+      messages: [
+        { role: "tool", content: "Internal tool result" },
+        { role: "assistant", content: "First answer" }
+      ],
+      events: []
+    });
+    const secondRun = store.createChatRun(
+      "77777777-7777-4777-8777-777777777777",
+      "Second question",
+      firstRun.conversationId
+    );
+
+    expect(store.getChatContext(secondRun.id)).toEqual({
+      inputMessage: "Second question",
+      history: [
+        { role: "user", content: "First question" },
+        { role: "assistant", content: "First answer" }
+      ]
+    });
+    expect(
+      store
+        .getConversation(firstRun.conversationId)
+        ?.messages.map(({ role, content }) => ({ role, content }))
+    ).toEqual([
+      { role: "user", content: "First question" },
+      { role: "tool", content: "Internal tool result" },
+      { role: "assistant", content: "First answer" },
+      { role: "user", content: "Second question" }
+    ]);
+    expect(() =>
+      store?.createChatRun(
+        "88888888-8888-4888-8888-888888888888",
+        "Conflicting question",
+        firstRun.conversationId
+      )
+    ).toThrow("Conversation already has an active run");
+  });
+
+  it("retries a cancelled run without duplicating its user message", () => {
+    store = new VoxMeshStore(":memory:");
+    const source = store.createChatRun(
+      "99999999-9999-4999-8999-999999999999",
+      "Retry this question"
+    );
+    store.cancelChatRun(source.id);
+    const messageCount = store.getConversation(
+      source.conversationId
+    )?.messageCount;
+
+    const retry = store.createChatRetry(
+      "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      source.id
+    );
+
+    expect(retry).toMatchObject({
+      conversationId: source.conversationId,
+      inputMessageId: source.inputMessageId,
+      retryOfRunId: source.id,
+      status: "in_progress"
+    });
+    expect(store.getChatContext(retry.id)).toEqual({
+      inputMessage: "Retry this question",
+      history: []
+    });
+    expect(store.getConversation(source.conversationId)?.messageCount).toBe(
+      messageCount
+    );
+    expect(() =>
+      store?.createChatRetry("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", source.id)
+    ).toThrow("Only the latest attempt can be retried");
+    expect(() =>
+      store?.createChatRetry("cccccccc-cccc-4ccc-8ccc-cccccccccccc", retry.id)
+    ).toThrow("Only failed or cancelled runs can be retried");
+    store.completeChatRun({
+      runId: retry.id,
+      messages: [{ role: "assistant", content: "Retry answer" }],
+      events: []
+    });
+    store.createChatRun(
+      "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      "Later question",
+      source.conversationId
+    );
+    expect(() =>
+      store?.createChatRetry("eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee", source.id)
+    ).toThrow("Only the latest conversation turn can be retried");
+  });
+
+  it("keeps active runs intact across simultaneous Store connections", () => {
+    const directory = mkdtempSync(join(tmpdir(), "voxmesh-connections-"));
+    const databasePath = join(directory, "voxmesh.sqlite");
+    let secondStore: VoxMeshStore | undefined;
+    try {
+      store = new VoxMeshStore(databasePath);
+      const run = store.createChatRun(
+        "ffffffff-ffff-4fff-8fff-ffffffffffff",
+        "Active request"
+      );
+      secondStore = new VoxMeshStore(databasePath);
+
+      expect(secondStore.getConversationRun(run.id).status).toBe("in_progress");
+      expect(() =>
+        secondStore?.createChatRun(
+          "12121212-1212-4212-8212-121212121212",
+          "Conflicting request",
+          run.conversationId
+        )
+      ).toThrow("Conversation already has an active run");
+    } finally {
+      secondStore?.close();
+      store?.close();
+      store = undefined;
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it("marks interrupted runs as failed after restart", () => {
@@ -833,6 +994,8 @@ function routeInput(
     enabled: route.enabled
   };
 }
+import { spawn } from "node:child_process";
+import { once } from "node:events";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

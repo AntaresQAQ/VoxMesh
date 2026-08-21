@@ -33,7 +33,12 @@ export const SessionSchema = Type.Object({
 
 export const ChatRequestSchema = Type.Object({
   runId: Type.String({ format: "uuid" }),
-  message: Type.String({ minLength: 1, maxLength: 8_000 })
+  message: Type.String({ minLength: 1, maxLength: 8_000 }),
+  conversationId: Type.Optional(Type.String({ minLength: 1 }))
+});
+
+export const ChatRetryRequestSchema = Type.Object({
+  runId: Type.String({ format: "uuid" })
 });
 
 export const ChatResponseSchema = Type.Object({
@@ -413,6 +418,7 @@ export type PasswordChange = Static<typeof PasswordChangeSchema>;
 export type Session = Static<typeof SessionSchema>;
 export type Dashboard = Static<typeof DashboardSchema>;
 export type ChatRequest = Static<typeof ChatRequestSchema>;
+export type ChatRetryRequest = Static<typeof ChatRetryRequestSchema>;
 export type ChatResponse = Static<typeof ChatResponseSchema>;
 export type Message = Static<typeof MessageSchema>;
 export type ConversationSummary = Static<typeof ConversationSummarySchema>;

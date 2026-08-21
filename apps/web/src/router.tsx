@@ -127,7 +127,14 @@ const dashboardRoute = createRoute({
 const chatRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: "/chat",
-  component: ChatPage
+  validateSearch: (search: Record<string, unknown>) => ({
+    conversationId:
+      typeof search.conversationId === "string" &&
+      search.conversationId.length > 0
+        ? search.conversationId
+        : undefined
+  }),
+  component: ChatRoute
 });
 const conversationsRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
@@ -235,6 +242,23 @@ function LoginRoute() {
       description={t("auth.loginDescription")}
       submitLabel={t("auth.signIn")}
       onSubmit={(password) => login.mutateAsync(password).then(() => undefined)}
+    />
+  );
+}
+
+function ChatRoute() {
+  const search = chatRoute.useSearch();
+  const navigate = useNavigate();
+  return (
+    <ChatPage
+      conversationId={search.conversationId ?? null}
+      onConversationChange={(conversationId) =>
+        navigate({
+          to: "/chat",
+          search: { conversationId: conversationId ?? undefined },
+          replace: true
+        })
+      }
     />
   );
 }

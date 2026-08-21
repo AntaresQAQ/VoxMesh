@@ -343,6 +343,37 @@ main > header {
   margin-top: 1.5rem;
 }
 
+.chat-transcript {
+  display: grid;
+  max-width: 760px;
+  margin: 1rem 0;
+  padding: 0;
+  gap: 0.75rem;
+  list-style: none;
+}
+
+.chat-message {
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  padding: 1rem;
+  background: var(--color-surface);
+}
+
+.chat-message p {
+  margin-bottom: 0;
+  white-space: pre-wrap;
+}
+
+.chat-message.assistant {
+  border-color: var(--color-accent);
+}
+
+.chat-retries {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
 .voice-controls {
   max-width: 760px;
   margin-top: 1.5rem;

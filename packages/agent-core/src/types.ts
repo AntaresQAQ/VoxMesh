@@ -41,6 +41,16 @@ export interface AgentRunResult {
   transcript: AgentMessage[];
 }
 
+/** Context and cancellation controls for one provider-independent Agent run. */
+export interface AgentRunOptions {
+  signal?: AbortSignal;
+  /**
+   * Durable user and final assistant messages that precede the new input.
+   * Tool-call transcripts remain scoped to their original run.
+   */
+  history?: AgentMessage[];
+}
+
 export class AgentRunCancelledError extends Error {
   public readonly code = "RUN_CANCELLED";
 

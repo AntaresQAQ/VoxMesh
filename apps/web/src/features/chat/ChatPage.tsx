@@ -1,14 +1,37 @@
 import { useRef, useState, type FormEvent } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiClient } from "../../api.js";
 import { PageHeader } from "../../components/layout/PageHeader.js";
 import { useI18n } from "../../i18n/i18n.js";
-import { queryKeys } from "../../query.js";
+import { conversationQueryOptions, queryKeys } from "../../query.js";
 import { localizedError } from "../../utils/errors.js";
+import { ChatTranscript } from "./ChatTranscript.js";
 import { VoiceControls } from "./VoiceControls.js";
 
-export function ChatPage() {
+type ChatMutationInput =
+  | {
+      kind: "message";
+      runId: string;
+      message: string;
+      signal: AbortSignal;
+    }
+  | {
+      kind: "retry";
+      runId: string;
+      retryOfRunId: string;
+      signal: AbortSignal;
+    };
+
+export function ChatPage({
+  conversationId = null,
+  onConversationChange
+}: {
+  conversationId?: string | null;
+  onConversationChange?: (
+    conversationId: string | null
+  ) => void | Promise<void>;
+}) {
   const { t } = useI18n();
   const queryClient = useQueryClient();
   const [message, setMessage] = useState("");
@@ -18,22 +41,35 @@ export function ChatPage() {
     "idle" | "running" | "cancelling" | "cancelled" | "completed-before-cancel"
   >("idle");
   const [runError, setRunError] = useState("");
+  const [retryingRunId, setRetryingRunId] = useState<string | null>(null);
   const activeRunId = useRef<string | null>(null);
   const activeController = useRef<AbortController | null>(null);
+  const conversation = useQuery({
+    ...conversationQueryOptions(conversationId ?? ""),
+    enabled: conversationId !== null
+  });
   const chat = useMutation({
-    mutationFn: (input: {
-      runId: string;
-      message: string;
-      signal: AbortSignal;
-    }) => apiClient.chat(input.runId, input.message, input.signal),
+    mutationFn: (input: ChatMutationInput) =>
+      input.kind === "message"
+        ? apiClient.chat(
+            input.runId,
+            input.message,
+            input.signal,
+            conversationId ?? undefined
+          )
+        : apiClient.retryChatRun(input.retryOfRunId, input.runId, input.signal),
     onSuccess: async (result) => {
       setResponse(result.response);
       setTools(result.usedTools);
       setMessage("");
       setRunStatus("idle");
       activeRunId.current = null;
+      await onConversationChange?.(result.conversationId);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.conversations }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.conversation(result.conversationId)
+        }),
         queryClient.invalidateQueries({ queryKey: queryKeys.dashboard }),
         queryClient.invalidateQueries({ queryKey: queryKeys.logs })
       ]);
@@ -45,6 +81,7 @@ export function ChatPage() {
     },
     onSettled: () => {
       activeController.current = null;
+      setRetryingRunId(null);
     }
   });
 
@@ -60,7 +97,31 @@ export function ChatPage() {
     activeController.current = controller;
     setRunError("");
     setRunStatus("running");
-    chat.mutate({ runId, message, signal: controller.signal });
+    chat.mutate({
+      kind: "message",
+      runId,
+      message,
+      signal: controller.signal
+    });
+  };
+  const retry = (retryOfRunId: string) => {
+    if (!globalThis.crypto?.randomUUID) {
+      setRunError(t("chat.runIdUnavailable"));
+      return;
+    }
+    const runId = globalThis.crypto.randomUUID();
+    const controller = new AbortController();
+    activeRunId.current = runId;
+    activeController.current = controller;
+    setRetryingRunId(retryOfRunId);
+    setRunError("");
+    setRunStatus("running");
+    chat.mutate({
+      kind: "retry",
+      runId,
+      retryOfRunId,
+      signal: controller.signal
+    });
   };
   const cancel = async () => {
     const runId = activeRunId.current;
@@ -92,6 +153,21 @@ export function ChatPage() {
 
   return (
     <PageHeader title={t("nav.chat")} description={t("chat.description")}>
+      {conversationId ? (
+        <button
+          type="button"
+          className="secondary"
+          disabled={chat.isPending}
+          onClick={() => {
+            setResponse("");
+            setTools([]);
+            setRunError("");
+            void onConversationChange?.(null);
+          }}
+        >
+          {t("chat.newConversation")}
+        </button>
+      ) : null}
       <form className="chat-form" onSubmit={(event) => void submit(event)}>
         <label>
           {t("chat.message")}
@@ -141,7 +217,18 @@ export function ChatPage() {
           {localizedError(chat.error, t, "chat.failed")}
         </p>
       ) : null}
-      {response ? (
+      {conversation.isError ? (
+        <p className="error" role="alert">
+          {localizedError(conversation.error, t, "conversations.loadingFailed")}
+        </p>
+      ) : null}
+      {conversation.data ? (
+        <ChatTranscript
+          conversation={conversation.data}
+          retryingRunId={retryingRunId}
+          onRetry={retry}
+        />
+      ) : response ? (
         <section className="response" aria-live="polite">
           <p className="eyebrow">{t("chat.assistant")}</p>
           <p>{response}</p>
