@@ -99,7 +99,9 @@ Later physical-audio work may add:
 
 - safe input and output discovery identifiers
 - selected input and output settings
-- Linux/ALSA availability and failure adapters
+- browser `MediaDevices` selection
+- macOS CoreAudio, Windows Audio, and Linux PipeWire/PulseAudio/ALSA
+  availability and failure adapters
 - hot-plug and stale-observation handling
 - capture/playback health
 

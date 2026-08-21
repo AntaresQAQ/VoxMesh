@@ -400,7 +400,7 @@ Browser end-to-end tests run once in the official Playwright container with Chro
 
 CI uses a workflow-and-PR concurrency group with `cancel-in-progress: true`. When a new commit is pushed to a pull request, any older in-progress CI run for that pull request is cancelled automatically. Runs for other pull requests continue independently.
 
-Linux-only audio, packaging, and hardware checks must remain separate from the cross-platform development workflow.
+Linux-only audio, deployment, and hardware checks must remain separate from the cross-platform development workflow.
 
 ## 10. Integration Technologies
 
@@ -412,8 +412,9 @@ must still be confirmed immediately before implementation:
 | MCP                   | Maintained official or compatible SDK; Streamable HTTP and stdio            |
 | STT/TTS               | Azure OpenAI and dedicated Alibaba Model Studio adapters                    |
 | OpenAI-compatible LLM | Generic adapter; Alibaba Cloud Model Studio is the first supported provider |
-| Linux audio           | ALSA adapter for standard USB Audio Class devices                           |
-| Deployment            | Multi-architecture Docker Compose, systemd, Debian packages, scripts        |
+| Host audio            | CoreAudio, Windows Audio, and PipeWire/PulseAudio/ALSA adapters             |
+| Browser audio         | MediaDevices input/output selection with capability-based sink selection    |
+| Deployment            | Native systemd deployment scripts; optional Docker Compose                  |
 | Real-time events      | Implemented authenticated WebSocket protocol with versioned envelopes       |
 
 Do not select an SDK solely because it is popular. Confirm maintenance status, license, platform support, security posture, bundle impact, and compatibility with project boundaries.

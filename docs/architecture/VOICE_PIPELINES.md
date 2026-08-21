@@ -114,13 +114,21 @@ media tracks, and resets the meter to zero. Meter initialization failures abort
 recording and release the acquired stream rather than silently presenting a
 non-functional level indicator.
 
-### Server-side physical audio selection
+### Browser and host audio selection
 
-The browser voice test and server-side physical audio are separate adapters.
-Future ALSA capture and playback use stable device IDs selected explicitly in
-Settings through independent Input device and Output device dropdowns.
+The browser voice test and VoxMesh-host physical audio are separate adapters
+and separate device inventories.
 
-The platform adapter owns device discovery and exposes only safe metadata.
+Browser selection uses `MediaDevices` for the microphone and speaker connected
+to the Web Console computer. Host selection uses CoreAudio on macOS, Windows
+Audio endpoints on Windows, and PipeWire/PulseAudio/ALSA adapters on Linux for
+devices connected to the server computer.
+
+Both inventories include every endpoint exposed by the platform, including
+built-in, USB, Bluetooth, HDMI/display, dock, and virtual devices. Stable IDs
+are selected explicitly in Teams-style independent input/output dropdowns.
+
+The platform adapter owns host discovery and exposes only safe metadata.
 VoxMesh never selects the first discovered device, substitutes another device,
 or falls back to Mock Audio. If a configured device disappears, its ID remains
 configured and the physical voice flow reports it as unavailable until the
@@ -141,10 +149,10 @@ Agent Core depends only on a project-owned `WakeWordDetector` contract.
 sherpa-onnx native bindings, models, token files, and keyword profiles remain
 outside Agent Core and outside browser audio code.
 
-The detector consumes the already-open selected physical input stream as mono
-16 kHz PCM. It does not open a second ALSA device, retain pre-trigger audio, or
-send audio to a provider. A small bounded in-memory pre-roll buffer prevents
-clipping immediately after detection.
+The detector consumes the already-open selected VoxMesh-host input stream as
+mono 16 kHz PCM. It does not open a second host-audio handle, retain
+pre-trigger audio, or send audio to a provider. A small bounded in-memory
+pre-roll buffer prevents clipping immediately after detection.
 
 Wake-word detection is disabled by default. Settings selects a packaged,
 validated keyword profile such as `Hey VoxMesh`, threshold, cooldown, and a

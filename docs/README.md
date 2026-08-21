@@ -14,6 +14,23 @@ discover them before planning or implementation:
 If these documents conflict, stop and ask the user to confirm the intended
 interpretation before changing behavior.
 
+## Document Roles
+
+- `MVP.md` defines product scope, architecture invariants, and final acceptance.
+- `IMPLEMENTATION_PLAN.md` records implementation status, phase gates, and
+  execution order. It must describe the merged `main` branch, not an
+  in-progress feature branch.
+- `architecture/` documents implemented architecture and clearly labeled
+  future extensions.
+- `development/` contains executable engineering, testing, accessibility, and
+  active-phase closeout plans.
+- `providers/` and `operations/` contain integration-specific and operational
+  guidance.
+
+Do not duplicate detailed execution checklists across documents. The
+Implementation Plan links to the active detailed plan, and the detailed plan
+links back to the governing MVP and development rules.
+
 ## Architecture
 
 - [Technology Stack and Development Guide](./architecture/TECHNOLOGY_STACK.md)
@@ -22,6 +39,7 @@ interpretation before changing behavior.
 - [WebSocket Event Delivery](./architecture/WEBSOCKET.md)
 - [Conversation Run Lifecycle](./architecture/CONVERSATION_LIFECYCLE.md)
 - [Device and Physical Audio Status](./architecture/DEVICE_STATUS.md)
+- [Cross-Platform Audio Device Selection](./architecture/PHYSICAL_AUDIO.md)
 
 Architecture documents describe current boundaries and planned extensions.
 Sections explicitly marked as planned are not claims of implemented behavior.
@@ -30,6 +48,7 @@ Sections explicitly marked as planned are not claims of implemented behavior.
 
 - [Accessibility Standard and Audit](./development/ACCESSIBILITY.md)
 - [Mock Mode Development Guide](./development/MOCK_MODE.md)
+- [Phase 3 Closeout Plan](./development/PHASE_3_CLOSEOUT.md)
 
 Development guides explain local workflows, deterministic testing, and quality
 evidence. Mandatory policy remains in
@@ -58,6 +77,10 @@ when those features enter implementation.
 - Update affected documentation in the same change as behavior.
 - Distinguish implemented, Mock-only, live-validated, planned, and deferred
   behavior explicitly.
+- Use merged pull requests as the implementation-status baseline. Do not name a
+  temporary working branch as the project-wide current state.
+- Keep immediate work packages in one active closeout plan with explicit scope,
+  dependencies, acceptance criteria, tests, and out-of-scope items.
 - Keep secrets, credentials, personal data, and machine-specific configuration
   out of documentation and examples.
 - Add new documents to this index and link them from the nearest relevant
