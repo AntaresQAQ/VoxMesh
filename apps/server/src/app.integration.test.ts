@@ -12,6 +12,7 @@ import { VoxMeshStore } from "@voxmesh/storage";
 
 import { buildServer } from "./app.js";
 import type { ServerConfig } from "./config.js";
+import type { DeviceStatusProvider } from "./device-status.js";
 
 const config: ServerConfig = {
   host: "127.0.0.1",
@@ -266,6 +267,7 @@ describe("server API", () => {
       store,
       createLlm: () => provider
     });
+
     await app.inject({
       method: "POST",
       url: "/api/setup",
@@ -314,6 +316,94 @@ describe("server API", () => {
       { role: "user", content: "Second question" }
     ]);
     expect(store.getConversation(conversationId)?.messages).toHaveLength(4);
+
+    await app.close();
+  });
+
+  it("returns authenticated platform-independent device status", async () => {
+    store = new VoxMeshStore(":memory:");
+    const observedAt = "2026-08-21T00:00:00.000Z";
+    const deviceStatusProvider: DeviceStatusProvider = {
+      getStatus: async () => ({
+        device: {
+          status: "degraded",
+          displayName: "Mock edge device",
+          detailCode: "thermal-throttling",
+          observedAt
+        },
+        audio: {
+          input: {
+            status: "ready",
+            displayName: "Mock microphone",
+            detailCode: null,
+            observedAt
+          },
+          output: {
+            status: "failed",
+            displayName: "Mock speaker",
+            detailCode: "playback-unavailable",
+            observedAt
+          }
+        },
+        system: {
+          cpuUsage: {
+            status: "stale",
+            value: 42,
+            unit: "percent",
+            detailCode: "stale-sample",
+            observedAt
+          },
+          memoryUsage: {
+            status: "ready",
+            value: 134_217_728,
+            unit: "bytes",
+            detailCode: null,
+            observedAt
+          },
+          temperature: {
+            status: "unavailable",
+            value: null,
+            unit: "celsius",
+            detailCode: "sensor-unavailable",
+            observedAt: null
+          }
+        }
+      })
+    };
+    const app = await buildServer({ config, store, deviceStatusProvider });
+    await app.inject({
+      method: "POST",
+      url: "/api/setup",
+      payload: { password: "a secure administrator password" }
+    });
+    const login = await app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      payload: { password: "a secure administrator password" }
+    });
+    const setCookie = login.headers["set-cookie"];
+    const cookie = (Array.isArray(setCookie) ? setCookie[0] : setCookie)?.split(
+      ";"
+    )[0];
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/device",
+      headers: { cookie }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      device: { status: "degraded", displayName: "Mock edge device" },
+      audio: {
+        input: { status: "ready" },
+        output: { status: "failed" }
+      },
+      system: {
+        cpuUsage: { status: "stale", value: 42 },
+        temperature: { status: "unavailable", value: null }
+      }
+    });
 
     await app.close();
   });
@@ -633,6 +723,11 @@ describe("server API", () => {
     expect(response.json()).toMatchObject({
       error: { code: "AUTHENTICATION_REQUIRED" }
     });
+    const device = await app.inject({
+      method: "GET",
+      url: "/api/device"
+    });
+    expect(device.statusCode).toBe(401);
     await app.close();
   });
 });

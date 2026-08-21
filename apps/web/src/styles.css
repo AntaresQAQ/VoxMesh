@@ -18,6 +18,7 @@
   --color-accent-contrast: #07111f;
   --color-error: #fda4af;
   --color-success: #86efac;
+  --color-warning: #fcd34d;
   --color-focus: #67e8f9;
   --color-shadow: rgba(0, 0, 0, 0.35);
   color: var(--color-text);
@@ -53,6 +54,7 @@ html[data-theme="light"] {
   --color-accent-contrast: #ffffff;
   --color-error: #be123c;
   --color-success: #15803d;
+  --color-warning: #a16207;
   --color-focus: #0e7490;
   --color-shadow: rgba(15, 23, 42, 0.15);
 }
@@ -315,6 +317,47 @@ main > header {
 
 .dashboard-route-overview {
   margin-top: 2rem;
+}
+
+.dashboard-device-status {
+  margin-top: 2rem;
+}
+
+.device-status-card {
+  border-inline-start-width: 4px;
+}
+
+.device-status-card.ready {
+  border-inline-start-color: var(--color-success);
+}
+
+.device-status-card.unavailable,
+.device-status-card.stale {
+  border-inline-start-color: var(--color-text-muted);
+}
+
+.device-status-card.degraded {
+  border-inline-start-color: var(--color-warning);
+}
+
+.device-status-card.failed {
+  border-inline-start-color: var(--color-error);
+}
+
+.availability-status {
+  font-weight: 700;
+}
+
+.availability-status.ready {
+  color: var(--color-success);
+}
+
+.availability-status.degraded {
+  color: var(--color-warning);
+}
+
+.availability-status.failed {
+  color: var(--color-error);
 }
 
 .dashboard-route-heading {

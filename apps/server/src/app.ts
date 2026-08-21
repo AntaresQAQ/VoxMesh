@@ -26,6 +26,7 @@ import {
   ConversationDetailSchema,
   ConversationListSchema,
   DashboardSchema,
+  DeviceStatusSchema,
   HealthSchema,
   LogListSchema,
   ModelDeploymentInputSchema,
@@ -44,6 +45,10 @@ import { VoxMeshStore } from "@voxmesh/storage";
 import type { ServerConfig } from "./config.js";
 import { ActiveRunRegistry } from "./active-run-registry.js";
 import { ConversationService } from "./conversation-service.js";
+import {
+  UnavailableDeviceStatusProvider,
+  type DeviceStatusProvider
+} from "./device-status.js";
 import { createLlmProvider } from "./llm-providers.js";
 import { LoginRateLimiter } from "./login-rate-limiter.js";
 import { createNativeVoiceProvider } from "./native-voice-providers.js";
@@ -73,6 +78,7 @@ export interface AppDependencies {
   eventMaxBufferedBytes?: number;
   mcp?: McpServer;
   createLlm?: (routeId?: string) => LlmProvider;
+  deviceStatusProvider?: DeviceStatusProvider;
 }
 
 export async function buildServer(
@@ -87,6 +93,8 @@ export async function buildServer(
   const store =
     dependencies.store ?? new VoxMeshStore(dependencies.config.databasePath);
   const mcp = dependencies.mcp ?? new MockMcpServer();
+  const deviceStatusProvider =
+    dependencies.deviceStatusProvider ?? new UnavailableDeviceStatusProvider();
   const conversationService = new ConversationService(
     store,
     mcp,
@@ -711,6 +719,20 @@ export async function buildServer(
       }
     },
     async (request) => store.activateRuntimeRoute(request.body.routeId)
+  );
+
+  app.get(
+    "/api/device",
+    {
+      preHandler: authenticate,
+      schema: {
+        response: {
+          200: DeviceStatusSchema,
+          401: ApiErrorSchema
+        }
+      }
+    },
+    async () => deviceStatusProvider.getStatus()
   );
 
   app.get(
