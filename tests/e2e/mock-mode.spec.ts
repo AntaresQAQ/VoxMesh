@@ -1,6 +1,14 @@
 import { expect, test } from "@playwright/test";
-import type { Page } from "@playwright/test";
-import AxeBuilder from "@axe-core/playwright";
+
+import {
+  expectAccessible,
+  expectNoHorizontalOverflow,
+  expectVisibleFocus,
+  installEventStreamFixture,
+  routeJson,
+  sendEventStreamGap,
+  sendEventStreamRestart
+} from "./phase3-fixtures.js";
 
 const password = "correct horse battery staple";
 const replacementPassword = "replacement horse battery staple";
@@ -12,9 +20,17 @@ test("completes setup, tool-assisted chat, inspection, and logout", async ({
     Object.defineProperty(navigator, "mediaDevices", {
       configurable: true,
       value: {
-        getUserMedia: async () => ({
-          getTracks: () => [{ stop: () => undefined }]
-        })
+        getUserMedia: async () => {
+          const failure = (
+            globalThis as typeof globalThis & {
+              __voxmeshMicrophoneFailure?: string;
+            }
+          ).__voxmeshMicrophoneFailure;
+          if (failure) throw new DOMException(failure, "NotAllowedError");
+          return {
+            getTracks: () => [{ stop: () => undefined }]
+          };
+        }
       }
     });
     class FakeMediaRecorder extends EventTarget {
@@ -134,14 +150,219 @@ test("completes setup, tool-assisted chat, inspection, and logout", async ({
   await expect(page.getByText("Unavailable", { exact: true })).toHaveCount(6);
   await expect(page.getByText("Adapter is not configured")).toHaveCount(6);
   await expectAccessible(page, "English dark dashboard");
-  await page.keyboard.press("Tab");
+  const dashboardFailurePage = await page.context().newPage();
+  await dashboardFailurePage.emulateMedia({ colorScheme: "dark" });
+  await routeJson(
+    dashboardFailurePage,
+    "**/api/dashboard",
+    {
+      error: {
+        code: "DASHBOARD_UNAVAILABLE",
+        message: "Dashboard summary unavailable"
+      }
+    },
+    503
+  );
+  await routeJson(dashboardFailurePage, "**/api/device", {
+    device: {
+      status: "degraded",
+      displayName: "Fixture host",
+      detailCode: "thermal-throttling",
+      observedAt: "2026-08-21T00:00:00.000Z"
+    },
+    audio: {
+      input: {
+        status: "ready",
+        displayName: "Fixture microphone",
+        detailCode: null,
+        observedAt: "2026-08-21T00:00:00.000Z"
+      },
+      output: {
+        status: "failed",
+        displayName: "Fixture speaker",
+        detailCode: "playback-unavailable",
+        observedAt: null
+      }
+    },
+    system: {
+      cpuUsage: {
+        status: "stale",
+        value: 42,
+        unit: "percent",
+        detailCode: "stale-sample",
+        observedAt: "2026-08-21T00:00:00.000Z"
+      },
+      memoryUsage: {
+        status: "ready",
+        value: 134217728,
+        unit: "bytes",
+        detailCode: null,
+        observedAt: "2026-08-21T00:00:00.000Z"
+      },
+      temperature: {
+        status: "unavailable",
+        value: null,
+        unit: "celsius",
+        detailCode: "sensor-unavailable",
+        observedAt: null
+      }
+    }
+  });
+  await dashboardFailurePage.goto("/dashboard");
+  await expect(dashboardFailurePage.locator("html")).toHaveAttribute(
+    "data-theme",
+    "dark"
+  );
+  await expect(dashboardFailurePage.getByRole("alert")).toContainText(
+    "Dashboard summary unavailable"
+  );
+  await expect(dashboardFailurePage.getByText("Fixture host")).toBeVisible();
   await expect(
-    page.getByRole("link", { name: "Manage routing" })
-  ).toBeFocused();
+    dashboardFailurePage.getByText("Ready", { exact: true })
+  ).toHaveCount(2);
+  await expect(dashboardFailurePage.getByText("Degraded")).toBeVisible();
+  await expect(
+    dashboardFailurePage.getByText("Stale", { exact: true })
+  ).toBeVisible();
+  await expect(
+    dashboardFailurePage.getByText("Failed", { exact: true })
+  ).toBeVisible();
+  await expect(
+    dashboardFailurePage.getByText("Unavailable", { exact: true })
+  ).toBeVisible();
+  await expectAccessible(
+    dashboardFailurePage,
+    "English dark independent Dashboard failure"
+  );
+  await dashboardFailurePage.close();
+  await page.keyboard.press("Tab");
+  const manageRouting = page.getByRole("link", { name: "Manage routing" });
+  await expectVisibleFocus(manageRouting);
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/settings\?section=providers/);
+  await expect(page.getByRole("heading", { name: "Settings" })).toBeFocused();
 
   await page.getByRole("link", { name: "Chat" }).click();
   await expect(page).toHaveURL(/\/chat$/);
   await expect(page.getByRole("heading", { name: "Chat" })).toBeFocused();
+  await page.evaluate(() => {
+    (
+      globalThis as typeof globalThis & {
+        __voxmeshMicrophoneFailure?: string;
+      }
+    ).__voxmeshMicrophoneFailure = "Microphone permission denied";
+  });
+  await page.getByRole("button", { name: "Start recording" }).click();
+  await expect(page.getByRole("alert")).toContainText(
+    "Microphone permission denied"
+  );
+  await page.evaluate(() => {
+    delete (
+      globalThis as typeof globalThis & {
+        __voxmeshMicrophoneFailure?: string;
+      }
+    ).__voxmeshMicrophoneFailure;
+  });
+
+  const failedConversationId = "failed-conversation";
+  let failedRunId = "";
+  const chatFailurePage = await page.context().newPage();
+  await chatFailurePage.emulateMedia({ colorScheme: "dark" });
+  await chatFailurePage.route("**/api/chat", async (route) => {
+    failedRunId = (route.request().postDataJSON() as { runId: string }).runId;
+    await route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({
+        error: {
+          code: "PROVIDER_UNAVAILABLE",
+          message: "Mock provider unavailable"
+        }
+      })
+    });
+  });
+  await chatFailurePage.route("**/api/chat/runs/*", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: failedRunId,
+        conversationId: failedConversationId,
+        kind: "chat",
+        status: "failed",
+        correlationId: "77777777-7777-4777-8777-777777777777",
+        inputMessageId: "failed-message",
+        retryOfRunId: null,
+        startedAt: "2026-08-21T00:00:00.000Z",
+        completedAt: "2026-08-21T00:00:01.000Z",
+        durationMs: 1000,
+        errorCode: "PROVIDER_UNAVAILABLE"
+      })
+    });
+  });
+  await chatFailurePage.route(
+    `**/api/conversations/${failedConversationId}`,
+    (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: failedConversationId,
+          title: "Failed request",
+          messageCount: 1,
+          createdAt: "2026-08-21T00:00:00.000Z",
+          updatedAt: "2026-08-21T00:00:01.000Z",
+          messages: [
+            {
+              id: "failed-message",
+              role: "user",
+              runId: failedRunId,
+              content: "Fail this request",
+              createdAt: "2026-08-21T00:00:00.000Z"
+            }
+          ],
+          events: [],
+          runs: [
+            {
+              id: failedRunId,
+              conversationId: failedConversationId,
+              kind: "chat",
+              status: "failed",
+              correlationId: "77777777-7777-4777-8777-777777777777",
+              inputMessageId: "failed-message",
+              retryOfRunId: null,
+              startedAt: "2026-08-21T00:00:00.000Z",
+              completedAt: "2026-08-21T00:00:01.000Z",
+              durationMs: 1000,
+              errorCode: "PROVIDER_UNAVAILABLE"
+            }
+          ]
+        })
+      })
+  );
+  await chatFailurePage.goto("/chat");
+  await expect(chatFailurePage.locator("html")).toHaveAttribute(
+    "data-theme",
+    "dark"
+  );
+  await chatFailurePage.getByLabel("Message").fill("Fail this request");
+  await chatFailurePage.getByRole("button", { name: "Send" }).click();
+  await expect(chatFailurePage.getByRole("alert")).toContainText(
+    "Mock provider unavailable"
+  );
+  await expect(chatFailurePage).toHaveURL(
+    new RegExp(`conversationId=${failedConversationId}`)
+  );
+  await expect(
+    chatFailurePage.getByRole("button", { name: "Retry" })
+  ).toBeVisible();
+  await chatFailurePage.reload();
+  await expect(chatFailurePage.getByText("Fail this request")).toBeVisible();
+  await expect(
+    chatFailurePage.getByRole("button", { name: "Retry" })
+  ).toBeVisible();
+  await expectAccessible(chatFailurePage, "English dark failed Chat recovery");
+  await chatFailurePage.close();
   await page.evaluate(() => {
     const originalFetch = globalThis.fetch;
     Object.assign(globalThis, {
@@ -289,8 +510,13 @@ test("completes setup, tool-assisted chat, inspection, and logout", async ({
   await page.unroute("**/api/chat/runs/*/retry");
   await page.goto("/chat");
 
-  await page.getByLabel("Message").fill("Check the light status");
-  await page.getByRole("button", { name: "Send" }).click();
+  const messageInput = page.getByLabel("Message");
+  await messageInput.fill("Check the light status");
+  await messageInput.focus();
+  await page.keyboard.press("Tab");
+  const sendButton = page.getByRole("button", { name: "Send" });
+  await expectVisibleFocus(sendButton);
+  await page.keyboard.press("Enter");
   await expect(
     page.getByText("Mock tool reports living-room-light is on.")
   ).toBeVisible();
@@ -398,6 +624,41 @@ test("completes setup, tool-assisted chat, inspection, and logout", async ({
   await expect(page.getByLabel("Category")).toHaveValue("MCP");
   await expect(page.getByLabel("Level")).toHaveValue("INFO");
   await expectAccessible(page, "English dark live logs");
+  const recoveryPage = await page.context().newPage();
+  await recoveryPage.emulateMedia({ colorScheme: "dark" });
+  await installEventStreamFixture(recoveryPage);
+  await recoveryPage.goto("/logs");
+  await expect(recoveryPage.locator("html")).toHaveAttribute(
+    "data-theme",
+    "dark"
+  );
+  await expect(recoveryPage.getByRole("status")).toContainText(
+    "Live updates connected"
+  );
+  await sendEventStreamGap(recoveryPage);
+  await expect(
+    recoveryPage.getByText(/Some events are no longer available for replay/)
+  ).toBeVisible();
+  await recoveryPage.getByRole("button", { name: "Refresh snapshot" }).click();
+  await expect(
+    recoveryPage.getByText(/Some events are no longer available for replay/)
+  ).toHaveCount(0);
+  await sendEventStreamRestart(recoveryPage);
+  await expect(
+    recoveryPage.getByText(/The server event stream restarted/)
+  ).toBeVisible();
+  await recoveryPage.getByRole("button", { name: "Refresh snapshot" }).click();
+  await expect(
+    recoveryPage.getByText(/The server event stream restarted/)
+  ).toHaveCount(0);
+  await expect(recoveryPage.getByRole("status")).toContainText(
+    "Live updates connected"
+  );
+  await expectAccessible(
+    recoveryPage,
+    "English dark event gap and restart recovery"
+  );
+  await recoveryPage.close();
   await page.getByLabel("Category").selectOption("ALL");
   await page.getByLabel("Level").selectOption("ALL");
   const layout = await page.evaluate(() => {
@@ -425,6 +686,13 @@ test("completes setup, tool-assisted chat, inspection, and logout", async ({
   await expect(page.getByRole("heading", { name: "设置" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "显示语言" })).toBeVisible();
   await expectAccessible(page, "Simplified Chinese dark settings");
+  await page.getByRole("link", { name: "仪表盘" }).click();
+  await expect(page.getByRole("heading", { name: "仪表盘" })).toBeFocused();
+  await expect(
+    page.getByRole("heading", { name: "设备与物理音频" })
+  ).toBeVisible();
+  await expectAccessible(page, "Simplified Chinese dark dashboard");
+  await page.getByRole("link", { name: "设置" }).click();
   await page.reload();
   await expect(page.getByRole("heading", { name: "设置" })).toBeVisible();
   await page.getByLabel("语言", { exact: true }).selectOption("en");
@@ -432,14 +700,16 @@ test("completes setup, tool-assisted chat, inspection, and logout", async ({
   await page.getByLabel("Theme").selectOption("light");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   await expectAccessible(page, "English light settings");
+  await page.getByRole("link", { name: "Dashboard" }).click();
+  await expectAccessible(page, "English light dashboard");
+  await page.setViewportSize({ width: 640, height: 360 });
+  await expectNoHorizontalOverflow(page);
+  await expectAccessible(page, "English light Dashboard at 200% equivalent");
+  await page.getByRole("link", { name: "Settings" }).click();
+  await expectNoHorizontalOverflow(page);
   await page.setViewportSize({ width: 360, height: 667 });
-  const responsiveWidth = await page.evaluate(() => ({
-    viewport: document.documentElement.clientWidth,
-    content: document.documentElement.scrollWidth
-  }));
-  expect(responsiveWidth.content).toBeLessThanOrEqual(
-    responsiveWidth.viewport + 1
-  );
+  await expectNoHorizontalOverflow(page);
+  await expectAccessible(page, "English light narrow Settings");
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
@@ -594,15 +864,3 @@ test("completes setup, tool-assisted chat, inspection, and logout", async ({
   await expect(page.getByRole("alert")).toContainText("Route not found:");
   await expectAccessible(page, "English dark not-found");
 });
-
-async function expectAccessible(page: Page, context: string): Promise<void> {
-  const results = await new AxeBuilder({ page })
-    .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
-    .analyze();
-  expect(
-    results.violations,
-    `${context}: ${results.violations
-      .map((violation) => `${violation.id} (${violation.nodes.length})`)
-      .join(", ")}`
-  ).toEqual([]);
-}

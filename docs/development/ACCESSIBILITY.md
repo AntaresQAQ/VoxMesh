@@ -60,6 +60,12 @@ The current end-to-end audit covers:
 
 - English Dark setup
 - English Dark Dashboard
+- English Dark Dashboard partial-request failure with all five device states
+- Simplified Chinese Dark Dashboard
+- English Light Dashboard
+- English Dark Chat cancellation, provider failure recovery, and retry
+- English Dark event-stream gap and restart recovery
+- English Dark Mock Voice chat
 - Simplified Chinese Dark Settings
 - English Light Settings
 - English Dark not-found route
@@ -71,6 +77,11 @@ It also verifies:
 - direct routes and authentication redirects work
 - responsive content does not create horizontal overflow at a narrow viewport
 - Browser History back and forward navigation works
+- failed initial Chat runs recover their durable Conversation URL
+- event replay gaps and process restarts expose explicit snapshot recovery
+- microphone permission denial is announced
+- narrow mobile and 200%-zoom-equivalent CSS viewports do not introduce
+  horizontal page overflow
 
 ```bash
 pnpm test:e2e
@@ -144,6 +155,7 @@ For each component change:
 
 ## 7. Current Audit Status
 
-The automated accessibility checks for the currently implemented routes pass with zero axe violations in the tested locale and theme combinations.
+Phase 3 automated accessibility closeout passes with zero axe violations in the
+tested locale, theme, failure, recovery, and responsive combinations.
 
 Full release qualification still requires the manual screen-reader, zoom, forced-colors, and hardware/audio-control review described above.

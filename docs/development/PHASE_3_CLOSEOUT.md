@@ -16,6 +16,10 @@ Phase 3 closes the core Web Console before live-provider qualification,
 streaming, physical audio, Wake Word, or the optional tool-management
 experience.
 
+The failure-fixture and browser-matrix work packages are delivered together in
+the Phase 3 closeout change because the fixtures exist only to support the
+automated matrix and add no production behavior.
+
 ## 2. Current Baseline
 
 Implemented on `main`:
@@ -31,11 +35,11 @@ Implemented on `main`:
 - representative unit, integration, Playwright, and axe coverage
 - the minimal in-process Mock MCP tool loop required by Agent Core
 
-Not yet complete in Phase 3:
+Completed by the closeout:
 
-- the remaining deterministic browser failure and recovery matrix
-- full locale/theme/keyboard/focus/responsive/zoom automated evidence
-- updated manual accessibility evidence and release-only checklist
+- deterministic browser failure and recovery fixtures
+- expanded locale/theme/keyboard/focus/responsive/zoom automated evidence
+- updated accessibility evidence and release-only manual checklist
 
 ## 3. MCP Boundary
 
@@ -59,11 +63,9 @@ Phase 8 owns:
 No MCP management API or UI should be added before Phase 8 unless the roadmap
 is explicitly reconfirmed.
 
-## 4. Planned Pull Requests
+## 4. Delivered Work Packages
 
-### PR A - Deterministic Failure and Recovery Fixtures
-
-Suggested branch: `test/phase3-failure-fixtures`
+### Work Package A - Deterministic Failure and Recovery Fixtures
 
 Scope:
 
@@ -85,13 +87,11 @@ Acceptance criteria:
 - production configuration cannot enable test-only controls
 - focused unit and integration tests cover fixture lifecycle and cleanup
 
-### PR B - Phase 3 Browser and Accessibility Matrix
+### Work Package B - Phase 3 Browser and Accessibility Matrix
 
-Suggested branch: `test/phase3-console-closeout`
+Dependency:
 
-Dependencies:
-
-- PR A merged
+- Work Package A
 
 Scope:
 
@@ -160,7 +160,7 @@ Manual release checklist:
 
 Before declaring Phase 3 complete:
 
-1. PRs A and B are reviewed and merged with required CI.
+1. The closeout change is reviewed and merged with required CI.
 2. `IMPLEMENTATION_PLAN.md` marks all Phase 3 acceptance items complete.
 3. Automated accessibility evidence is current.
 4. Remaining manual release checks are explicit.
