@@ -25,6 +25,15 @@ export function ConversationDetailPage() {
       <Link className="back-link" to="/conversations">
         {t("nav.conversations")}
       </Link>
+      {conversation.data ? (
+        <Link
+          className="back-link"
+          to="/chat"
+          search={{ conversationId: conversation.data.id }}
+        >
+          {t("conversations.continueChat")}
+        </Link>
+      ) : null}
       {conversation.error ? (
         <p className="error" role="alert">
           {localizedError(conversation.error, t, "conversations.loadingFailed")}

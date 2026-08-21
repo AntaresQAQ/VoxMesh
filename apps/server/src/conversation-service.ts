@@ -51,22 +51,33 @@ export class ConversationService {
     ) => NativeVoiceProvider
   ) {}
 
-  public startTextRun(runId: string, message: string): ConversationRun {
-    return this.store.createChatRun(runId, message);
+  public startTextRun(
+    runId: string,
+    message: string,
+    conversationId?: string
+  ): ConversationRun {
+    return this.store.createChatRun(runId, message, conversationId);
+  }
+
+  public startTextRetry(runId: string, retryOfRunId: string): ConversationRun {
+    return this.store.createChatRetry(runId, retryOfRunId);
   }
 
   public async executeTextRun(
     run: ConversationRun,
-    message: string,
     signal: AbortSignal
   ): Promise<TextConversationResult> {
     const agent = new AgentRuntime(this.createLlm(), this.mcp);
     try {
-      const result = await agent.run(message, { signal });
+      const context = this.store.getChatContext(run.id);
+      const result = await agent.run(context.inputMessage, {
+        history: context.history,
+        signal
+      });
       const finalized = this.store.completeChatRun({
         runId: run.id,
         messages: result.transcript
-          .slice(1)
+          .slice(context.history.length + 1)
           .filter((entry) => !entry.toolCall)
           .map((entry) => ({ role: entry.role, content: entry.content })),
         events: result.events

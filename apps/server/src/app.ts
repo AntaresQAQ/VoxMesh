@@ -19,6 +19,7 @@ import {
 import {
   ApiErrorSchema,
   ActiveRuntimeRouteUpdateSchema,
+  ChatRetryRequestSchema,
   ChatRequestSchema,
   ChatResponseSchema,
   ConversationRunSchema,
@@ -37,6 +38,7 @@ import {
   SetupStatusSchema,
   VoiceResponseSchema
 } from "@voxmesh/shared";
+import type { ConversationRun } from "@voxmesh/shared";
 import { VoxMeshStore } from "@voxmesh/storage";
 
 import type { ServerConfig } from "./config.js";
@@ -746,6 +748,7 @@ export async function buildServer(
         response: {
           200: ChatResponseSchema,
           401: ApiErrorSchema,
+          404: ApiErrorSchema,
           409: ApiErrorSchema
         }
       }
@@ -753,41 +756,72 @@ export async function buildServer(
     async (request, reply) => {
       const run = conversationService.startTextRun(
         request.body.runId,
-        request.body.message
+        request.body.message,
+        request.body.conversationId
       );
-      const controller = activeRuns.start(run.id);
-      if (store.getConversationRun(run.id).status !== "in_progress") {
-        activeRuns.cancel(run.id);
+      return executeActiveTextRun(run, request, reply);
+    }
+  );
+
+  async function executeActiveTextRun(
+    run: ConversationRun,
+    request: FastifyRequest,
+    reply: FastifyReply
+  ) {
+    const controller = activeRuns.start(run.id);
+    if (store.getConversationRun(run.id).status !== "in_progress") {
+      activeRuns.cancel(run.id);
+    }
+    const cancel = () => {
+      const cancelled = store.cancelChatRun(run.id);
+      if (cancelled.run.status === "cancelled") activeRuns.cancel(run.id);
+    };
+    const cancelOnDisconnect = () => {
+      if (!reply.raw.writableEnded) cancel();
+    };
+    reply.raw.once("close", cancelOnDisconnect);
+    try {
+      return await conversationService.executeTextRun(run, controller.signal);
+    } catch (error) {
+      if (error instanceof Error && error.name === "AgentRunCancelledError") {
+        return reply.status(409).send({
+          error: {
+            code: "RUN_CANCELLED",
+            message: "Conversation run was cancelled",
+            requestId: request.id
+          }
+        });
       }
-      const cancel = () => {
-        const cancelled = store.cancelChatRun(run.id);
-        if (cancelled.transitioned) activeRuns.cancel(run.id);
-      };
-      const cancelOnDisconnect = () => {
-        if (!reply.raw.writableEnded) cancel();
-      };
-      reply.raw.once("close", cancelOnDisconnect);
-      try {
-        return await conversationService.executeTextRun(
-          run,
-          request.body.message,
-          controller.signal
-        );
-      } catch (error) {
-        if (error instanceof Error && error.name === "AgentRunCancelledError") {
-          return reply.status(409).send({
-            error: {
-              code: "RUN_CANCELLED",
-              message: "Conversation run was cancelled",
-              requestId: request.id
-            }
-          });
+      throw error;
+    } finally {
+      reply.raw.off("close", cancelOnDisconnect);
+      activeRuns.finish(run.id, controller);
+    }
+  }
+
+  app.post(
+    "/api/chat/runs/:runId/retry",
+    {
+      preHandler: authenticate,
+      schema: {
+        params: Type.Object({
+          runId: Type.String({ format: "uuid" })
+        }),
+        body: ChatRetryRequestSchema,
+        response: {
+          200: ChatResponseSchema,
+          401: ApiErrorSchema,
+          404: ApiErrorSchema,
+          409: ApiErrorSchema
         }
-        throw error;
-      } finally {
-        reply.raw.off("close", cancelOnDisconnect);
-        activeRuns.finish(run.id, controller);
       }
+    },
+    async (request, reply) => {
+      const run = conversationService.startTextRetry(
+        request.body.runId,
+        request.params.runId
+      );
+      return executeActiveTextRun(run, request, reply);
     }
   );
 
@@ -826,7 +860,9 @@ export async function buildServer(
     },
     async (request) => {
       const result = store.cancelChatRun(request.params.runId);
-      if (result.transitioned) activeRuns.cancel(request.params.runId);
+      if (result.run.status === "cancelled") {
+        activeRuns.cancel(request.params.runId);
+      }
       return result.run;
     }
   );

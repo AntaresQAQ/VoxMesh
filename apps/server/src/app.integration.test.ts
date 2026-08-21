@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import type { LlmProvider } from "@voxmesh/agent-core";
 import type {
+  AgentMessage,
   ConversationDetail,
   Dashboard,
   RuntimeRoutingSummary,
@@ -248,17 +249,92 @@ describe("server API", () => {
     await app.close();
   });
 
+  it("continues Chat in one conversation with durable history", async () => {
+    store = new VoxMeshStore(":memory:");
+    const requests: AgentMessage[][] = [];
+    const provider: LlmProvider = {
+      complete: async ({ messages }) => {
+        requests.push(messages.map((message) => ({ ...message })));
+        return {
+          type: "message",
+          content: requests.length === 1 ? "First answer" : "Second answer"
+        };
+      }
+    };
+    const app = await buildServer({
+      config,
+      store,
+      createLlm: () => provider
+    });
+    await app.inject({
+      method: "POST",
+      url: "/api/setup",
+      payload: { password: "a secure administrator password" }
+    });
+    const login = await app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      payload: { password: "a secure administrator password" }
+    });
+    const setCookie = login.headers["set-cookie"];
+    const cookie = (Array.isArray(setCookie) ? setCookie[0] : setCookie)?.split(
+      ";"
+    )[0];
+    const first = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      headers: { cookie },
+      payload: {
+        runId: "77777777-7777-4777-8777-777777777777",
+        message: "First question"
+      }
+    });
+    const conversationId = first.json<{ conversationId: string }>()
+      .conversationId;
+    const second = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      headers: { cookie },
+      payload: {
+        runId: "88888888-8888-4888-8888-888888888888",
+        conversationId,
+        message: "Second question"
+      }
+    });
+
+    expect(first.statusCode).toBe(200);
+    expect(second.statusCode).toBe(200);
+    expect(second.json()).toMatchObject({
+      conversationId,
+      response: "Second answer"
+    });
+    expect(requests[1]).toEqual([
+      { role: "user", content: "First question" },
+      { role: "assistant", content: "First answer" },
+      { role: "user", content: "Second question" }
+    ]);
+    expect(store.getConversation(conversationId)?.messages).toHaveLength(4);
+
+    await app.close();
+  });
+
   it("cancels an active Chat run idempotently", async () => {
     store = new VoxMeshStore(":memory:");
+    let completionCount = 0;
     const delayedLlm: LlmProvider = {
-      complete: async ({ signal }) =>
-        new Promise((_resolve, reject) => {
+      complete: async ({ signal }) => {
+        completionCount += 1;
+        if (completionCount > 1) {
+          return { type: "message", content: "Retry completed" };
+        }
+        return new Promise((_resolve, reject) => {
           signal?.addEventListener(
             "abort",
             () => reject(new DOMException("Aborted", "AbortError")),
             { once: true }
           );
-        })
+        });
+      }
     };
     const app = await buildServer({
       config,
@@ -306,6 +382,7 @@ describe("server API", () => {
     }
     expect(runStarted).toBe(true);
 
+    const externallyCancelled = store.cancelChatRun(runId);
     const cancellation = await app.inject({
       method: "POST",
       url: `/api/chat/runs/${runId}/cancel`,
@@ -323,6 +400,7 @@ describe("server API", () => {
       headers: { cookie }
     });
 
+    expect(externallyCancelled.transitioned).toBe(true);
     expect(cancellation.statusCode).toBe(200);
     expect(cancellation.json()).toMatchObject({
       status: "cancelled",
@@ -341,6 +419,33 @@ describe("server API", () => {
       id: runId,
       status: "cancelled"
     });
+    const retryRunId = "66666666-6666-4666-8666-666666666666";
+    const retry = await app.inject({
+      method: "POST",
+      url: `/api/chat/runs/${runId}/retry`,
+      headers: { cookie },
+      payload: { runId: retryRunId }
+    });
+    expect(retry.statusCode).toBe(200);
+    expect(retry.json()).toMatchObject({
+      runId: retryRunId,
+      response: "Retry completed"
+    });
+    const conversation = store.getConversation(
+      cancellation.json<{ conversationId: string }>().conversationId
+    );
+    expect(conversation?.messages.map((message) => message.role)).toEqual([
+      "user",
+      "assistant"
+    ]);
+    expect(conversation?.runs).toEqual([
+      expect.objectContaining({ id: runId, status: "cancelled" }),
+      expect.objectContaining({
+        id: retryRunId,
+        status: "completed",
+        retryOfRunId: runId
+      })
+    ]);
 
     await app.close();
   });

@@ -82,6 +82,10 @@ export const en = {
   "chat.assistant": "Assistant",
   "chat.tools": "Tools: {tools}",
   "chat.failed": "Chat failed",
+  "chat.transcript": "Conversation transcript",
+  "chat.newConversation": "New conversation",
+  "chat.retry": "Retry",
+  "chat.retrying": "Retrying...",
   "voice.title": "Voice test",
   "voice.description":
     "Record audio in the browser and run it through the active Runtime Route.",
@@ -103,6 +107,7 @@ export const en = {
   "conversations.count": "{count} messages",
   "conversations.select": "Select a conversation.",
   "conversations.loadingFailed": "Loading failed",
+  "conversations.continueChat": "Continue in Chat",
   "conversations.role.user": "User",
   "conversations.role.assistant": "Assistant",
   "conversations.role.tool": "Tool",

@@ -83,8 +83,8 @@ Current implementation branch: `feat/realtime-observability`, based on
 
 ### Remaining Phase 3 acceptance work
 
-- [ ] Chat cancellation, retry, and conversation continuity
-- [ ] Conversation Inspector duration, safe metadata, correlation identifiers,
+- [x] Chat cancellation, retry, and conversation continuity
+- [x] Conversation Inspector duration, safe metadata, correlation identifiers,
       and complete in-progress/failed/cancelled states
 - [ ] Dashboard device and physical-audio status with explicit unavailable,
       stale, degraded, and failed states

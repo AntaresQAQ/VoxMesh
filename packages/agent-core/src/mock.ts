@@ -67,7 +67,8 @@ export class MockLlmProvider implements LlmProvider {
     }
 
     const userMessage =
-      input.messages.find((message) => message.role === "user")?.content ?? "";
+      [...input.messages].reverse().find((message) => message.role === "user")
+        ?.content ?? "";
     if (/\b(light|device|tool|status)\b/i.test(userMessage)) {
       return {
         type: "tool_call",

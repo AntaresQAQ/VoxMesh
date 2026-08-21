@@ -193,12 +193,115 @@ test("completes setup, tool-assisted chat, inspection, and logout", async ({
     ).__restoreChatFetch?.();
   });
 
+  let retryCompleted = false;
+  await page.route("**/api/conversations/retry-conversation", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: "retry-conversation",
+        title: "Retry conversation",
+        messageCount: retryCompleted ? 2 : 1,
+        createdAt: "2026-08-19T00:00:00.000Z",
+        updatedAt: "2026-08-19T00:00:01.000Z",
+        messages: [
+          {
+            id: "retry-message",
+            role: "user",
+            runId: "33333333-3333-4333-8333-333333333333",
+            content: "Retry this request",
+            createdAt: "2026-08-19T00:00:00.000Z"
+          },
+          ...(retryCompleted
+            ? [
+                {
+                  id: "retry-answer",
+                  role: "assistant",
+                  runId: "44444444-4444-4444-8444-444444444444",
+                  content: "Retry completed",
+                  createdAt: "2026-08-19T00:00:01.000Z"
+                }
+              ]
+            : [])
+        ],
+        events: [],
+        runs: [
+          {
+            id: "33333333-3333-4333-8333-333333333333",
+            conversationId: "retry-conversation",
+            kind: "chat",
+            status: "cancelled",
+            correlationId: "55555555-5555-4555-8555-555555555555",
+            inputMessageId: "retry-message",
+            retryOfRunId: null,
+            startedAt: "2026-08-19T00:00:00.000Z",
+            completedAt: "2026-08-19T00:00:01.000Z",
+            durationMs: 1000,
+            errorCode: "RUN_CANCELLED"
+          },
+          ...(retryCompleted
+            ? [
+                {
+                  id: "44444444-4444-4444-8444-444444444444",
+                  conversationId: "retry-conversation",
+                  kind: "chat",
+                  status: "completed",
+                  correlationId: "66666666-6666-4666-8666-666666666666",
+                  inputMessageId: "retry-message",
+                  retryOfRunId: "33333333-3333-4333-8333-333333333333",
+                  startedAt: "2026-08-19T00:00:01.000Z",
+                  completedAt: "2026-08-19T00:00:02.000Z",
+                  durationMs: 1000,
+                  errorCode: null
+                }
+              ]
+            : [])
+        ]
+      })
+    });
+  });
+  await page.route("**/api/chat/runs/*/retry", async (route) => {
+    retryCompleted = true;
+    const request = route.request().postDataJSON() as { runId: string };
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        runId: request.runId,
+        conversationId: "retry-conversation",
+        response: "Retry completed",
+        usedTools: []
+      })
+    });
+  });
+  await page.goto("/chat?conversationId=retry-conversation");
+  await expect(page.getByText("Retry this request")).toBeVisible();
+  await page.getByRole("button", { name: "Retry" }).click();
+  await expect(page.getByText("Retry completed")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Retry" })).toHaveCount(0);
+  await expectAccessible(page, "English dark retried Chat run");
+  await page.unroute("**/api/conversations/retry-conversation");
+  await page.unroute("**/api/chat/runs/*/retry");
+  await page.goto("/chat");
+
   await page.getByLabel("Message").fill("Check the light status");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(
     page.getByText("Mock tool reports living-room-light is on.")
   ).toBeVisible();
-  await expect(page.getByText("Tools: mock.get_device_status")).toBeVisible();
+  await expect(page).toHaveURL(/\/chat\?conversationId=[^&]+$/);
+  await expect(
+    page.getByRole("heading", { name: "Conversation transcript" })
+  ).toBeVisible();
+  await page.getByLabel("Message").fill("Continue this conversation");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(
+    page.getByText("Mock assistant received: Continue this conversation")
+  ).toBeVisible();
+  await page.reload();
+  await expect(
+    page.getByText("Mock assistant received: Continue this conversation")
+  ).toBeVisible();
   await page.getByRole("button", { name: "Start recording" }).click();
   await expect(page.getByRole("status")).toContainText("Recording");
   const voiceRequest = page.waitForRequest(

@@ -126,10 +126,21 @@ export const apiClient = {
       body: JSON.stringify({ routeId })
     }),
   dashboard: () => api<Dashboard>("/api/dashboard"),
-  chat: (runId: string, message: string, signal?: AbortSignal) =>
+  chat: (
+    runId: string,
+    message: string,
+    signal?: AbortSignal,
+    conversationId?: string
+  ) =>
     api<ChatResponse>("/api/chat", {
       method: "POST",
-      body: JSON.stringify({ runId, message }),
+      body: JSON.stringify({ runId, message, conversationId }),
+      ...(signal ? { signal } : {})
+    }),
+  retryChatRun: (retryOfRunId: string, runId: string, signal?: AbortSignal) =>
+    api<ChatResponse>(`/api/chat/runs/${retryOfRunId}/retry`, {
+      method: "POST",
+      body: JSON.stringify({ runId }),
       ...(signal ? { signal } : {})
     }),
   chatRun: (runId: string) => api<ConversationRun>(`/api/chat/runs/${runId}`),

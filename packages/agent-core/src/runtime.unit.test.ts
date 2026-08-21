@@ -50,4 +50,28 @@ describe("AgentRuntime", () => {
 
     await expect(pending).rejects.toBeInstanceOf(AgentRunCancelledError);
   });
+
+  it("supplies durable conversation history before the new user input", async () => {
+    let receivedMessages: unknown;
+    const provider: LlmProvider = {
+      complete: async ({ messages }) => {
+        receivedMessages = messages.map((message) => ({ ...message }));
+        return { type: "message", content: "Current answer" };
+      }
+    };
+    const runtime = new AgentRuntime(provider, new MockMcpServer());
+
+    await runtime.run("Current question", {
+      history: [
+        { role: "user", content: "Previous question" },
+        { role: "assistant", content: "Previous answer" }
+      ]
+    });
+
+    expect(receivedMessages).toEqual([
+      { role: "user", content: "Previous question" },
+      { role: "assistant", content: "Previous answer" },
+      { role: "user", content: "Current question" }
+    ]);
+  });
 });

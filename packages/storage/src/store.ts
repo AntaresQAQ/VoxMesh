@@ -1,10 +1,11 @@
 import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 
 import Database from "better-sqlite3";
 
 import type {
+  AgentMessage,
   ConversationDetail,
   ConversationRun,
   ConversationRunKind,
@@ -95,6 +96,17 @@ interface ConversationRunRow {
   error_code: string | null;
 }
 
+interface LocalDatabaseLease {
+  ownerId: string;
+  references: number;
+}
+
+const localDatabaseLeases = new Map<string, LocalDatabaseLease>();
+const OWNER_HEARTBEAT_MS = 5_000;
+const OWNER_STALE_MS = 30_000;
+const MAX_CHAT_HISTORY_MESSAGES = 32;
+const MAX_CHAT_HISTORY_CHARACTERS = 24_000;
+
 export interface StoredLlmConfiguration {
   mode: LlmMode;
   endpoint: string;
@@ -121,6 +133,11 @@ export interface StoredSpeechConfiguration {
   ttsVoice: string;
   ttsInstructions: string;
   ttsApiKey: string | null;
+}
+
+export interface StoredChatContext {
+  inputMessage: string;
+  history: AgentMessage[];
 }
 
 export interface StoredVoicePipelineConfiguration {
@@ -181,6 +198,10 @@ export type StorageObservabilityEvent =
 export class VoxMeshStore {
   private readonly database: Database.Database;
   private readonly runtimeRouting: RuntimeRoutingStore;
+  private readonly leaseKey: string;
+  private readonly ownerId: string;
+  private ownershipHeartbeat: NodeJS.Timeout | null = null;
+  private closed = false;
   private readonly observabilityListeners = new Set<
     (event: StorageObservabilityEvent) => void
   >();
@@ -189,16 +210,44 @@ export class VoxMeshStore {
     if (path !== ":memory:") {
       mkdirSync(dirname(path), { recursive: true });
     }
-    this.database = new Database(path);
-    this.database.pragma("journal_mode = WAL");
-    this.database.pragma("foreign_keys = ON");
-    this.migrate();
-    this.reconcileInterruptedRuns();
-    this.runtimeRouting = new RuntimeRoutingStore(this.database);
-    this.runtimeRouting.initializeDefaults();
+    const database = new Database(path);
+    const lease = acquireLocalDatabaseLease(path);
+    this.leaseKey = lease.key;
+    this.ownerId = lease.ownerId;
+    this.database = database;
+    let ownershipClaimed = false;
+    try {
+      this.database.pragma("journal_mode = WAL");
+      this.database.pragma("foreign_keys = ON");
+      this.bootstrapProcessOwner();
+      ownershipClaimed = this.claimDatabaseOwnership();
+      this.migrate();
+      if (ownershipClaimed) {
+        this.reconcileInterruptedRuns();
+      }
+      this.runtimeRouting = new RuntimeRoutingStore(this.database);
+      this.runtimeRouting.initializeDefaults();
+      this.startOwnershipHeartbeat();
+    } catch (error) {
+      const lastLease = releaseLocalDatabaseLease(this.leaseKey);
+      if (ownershipClaimed && lastLease) {
+        this.releaseDatabaseOwnership();
+      }
+      this.database.close();
+      throw error;
+    }
   }
 
   public close(): void {
+    if (this.closed) return;
+    this.closed = true;
+    if (this.ownershipHeartbeat) {
+      clearInterval(this.ownershipHeartbeat);
+      this.ownershipHeartbeat = null;
+    }
+    if (releaseLocalDatabaseLease(this.leaseKey)) {
+      this.releaseDatabaseOwnership();
+    }
     this.database.close();
   }
 
@@ -405,24 +454,30 @@ export class VoxMeshStore {
     return id;
   }
 
-  public createChatRun(runId: string, userMessage: string): ConversationRun {
-    const conversationId = randomUUID();
+  public createChatRun(
+    runId: string,
+    userMessage: string,
+    existingConversationId?: string
+  ): ConversationRun {
+    const conversationId = existingConversationId ?? randomUUID();
     const correlationId = randomUUID();
     const startedAt = new Date().toISOString();
-    let run: ConversationRun | undefined;
-    let message: Message | undefined;
-    let event: PipelineEvent | undefined;
-    this.database.transaction(() => {
-      this.database
-        .prepare(
-          "INSERT INTO conversations (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)"
-        )
-        .run(
-          conversationId,
-          conversationTitle(userMessage),
-          startedAt,
-          startedAt
-        );
+    const create = this.database.transaction(() => {
+      if (existingConversationId) {
+        this.requireConversation(existingConversationId);
+        this.requireNoActiveRun(existingConversationId);
+      } else {
+        this.database
+          .prepare(
+            "INSERT INTO conversations (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)"
+          )
+          .run(
+            conversationId,
+            conversationTitle(userMessage),
+            startedAt,
+            startedAt
+          );
+      }
       const inserted = this.database
         .prepare(
           `INSERT INTO conversation_runs (
@@ -438,7 +493,7 @@ export class VoxMeshStore {
           statusCode: 409
         });
       }
-      message = this.insertMessage(
+      const message = this.insertMessage(
         conversationId,
         "user",
         userMessage,
@@ -450,8 +505,8 @@ export class VoxMeshStore {
           "UPDATE conversation_runs SET input_message_id = ? WHERE id = ?"
         )
         .run(message.id, runId);
-      run = this.getConversationRun(runId);
-      event = this.insertPipelineEvent({
+      const run = this.getConversationRun(runId);
+      const event = this.insertPipelineEvent({
         conversationId,
         runId,
         correlationId,
@@ -460,10 +515,9 @@ export class VoxMeshStore {
         message: "Agent run started",
         durationMs: null
       });
-    })();
-    if (!run || !message || !event) {
-      throw new Error("Conversation run transaction did not produce records");
-    }
+      return { run, message, event };
+    });
+    const { run, message, event } = create.immediate();
     this.emitObservabilityEvent({ type: "run.created", run });
     this.emitObservabilityEvent({
       type: "message.created",
@@ -473,6 +527,64 @@ export class VoxMeshStore {
     this.emitObservabilityEvent({
       type: "pipeline.created",
       conversationId,
+      event
+    });
+    return run;
+  }
+
+  public createChatRetry(runId: string, retryOfRunId: string): ConversationRun {
+    const correlationId = randomUUID();
+    const startedAt = new Date().toISOString();
+    const create = this.database.transaction(() => {
+      const source = this.getConversationRun(retryOfRunId);
+      if (source.status !== "failed" && source.status !== "cancelled") {
+        throw conflict("Only failed or cancelled runs can be retried");
+      }
+      if (!source.inputMessageId) {
+        throw conflict("Conversation run has no retryable input message");
+      }
+      this.requireLatestRetryableAttempt(source);
+      this.requireNoActiveRun(source.conversationId);
+      const inserted = this.database
+        .prepare(
+          `INSERT INTO conversation_runs (
+             id, conversation_id, kind, status, correlation_id,
+             input_message_id, retry_of_run_id, started_at, completed_at,
+             duration_ms, error_code
+           ) VALUES (?, ?, 'chat', 'in_progress', ?, ?, ?, ?, NULL, NULL, NULL)
+           ON CONFLICT(id) DO NOTHING`
+        )
+        .run(
+          runId,
+          source.conversationId,
+          correlationId,
+          source.inputMessageId,
+          source.id,
+          startedAt
+        );
+      if (inserted.changes !== 1) {
+        throw conflict("Conversation run ID already exists");
+      }
+      this.database
+        .prepare("UPDATE conversations SET updated_at = ? WHERE id = ?")
+        .run(startedAt, source.conversationId);
+      const run = this.getConversationRun(runId);
+      const event = this.insertPipelineEvent({
+        conversationId: source.conversationId,
+        runId,
+        correlationId,
+        stage: "AGENT",
+        status: "started",
+        message: "Agent retry started",
+        durationMs: null
+      });
+      return { run, event };
+    });
+    const { run, event } = create.immediate();
+    this.emitObservabilityEvent({ type: "run.created", run });
+    this.emitObservabilityEvent({
+      type: "pipeline.created",
+      conversationId: run.conversationId,
       event
     });
     return run;
@@ -504,6 +616,44 @@ export class VoxMeshStore {
         )
         .all(conversationId) as ConversationRunRow[]
     ).map(mapConversationRun);
+  }
+
+  public getChatContext(runId: string): StoredChatContext {
+    const run = this.getConversationRun(runId);
+    if (!run.inputMessageId) {
+      throw new Error("Conversation run has no input message");
+    }
+    const input = this.database
+      .prepare(
+        `SELECT content
+         FROM messages
+         WHERE id = ? AND conversation_id = ? AND role = 'user'`
+      )
+      .get(run.inputMessageId, run.conversationId) as
+      { content: string } | undefined;
+    if (!input) throw new Error("Conversation run input message was not found");
+    const recentHistory = this.database
+      .prepare(
+        `SELECT role, content
+         FROM messages
+         WHERE conversation_id = ?
+           AND role IN ('user', 'assistant')
+           AND rowid < (SELECT rowid FROM messages WHERE id = ?)
+         ORDER BY rowid DESC
+         LIMIT ?`
+      )
+      .all(
+        run.conversationId,
+        run.inputMessageId,
+        MAX_CHAT_HISTORY_MESSAGES * 2
+      ) as Array<{
+      role: "user" | "assistant";
+      content: string;
+    }>;
+    return {
+      inputMessage: input.content,
+      history: selectChatHistory(recentHistory)
+    };
   }
 
   public completeChatRun(input: {
@@ -719,6 +869,48 @@ export class VoxMeshStore {
       .prepare("SELECT COUNT(*) AS count FROM conversations")
       .get() as CountRow;
     return row.count;
+  }
+
+  private requireConversation(conversationId: string): void {
+    const row = this.database
+      .prepare("SELECT 1 FROM conversations WHERE id = ?")
+      .get(conversationId);
+    if (!row) throw notFound("Conversation was not found");
+  }
+
+  private requireNoActiveRun(conversationId: string): void {
+    const row = this.database
+      .prepare(
+        `SELECT 1 FROM conversation_runs
+         WHERE conversation_id = ? AND status = 'in_progress'`
+      )
+      .get(conversationId);
+    if (row) throw conflict("Conversation already has an active run");
+  }
+
+  private requireLatestRetryableAttempt(source: ConversationRun): void {
+    const latestInput = this.database
+      .prepare(
+        `SELECT id FROM messages
+         WHERE conversation_id = ? AND role = 'user'
+         ORDER BY rowid DESC
+         LIMIT 1`
+      )
+      .get(source.conversationId) as { id: string } | undefined;
+    if (latestInput?.id !== source.inputMessageId) {
+      throw conflict("Only the latest conversation turn can be retried");
+    }
+    const latestAttempt = this.database
+      .prepare(
+        `SELECT id FROM conversation_runs
+         WHERE input_message_id = ?
+         ORDER BY started_at DESC, rowid DESC
+         LIMIT 1`
+      )
+      .get(source.inputMessageId) as { id: string } | undefined;
+    if (latestAttempt?.id !== source.id) {
+      throw conflict("Only the latest attempt can be retried");
+    }
   }
 
   private finalizeChatRun(input: {
@@ -950,6 +1142,13 @@ export class VoxMeshStore {
         created_at TEXT NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS storage_process_owner (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        owner_id TEXT NOT NULL,
+        process_id INTEGER NOT NULL,
+        claimed_at TEXT NOT NULL
+      );
+
       CREATE TABLE IF NOT EXISTS sessions (
         token_hash TEXT PRIMARY KEY,
         expires_at TEXT NOT NULL,
@@ -1069,6 +1268,9 @@ export class VoxMeshStore {
     this.database.exec(`
       CREATE INDEX IF NOT EXISTS idx_conversation_runs_conversation
       ON conversation_runs(conversation_id, started_at);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_conversation_runs_active
+      ON conversation_runs(conversation_id)
+      WHERE status = 'in_progress';
       CREATE INDEX IF NOT EXISTS idx_messages_run
       ON messages(run_id);
       CREATE INDEX IF NOT EXISTS idx_conversation_events_run
@@ -1155,6 +1357,84 @@ export class VoxMeshStore {
         ALTER TABLE conversation_events_next RENAME TO conversation_events;
       `);
     })();
+  }
+
+  /**
+   * Claims exclusive process ownership while allowing multiple Store
+   * connections inside the same Node.js process.
+   */
+  private bootstrapProcessOwner(): void {
+    this.database.exec(`
+      CREATE TABLE IF NOT EXISTS storage_process_owner (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        owner_id TEXT NOT NULL,
+        process_id INTEGER NOT NULL,
+        claimed_at TEXT NOT NULL
+      );
+    `);
+  }
+
+  private claimDatabaseOwnership(): boolean {
+    const claim = this.database.transaction(() => {
+      const existing = this.database
+        .prepare(
+          `SELECT owner_id, process_id, claimed_at
+           FROM storage_process_owner WHERE id = 1`
+        )
+        .get() as
+        | { owner_id: string; process_id: number; claimed_at: string }
+        | undefined;
+      if (existing?.owner_id === this.ownerId) return false;
+      const heartbeatAge = existing
+        ? Date.now() - Date.parse(existing.claimed_at)
+        : Number.POSITIVE_INFINITY;
+      if (
+        existing &&
+        existing.process_id !== process.pid &&
+        heartbeatAge < OWNER_STALE_MS &&
+        isProcessAlive(existing.process_id)
+      ) {
+        throw conflict("VoxMesh database is active in another process");
+      }
+      this.database
+        .prepare(
+          `INSERT INTO storage_process_owner (
+             id, owner_id, process_id, claimed_at
+           ) VALUES (1, ?, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET
+             owner_id = excluded.owner_id,
+             process_id = excluded.process_id,
+             claimed_at = excluded.claimed_at`
+        )
+        .run(this.ownerId, process.pid, new Date().toISOString());
+      return true;
+    });
+    return claim.immediate();
+  }
+
+  private startOwnershipHeartbeat(): void {
+    this.ownershipHeartbeat = setInterval(() => {
+      try {
+        this.database
+          .prepare(
+            `UPDATE storage_process_owner
+             SET claimed_at = ?
+             WHERE id = 1 AND owner_id = ?`
+          )
+          .run(new Date().toISOString(), this.ownerId);
+      } catch (error) {
+        console.error("Database ownership heartbeat failed", error);
+      }
+    }, OWNER_HEARTBEAT_MS);
+    this.ownershipHeartbeat.unref();
+  }
+
+  private releaseDatabaseOwnership(): void {
+    this.database
+      .prepare(
+        "DELETE FROM storage_process_owner WHERE id = 1 AND owner_id = ?"
+      )
+      .run(this.ownerId);
   }
 
   private reconcileInterruptedRuns(): void {
@@ -1306,6 +1586,67 @@ function mapConversationRun(row: ConversationRunRow): ConversationRun {
 
 function notFound(message: string): Error & { statusCode: number } {
   return Object.assign(new Error(message), { statusCode: 404 });
+}
+
+function conflict(message: string): Error & { statusCode: number } {
+  return Object.assign(new Error(message), { statusCode: 409 });
+}
+
+function acquireLocalDatabaseLease(path: string): {
+  key: string;
+  ownerId: string;
+} {
+  const key = path === ":memory:" ? randomUUID() : resolve(path);
+  const existing = localDatabaseLeases.get(key);
+  if (existing) {
+    existing.references += 1;
+    return { key, ownerId: existing.ownerId };
+  }
+  const ownerId = randomUUID();
+  localDatabaseLeases.set(key, { ownerId, references: 1 });
+  return { key, ownerId };
+}
+
+function releaseLocalDatabaseLease(key: string): boolean {
+  const lease = localDatabaseLeases.get(key);
+  if (!lease) return false;
+  lease.references -= 1;
+  if (lease.references > 0) return false;
+  localDatabaseLeases.delete(key);
+  return true;
+}
+
+function isProcessAlive(processId: number): boolean {
+  try {
+    process.kill(processId, 0);
+    return true;
+  } catch (error) {
+    return (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "EPERM"
+    );
+  }
+}
+
+function selectChatHistory(newestFirst: AgentMessage[]): AgentMessage[] {
+  const selected: AgentMessage[] = [];
+  let characters = 0;
+  for (const message of newestFirst) {
+    if (selected.length >= MAX_CHAT_HISTORY_MESSAGES) break;
+    if (
+      selected.length > 0 &&
+      characters + message.content.length > MAX_CHAT_HISTORY_CHARACTERS
+    ) {
+      break;
+    }
+    selected.push(message);
+    characters += message.content.length;
+  }
+  selected.reverse();
+  while (selected[0]?.role === "assistant") selected.shift();
+  return selected;
 }
 
 function conversationTitle(message: string): string {
