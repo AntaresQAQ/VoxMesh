@@ -45,7 +45,7 @@ Build a minimal but extensible AI voice agent gateway with:
 The first version must be able to run without:
 
 - NanoPi R2S
-- USB audio hardware
+- physical audio hardware
 - Third-party MCP servers
 - Real AI API keys
 
@@ -173,7 +173,7 @@ Development workflows must support:
 
 macOS and Linux are the primary development platforms, but Windows must also support dependency installation, build, format check, lint, strict type-check, unit tests, integration tests, Mock Mode, and browser end-to-end tests.
 
-Linux-only audio, packaging, deployment, and hardware tests must remain optional on macOS and Windows.
+Linux-only audio, deployment, and hardware tests must remain optional on macOS and Windows.
 
 ---
 
@@ -374,9 +374,15 @@ The Agent Core should never directly call:
 
 Those belong to platform-specific adapters.
 
-The first physical implementation should target Linux and USB audio devices.
+Physical audio must support macOS, Windows, and Linux through separate platform
+adapters. Discovery must include all operating-system audio endpoints rather
+than filtering for USB devices.
 
-NanoPi R2S should use the Linux adapter.
+The Web Console provides Teams-style independent microphone and speaker
+selection. Browser-connected devices and VoxMesh-host devices are separate
+inventories and must be labeled and persisted independently.
+
+NanoPi R2S uses the Linux host-audio adapter.
 
 ---
 
@@ -601,11 +607,15 @@ GET  /api/conversations/:id
 
 POST /api/chat
 
+GET  /api/logs
+```
+
+Phase 8 adds the MCP management and manual-execution APIs:
+
+```text
 GET  /api/mcp/servers
 GET  /api/mcp/tools
 POST /api/mcp/tools/:name/test
-
-GET  /api/logs
 ```
 
 WebSocket:
@@ -732,14 +742,22 @@ Its configuration should live under:
 deployments/nanopi-r2s/
 ```
 
-This may contain:
+The supported native path is script-driven. This directory may contain:
 
 ```text
-Dockerfile
-docker-compose.yml
 install.sh
+upgrade.sh
+backup.sh
+restore.sh
+rollback.sh
+uninstall.sh
+voxmesh.service
 configuration files
 ```
+
+An optional Dockerfile and `docker-compose.yml` may be provided, but Docker is
+not required for MVP acceptance. Debian packages and package-repository
+integration are out of scope.
 
 R2S-specific logic must remain inside the deployment/platform layer.
 
@@ -759,11 +777,11 @@ The intended design is:
                         │
           ┌─────────────┼─────────────┐
           ▼             ▼             ▼
-      Linux Audio   macOS Audio   Browser Audio
-        Adapter       Adapter        Adapter
+      Linux Audio   macOS Audio   Windows Audio   Browser Audio
+        Adapter       Adapter        Adapter         Adapter
           │
           ▼
-       ALSA / etc.
+    PipeWire/ALSA   CoreAudio        WASAPI       MediaDevices
 ```
 
 Similarly:
@@ -843,10 +861,10 @@ Implement:
 - Dashboard
 - Chat
 - Conversations
-- MCP
 - Logs
+- Settings
 
-### Phase 4 — Real AI Providers
+### Phase 4 — Buffered Real AI Providers
 
 Add buffered Azure implementations for:
 
@@ -856,24 +874,46 @@ Add buffered Azure implementations for:
 
 without modifying Agent Core.
 
+### Phase 5 — Full-Chain Streaming Voice
+
 After buffered-provider acceptance, add capability-gated full-chain streaming:
 Streaming STT, Streaming Chat LLM, and Streaming TTS. Streaming support is
 independent per pipeline role, must never silently fall back to buffered
 execution, and initially targets OpenAI/Azure-compatible Chat SSE plus Alibaba
 Cloud Model Studio speech WebSockets.
 
-### Phase 5 — Real MCP
+### Phase 6 — Cross-Platform Audio Devices
 
-Add generic Streamable HTTP and stdio MCP integrations with explicit server and tool enablement.
+Implement Teams-style browser and VoxMesh-host audio discovery, explicit
+input/output selection, testing, capture, and playback across macOS, Windows,
+and Linux platform adapters. Enumerate every available audio endpoint, not
+only USB devices.
 
-### Phase 6 — Linux Audio and Wake Word
+### Phase 7 — Offline Wake Word
 
-Implement USB audio support and local offline wake-word detection through Linux
-platform adapters.
+Implement local sherpa-onnx wake-word detection on top of the selected
+VoxMesh-host input without adding wake-word logic to Agent Core.
 
-### Phase 7 — NanoPi Deployment
+### Phase 8 — Generic Third-Party MCP
 
-Package the application for NanoPi R2S using Docker Compose.
+Add the full MCP Console plus generic Streamable HTTP and stdio integrations
+with explicit server and tool enablement. The Mock MCP loop remains available
+to Agent Core before this phase, but user-facing MCP management and manual
+execution are deferred here.
+
+### Phase 9 — Scripted Deployment and NanoPi Qualification
+
+Provide validated native deployment scripts for Linux amd64 and arm64,
+including systemd setup, upgrades, backup, restore, rollback, and uninstall.
+Docker Compose may remain an optional deployment path. Debian packages and a
+package repository are not required.
+
+### Final MVP Acceptance Gate
+
+Run the complete cross-platform, provider, MCP, physical-audio, wake-word,
+deployment, security, migration, backup, rollback, accessibility, and hardware
+qualification matrix. This is a release gate, not another implementation
+phase.
 
 ---
 
@@ -898,7 +938,7 @@ The MVP is complete when the following works:
                         TTS
                          │
                          ▼
-                  USB Speakerphone
+                Selected Audio Output
 ```
 
 The system must also work in Mock Mode:

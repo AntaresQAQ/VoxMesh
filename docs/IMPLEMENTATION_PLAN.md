@@ -11,8 +11,30 @@ This document is the project-visible implementation roadmap. It does not authori
 
 Last updated: 2026-08-21
 
-Current implementation branch: `feat/realtime-observability`, based on
-`1a668a7` (`docs: reorganize project documentation (#8)`).
+Implementation baseline: merged `main` through PR #12
+(`feat: add dashboard device status`).
+
+Recent merged milestones:
+
+- PR #9: real-time observability
+- PR #10: Conversation Run lifecycle and cancellation
+- PR #11: Chat continuity and retry
+- PR #12: Dashboard device and physical-audio status foundations
+
+### Phase Status
+
+| Phase | Scope                            | Status                                 |
+| ----- | -------------------------------- | -------------------------------------- |
+| 1     | Project skeleton and secure base | Complete                               |
+| 2     | Agent Core and Mock pipeline     | Complete                               |
+| 3     | Web Console                      | In progress: closeout evidence remains |
+| 4     | Buffered real AI providers       | Implemented; live acceptance pending   |
+| 5     | Full-chain streaming voice       | Planned; requires Phase 4 acceptance   |
+| 6     | Cross-platform audio devices     | Planned; requires Phase 5 acceptance   |
+| 7     | Offline wake word                | Planned; requires Phase 6 acceptance   |
+| 8     | Generic third-party MCP          | Planned; requires Phase 7 acceptance   |
+| 9     | Scripted deployment and NanoPi   | Planned; requires Phase 8 acceptance   |
+| Gate  | Final MVP acceptance and release | Pending                                |
 
 ### Completed foundation and vertical slices
 
@@ -41,6 +63,12 @@ Current implementation branch: `feat/realtime-observability`, based on
       pipeline events with bounded replay, gap indication, heartbeat,
       backpressure, session revocation, redaction, reconnect, and URL-backed
       Logs filters
+- [x] Conversation Run identity, correlation, terminal-state persistence,
+      cancellation, restart recovery, inspection, continuity, bounded history,
+      and failed/cancelled retry without duplicate user messages
+- [x] platform-independent device, physical-audio, and system-metric status
+      contracts with an authenticated API, explicit unavailable defaults,
+      independent Dashboard polling, and five-state accessible rendering
 
 ### Completed Runtime Routing
 
@@ -72,11 +100,17 @@ Current implementation branch: `feat/realtime-observability`, based on
 - The Logs page loads a durable `GET /api/logs` snapshot and merges
   authenticated real-time log events. Application-level bidirectional voice
   streaming remains planned separately.
-- Conversation list/detail and persisted pipeline events are implemented, but
-  complete duration, correlation, in-progress, failed, and cancelled metadata
-  remain.
-- Mock MCP tool execution through Agent Core is implemented; generic MCP
-  server configuration, discovery, approval, and manual execution UI are not.
+- Conversation Run lifecycle, cancellation, continuity, bounded durable
+  history, retry, correlation, duration, and terminal-state inspection are
+  implemented for text Chat. Voice requests still use nullable run metadata
+  and do not yet expose cancellable or streaming voice sessions.
+- Device and physical-audio status contracts are implemented. The default
+  adapter intentionally reports unavailable; discovery, selection, capture,
+  playback, and macOS/Windows/Linux integration remain Phase 6 work.
+- Mock MCP tool execution through Agent Core is implemented as a deterministic
+  runtime dependency. User-facing MCP inspection, manual execution,
+  configuration, transports, permissions, and lifecycle are deferred together
+  to Phase 8.
 - Automated accessibility checks cover representative routes and states. They
   do not replace the remaining manual screen-reader, forced-colors, complete
   zoom, device, and hardware review.
@@ -88,10 +122,11 @@ Current implementation branch: `feat/realtime-observability`, based on
       and complete in-progress/failed/cancelled states
 - [x] Dashboard device and physical-audio status with explicit unavailable,
       stale, degraded, and failed states
-- [ ] generic Mock MCP inspection and manual execution UI without
-      service-specific logic
 - [ ] remaining Phase 3 failure/recovery, locale, theme, keyboard, zoom, and
       accessibility evidence
+
+The executable scope, PR split, acceptance criteria, and exclusions are defined
+in [Phase 3 Closeout Plan](./development/PHASE_3_CLOSEOUT.md).
 
 ### Remaining buffered Phase 4 acceptance work
 
@@ -123,13 +158,17 @@ Current implementation branch: `feat/realtime-observability`, based on
 
 ### Later confirmed phases
 
-- [ ] generic MCP configuration, Streamable HTTP and stdio transports,
-      lifecycle, permissions, and full MCP Console
-- [ ] Debian/Ubuntu ALSA USB capture/playback and local offline wake-word
-      detection through platform adapters
-- [ ] Linux amd64/arm64 archives, containers, Debian packages, Compose,
-      systemd, backup/restore, rollback, and NanoPi R2S qualification
-- [ ] final cross-platform and hardware MVP acceptance
+- [ ] Phase 6 browser and host audio discovery, selection, testing, capture,
+      playback, permissions, and platform qualification on macOS, Windows, and
+      Linux
+- [ ] Phase 7 local offline wake-word detection, packaged profiles, settings,
+      privacy controls, and hardware qualification
+- [ ] Phase 8 generic MCP inspection, manual execution, configuration,
+      Streamable HTTP and stdio transports, lifecycle, permissions, and full
+      MCP Console
+- [ ] Phase 9 Linux amd64/arm64 deployment scripts, systemd, optional Docker
+      Compose, backup/restore, rollback, and NanoPi R2S qualification
+- [ ] Final cross-platform and hardware MVP Acceptance Gate
 
 ### Deferred and not active backlog
 
@@ -146,40 +185,49 @@ verified, activation must continue to reject routes that request streaming.
 
 ### Next execution order
 
-1. Close the remaining Phase 3 Web Console and end-to-end acceptance gaps.
+1. Close the remaining Phase 3 Web Console, end-to-end, and manual
+   accessibility evidence.
 2. Complete the Phase 4 opt-in live-provider acceptance gate.
-3. Implement capability-gated full-chain Streaming STT/Chat LLM/TTS.
-4. Implement Phase 5 generic MCP.
-5. Implement Phase 6 ALSA physical audio and offline wake-word detection.
-6. Implement Phase 7 packaging, deployment, backup, rollback, and NanoPi
+3. Implement Phase 5 capability-gated full-chain Streaming STT/Chat LLM/TTS.
+4. Implement Phase 6 cross-platform audio devices.
+5. Implement Phase 7 offline wake-word detection.
+6. Implement Phase 8 generic third-party MCP and the full MCP Console.
+7. Implement Phase 9 scripted deployment, backup, rollback, and NanoPi
    qualification.
+8. Complete the Final MVP Acceptance Gate.
 
 ## 1. Current State and Approach
 
-The repository contains validated Mock and real-provider buffered voice
-vertical slices, protected Runtime Routing, and a bilingual Web Console with
-representative accessibility automation. The implementation is intentionally
-incomplete: application-level voice streaming, complete MCP integration,
-physical audio, manual accessibility evidence, deployment, and final hardware
-qualification remain.
+The repository contains validated Mock buffered voice vertical slices,
+implemented buffered real-provider adapters, protected Runtime Routing,
+real-time observability, durable Chat lifecycle and continuity,
+platform-independent device-status foundations, and a bilingual Web Console
+with representative accessibility automation. The implementation is
+intentionally incomplete: Phase 3 closeout evidence, live-provider
+qualification, application-level voice streaming, physical audio, Wake Word,
+third-party MCP, scripted deployment, and final hardware qualification remain.
 
-The implementation follows the seven phases defined in the MVP specification
+The implementation follows the nine phases defined in the MVP specification
 while preserving a platform-independent Agent Core. Some provider work was
-delivered before all Phase 3 acceptance items; the next work returns to Phase 3
-closure before continuing to generic MCP, physical audio, and deployment.
+delivered before all Phase 3 acceptance items; the next work completes the
+Phase 3 closeout matrix before the separately gated live-provider, streaming,
+physical-audio, Wake Word, third-party MCP, and deployment phases.
 Every behavior-changing work package remains gated by explicit user
 confirmation.
 
 ## 2. Confirmed Product Decisions
 
-- The roadmap covers all seven MVP phases.
-- All seven phases are detailed into executable work packages and explicit decision gates.
+- The roadmap covers all nine MVP implementation phases plus a final acceptance
+  gate.
+- All nine phases are detailed into executable work packages and explicit
+  decision gates.
 - Vitest is the baseline unit and integration test framework.
 - Playwright is the baseline browser end-to-end test framework.
 - Fastify schemas and TypeBox define runtime-validated HTTP and WebSocket contracts and shared TypeScript types.
 - macOS, Linux, and Windows are supported development environments; macOS and Linux are the primary contributor platforms.
 - All three development platforms must support installation, build, format check, lint, strict type-check, unit tests, integration tests, Mock Mode, and Playwright.
-- Real ALSA audio, Linux services, Debian packaging, and NanoPi qualification remain Linux-only.
+- Host audio uses platform adapters on macOS, Windows, and Linux. Deployment
+  automation and NanoPi qualification remain Linux-only.
 - The server listen host and port are configurable.
 - The default deployment scenario is a trusted local-area network.
 - The Web Console requires a single administrator password.
@@ -207,12 +255,17 @@ confirmation.
 - MCP supports Streamable HTTP and stdio. OAuth is deferred.
 - MCP servers and tools are disabled by default and require explicit administrator enablement.
 - Administrators may configure arbitrary stdio commands after a prominent command-execution warning and explicit confirmation.
-- Linux audio targets Debian or Ubuntu ARM64, ALSA, and standard USB Audio Class devices.
-- Server-side physical audio input and output devices are selected independently
-  in Settings through explicit dropdowns populated by the platform adapter.
-- No physical audio device is selected implicitly. VoxMesh must not select the
-  first discovered device or silently fall back to another physical or Mock
-  device.
+- Browser audio enumerates devices connected to the Web Console computer.
+  Host audio enumerates devices connected to the VoxMesh server computer.
+  These inventories and selections remain independent.
+- Host audio supports macOS CoreAudio, Windows Audio endpoints, and Linux
+  PipeWire/PulseAudio/ALSA adapters.
+- Discovery includes built-in, USB, Bluetooth, HDMI/display, dock, virtual,
+  default, and communications endpoints when exposed by the platform.
+- Browser and host audio input/output devices are selected independently
+  through explicitly labeled Teams-style dropdowns.
+- No audio device is selected implicitly. VoxMesh must not select the first
+  discovered device or silently fall back to another physical or Mock device.
 - Audio device IDs, sample rate, and channels are configurable; capture
   defaults to 16 kHz mono.
 - Browser voice testing remains a separate browser-owned audio boundary and
@@ -220,14 +273,16 @@ confirmation.
 - Wake-word detection uses the Apache-2.0 sherpa-onnx open-vocabulary keyword
   spotter through its Node.js addon in the Linux platform adapter.
 - Wake-word detection is local and offline, requires no cloud service or
-  access key, and consumes the selected physical input device as mono 16 kHz
-  PCM.
+  access key, and consumes the selected VoxMesh-host input device as mono
+  16 kHz PCM.
 - Wake-word detection is disabled by default and must be enabled explicitly
   after an input device and packaged keyword profile are selected.
 - VAD remains deferred. The first wake-word flow uses a bounded configurable
   utterance window after detection rather than indefinite recording.
-- Releases provide Linux amd64 and arm64 images, archives, and Debian packages.
-- NanoPi supports Docker Compose, systemd, scripts, and manual deployment with backup and one-command compatible rollback.
+- The supported native deployment path uses validated scripts for Linux amd64
+  and arm64. Debian packages and a package repository are not required.
+- NanoPi supports scripted systemd deployment with backup and one-command
+  compatible rollback. Docker Compose may remain an optional deployment path.
 - TanStack Router is the required Web Console router.
 - Navigation must use Browser History and stable URLs rather than component-local page state.
 - TanStack Query is the preferred Web Console server-state and request-cache layer.
@@ -423,7 +478,8 @@ Phase 1 implementation requires a new explicit user confirmation.
 - Define root commands for development, build, format check, lint, type-check, unit tests, integration tests, e2e tests, and complete validation.
 - Implement cross-platform root scripts without Bash, GNU-only flags, or Unix-only paths.
 - Add Linux, macOS, and Windows CI jobs for build, checks, tests, Mock Mode startup, and Playwright.
-- Keep ALSA, Debian packaging, deployment, and hardware jobs explicitly Linux-only.
+- Run browser and host-audio contract tests on macOS, Windows, and Linux.
+  Keep deployment and NanoPi hardware jobs explicitly Linux-only.
 - Add a root `README.md` linking product, architecture, setup, configuration, testing, deployment, and governance documentation.
 - Document platform-specific setup and troubleshooting where required.
 
@@ -615,15 +671,7 @@ Phase 3 implementation requires a new explicit user confirmation after Phase 2 a
 - Support empty, in-progress, failed, cancelled, and completed conversations.
 - Represent the selected conversation in `/conversations/$conversationId` rather than component-local selection state.
 
-### 7.4 MCP Console
-
-- List configured MCP servers, connection status, and discovered tools.
-- Render argument forms from validated schemas with a JSON fallback.
-- Require authentication for manual execution and distinguish it from Agent Core calls.
-- Validate arguments and render structured results and errors safely.
-- Do not add Home Assistant-specific UI logic.
-
-### 7.5 Real-Time Logs and Events
+### 7.4 Real-Time Logs and Events
 
 - Authenticate WebSocket connections using the established session.
 - Stream logs and domain events in versioned envelopes.
@@ -632,23 +680,27 @@ Phase 3 implementation requires a new explicit user confirmation after Phase 2 a
 - Prevent secret-bearing fields from reaching the browser.
 - Store shareable log filters in validated URL search parameters.
 
-### 7.6 Configuration UI
+### 7.5 Configuration UI
 
-- Expose safe settings for providers, MCP servers, audio devices, and non-secret server behavior.
-- Provide a dedicated Audio Settings section with separate **Input device** and
-  **Output device** dropdowns for server-side physical capture and playback.
-- Populate device dropdowns from safe platform-adapter discovery metadata and
-  provide an explicit refresh action.
+- Expose safe settings for providers, audio devices, and non-secret server behavior.
+- Provide a dedicated Audio Settings section with separate **This browser** and
+  **VoxMesh host** device groups.
+- Provide independent Microphone/Speaker selectors for browser audio and
+  Input device/Output device selectors for host audio.
+- Populate browser selectors from `MediaDevices` and host selectors from safe
+  platform-adapter discovery metadata.
+- Include all endpoints exposed by the platform rather than filtering for USB.
+- Provide explicit refresh and device-change handling.
 - Include a **No device selected** option and require an administrator to make
   each selection explicitly.
 - Persist stable device IDs rather than transient list positions or display
   labels.
 - If a saved device is missing, retain its configured ID, show it as
-  unavailable, and block physical voice operations instead of changing the
-  selection.
-- Provide bounded **Test input** and **Test output** actions. Input testing
-  shows a live level meter without retaining audio; output testing plays a
-  bundled local sample so hardware can be isolated from provider failures.
+  unavailable, and block the affected browser or host operation instead of
+  changing the selection.
+- Provide bounded test actions for both inventories. Input testing shows a live
+  level meter without retaining audio; output testing plays a bundled local
+  sample so hardware can be isolated from provider failures.
 - Announce discovery, refresh, test, unavailable, busy, permission, and failure
   states accessibly. Dropdowns and test actions must remain keyboard usable in
   English and Simplified Chinese at narrow widths and 200% zoom.
@@ -659,10 +711,11 @@ Phase 3 implementation requires a new explicit user confirmation after Phase 2 a
 - Apply language changes immediately without a page reload and persist the preference for future visits.
 - Provide Light, Dark, and System appearance options.
 - Apply appearance changes immediately and persist the selected mode.
-- Use TanStack Form for provider and future MCP or audio configuration when cross-field validation or write-only secret handling is required.
+- Use TanStack Form for provider and future audio configuration when
+  cross-field validation or write-only secret handling is required.
 - Use TanStack Query mutations and explicit invalidation for saved server configuration.
 
-### 7.7 Browser History Routing
+### 7.6 Browser History Routing
 
 - Replace runtime-only page selection with TanStack Router navigation.
 - Define typed routes for setup, login, Dashboard, Chat, Conversations, conversation detail, Logs, Settings, and not-found behavior.
@@ -682,9 +735,11 @@ Acceptance gate:
 - Authentication and first-run redirects do not loop or expose protected content.
 - Route tests cover valid, protected, unknown, and malformed URLs.
 
-### 7.8 Localization and Language Extensibility
+### 7.7 Localization and Language Extensibility
 
-- Organize locale resources by feature, including common navigation, authentication, Dashboard, Chat, Conversations, MCP, Logs, Settings, validation, and errors.
+- Organize locale resources by feature, including common navigation,
+  authentication, Dashboard, Chat, Conversations, Logs, Settings, validation,
+  and errors.
 - Define a typed or statically checked translation-key contract so renamed or missing keys are detected during development.
 - Keep locale selection independent from the single-administrator account so the setup and login experience can use the saved language.
 - Use `Intl` formatting for dates, times, numbers, lists, and future measurement units.
@@ -697,7 +752,7 @@ Acceptance gate:
 - Switching languages updates the current screen immediately and survives reload and sign-out.
 - Adding a fixture locale requires resource files and tests, but no component logic changes.
 
-### 7.9 Appearance and Theme Extensibility
+### 7.8 Appearance and Theme Extensibility
 
 - Define semantic CSS tokens for page, panel, elevated surface, border, primary and muted text, accent, interactive states, error, success, and shadows.
 - Resolve the selected appearance mode to Light or Dark and expose it through the root document element.
@@ -712,7 +767,7 @@ Acceptance gate:
 - System mode follows live operating-system theme changes.
 - Theme implementation does not require conditional rendering in feature components.
 
-### 7.10 Phase 3 End-to-End Matrix
+### 7.9 Phase 3 End-to-End Matrix
 
 Playwright must cover:
 
@@ -723,7 +778,6 @@ Playwright must cover:
 - chat failure, cancellation, and retry
 - browser microphone denial and mock voice flow
 - conversation timeline success and failure
-- MCP discovery and manual execution
 - WebSocket reconnect and event rendering
 - log filtering and redaction
 - configuration validation, secret handling, conflict, and restart indication
@@ -739,7 +793,7 @@ Acceptance gate:
 - All MVP Web Console areas work against Mock Mode on a normal development machine.
 - Every browser-visible feature has success and critical failure or recovery coverage.
 
-## 8. Phase 4 - Azure AI Provider Integration
+## 8. Phase 4 - Buffered Real AI Provider Integration
 
 Phase 4 requires explicit confirmation after Phase 3 acceptance.
 
@@ -808,9 +862,11 @@ Buffered Phase 4 acceptance:
 - Azure failures are diagnosable without secret exposure.
 - Default CI remains offline and deterministic.
 
-### 8.7 Capability-Gated Full-Chain Streaming
+## 9. Phase 5 - Full-Chain Streaming Voice
 
-Transport and protocol:
+Phase 5 requires explicit confirmation after buffered Phase 4 acceptance.
+
+### 9.1 Transport and Protocol
 
 - Add a dedicated authenticated `/api/voice-stream` WebSocket endpoint rather
   than overloading the buffered `/api/voice` request.
@@ -831,7 +887,7 @@ Transport and protocol:
   server, and provider resources. MVP reconnect starts a new voice session; it
   never claims to resume an interrupted provider stream.
 
-Browser input and playback:
+### 9.2 Browser Input and Playback
 
 - Capture mono PCM frames through Web Audio/AudioWorklet rather than waiting
   for a complete `MediaRecorder` container.
@@ -846,7 +902,7 @@ Browser input and playback:
 - Disable streaming controls when required browser APIs are unavailable.
   Never silently send the same route through the buffered endpoint.
 
-Provider contracts, Agent Core, and routing:
+### 9.3 Provider Contracts, Agent Core, and Routing
 
 - Add optional `StreamingSpeechToTextProvider` and
   `StreamingTextToSpeechProvider` contracts behind the provider-independent
@@ -888,7 +944,7 @@ Provider contracts, Agent Core, and routing:
 - Route activation requires the runtime transport plus declared and verified
   `streaming` capability for every enabled role.
 
-Backpressure, cancellation, and lifecycle:
+### 9.4 Backpressure, Cancellation, and Lifecycle
 
 - Bound browser, server, provider, and playback queues by bytes, frames, and
   duration.
@@ -906,7 +962,7 @@ Backpressure, cancellation, and lifecycle:
   LLM delta/segment count, tool lifecycle, pressure, and failure events without
   storing raw audio, secret payloads, or unbounded token fragments.
 
-Testing and acceptance:
+### 9.5 Testing and Acceptance
 
 - Unit-test protocol ordering, sequence validation, frame limits, capability
   gates, streaming LLM delta assembly, fragmented tool calls, semantic speech
@@ -928,7 +984,7 @@ Testing and acceptance:
   segment latency, final-transcript-to-first-audio latency, underruns, queue
   depth, CPU, memory, and network use.
 
-Streaming acceptance:
+Phase 5 acceptance:
 
 - A supported route can independently stream STT, Chat LLM, TTS, or any
   combination without using a buffered provider call for an enabled streaming
@@ -944,127 +1000,103 @@ Streaming acceptance:
 - Agent Core remains independent of WebSocket, browser, and vendor streaming
   APIs.
 
-## 9. Phase 5 - Generic Third-Party MCP Integration
+## 10. Phase 6 - Cross-Platform Audio Devices
 
-Phase 5 requires explicit confirmation after Phase 4 acceptance. Home Assistant is deferred and must later connect through this generic layer without integration-specific Agent Core code.
+Phase 6 requires explicit confirmation after Phase 5 acceptance and access to
+representative macOS, Windows, and Linux audio environments.
 
-### 9.1 Configuration Model
+See
+[Cross-Platform Audio Device Selection](./architecture/PHYSICAL_AUDIO.md) for
+the browser/host boundary and Teams-style selection behavior.
 
-- Define transport-discriminated configuration for Streamable HTTP and stdio.
-- Store name, description, enabled state, timeouts, retry policy, and tool policy.
-- Streamable HTTP supports no authentication, static HTTP authorization tokens, and custom sensitive headers.
-- stdio supports executable, ordered arguments, working directory, and environment variables.
-- Treat authorization values, sensitive headers, and sensitive environment values as write-only secrets.
-- Version configuration and use optimistic concurrency.
+### 10.1 Browser and Host Inventories
 
-### 9.2 Streamable HTTP
-
-- Use a maintained MCP SDK and the current Streamable HTTP protocol.
-- Validate URL schemes and reject unsupported endpoints.
-- Bound initialization, discovery, calls, reconnect, and shutdown.
-- Use backoff and jitter for connection recovery.
-- Do not retry tool calls unless they are explicitly known to be idempotent.
-- Normalize protocol, authentication, connection, timeout, schema, and server errors.
-- Defer OAuth.
-
-### 9.3 stdio and Process Security
-
-- Spawn executables directly with `shell: false` and explicit argument arrays.
-- Use platform-aware executable resolution and process tracking on macOS, Linux, and Windows.
-- Run with privileges no broader than the VoxMesh service account.
-- Bound startup, initialization, calls, idle time, shutdown, restart count, and crash-loop behavior.
-- Redact sensitive environment values from diagnostics.
-- Terminate only process trees started and tracked by VoxMesh.
-- Display a persistent Web Console warning that arbitrary stdio configuration grants command execution as the VoxMesh service account.
-- Require explicit confirmation before saving or enabling changed command, arguments, working directory, or environment.
-- Audit create, edit, enable, disable, start, stop, crash, and delete actions.
-
-### 9.4 Lifecycle and Tool Permissions
-
-- Implement initialization, capability negotiation, discovery, health, reconnect, disable, and graceful shutdown.
-- Cache tool metadata with refresh and stale-state indicators.
-- Isolate server failures and bound concurrency globally and per server.
-- Disable new servers and newly discovered tools by default.
-- Require explicit administrator enablement for each server and tool.
-- Include server identity in tool identity to prevent collisions.
-- Invalidate approval when a tool schema or relevant capability changes.
-- Validate tool arguments and result envelopes.
-
-### 9.5 Web Console and Tests
-
-- Add create, edit, test, enable, disable, reconnect, refresh, manual call, and delete flows.
-- Keep tokens, headers, and environment secrets write-only.
-- Clearly distinguish Streamable HTTP and stdio risks.
-- Show lifecycle, capabilities, tools, approvals, schema changes, safe errors, and audit history.
-- Unit-test validation, masking, permissions, schema invalidation, lifecycle, retries, and process construction.
-- Integration-test deterministic Streamable HTTP and stdio fixture servers on supported platforms.
-- Playwright-test warnings, confirmations, discovery, approvals, manual and Agent calls, reconnect, failure isolation, and deletion.
-
-Phase 5 acceptance:
-
-- Generic compatible servers connect through Streamable HTTP or stdio.
-- Agent Core can see and call only explicitly enabled tools.
-- stdio never uses an implicit shell and never reveals sensitive environment values.
-- No Home Assistant-specific code, schemas, labels, or branches exist in Agent Core.
-
-## 10. Phase 6 - Debian/Ubuntu ALSA USB Audio and Wake Word
-
-Phase 6 requires explicit confirmation after Phase 5 acceptance and access to representative Linux ARM64 hardware.
-
-### 10.1 Scope and Devices
-
-- Target Debian or Ubuntu ARM64 with ALSA while keeping the adapter testable on Linux amd64.
-- Support standard USB Audio Class capture and playback devices without model-specific logic.
-- Define platform-independent audio discovery contracts that return stable ID,
-  direction, safe display name, availability, supported formats, and a
-  platform-neutral status.
-- Enumerate capture and playback devices separately and expose only safe
-  metadata through authenticated APIs.
-- Configure input and output IDs independently through Settings dropdowns.
+- Treat browser devices and VoxMesh-host devices as separate inventories.
+- Browser discovery uses `MediaDevices` and affects only browser voice
+  recording/playback.
+- Host discovery uses project-owned platform adapters and affects host capture,
+  playback, physical voice, and Wake Word.
+- Enumerate input and output endpoints independently.
+- Include built-in, USB, Bluetooth, HDMI/display, dock, virtual, default, and
+  communications endpoints when exposed by the platform.
+- Do not filter by transport or assume USB Audio Class.
+- Expose stable platform-scoped IDs, direction, safe display name,
+  default/communications role, availability, and safe format capabilities.
 - Use a visible **No device selected** state as the default.
-- Persist selected stable IDs across service and device restarts.
-- Provide explicit refresh after hot-plug changes; automatic discovery may
-  supplement but must not replace the administrator-controlled refresh path.
-- Retain missing saved IDs as unavailable selections so reconnecting the same
-  stable device can restore readiness without choosing a different device.
-- Never silently select another device or fall back to Mock Audio.
-- Expose unavailable, busy, permission-denied, unsupported-format, disconnected, and error states.
-- Keep Linux audio optional so macOS and Windows can install, build, test, and run Mock Mode without ALSA dependencies.
+- Retain missing selected IDs as unavailable entries.
+- Never silently select another endpoint or fall back to Mock Audio.
 
-### 10.2 Formats and Lifecycle
+### 10.2 Teams-Style Settings and Tests
 
-- Configure sample rate, channels, sample format, and buffering.
-- Default capture to 16 kHz mono, 16-bit PCM.
-- Validate settings against device capabilities before use.
-- Convert supported ALSA, Azure OpenAI Audio, WAV, and PCM formats at adapter boundaries.
-- Preserve audio metadata and reject unapproved lossy conversion.
-- Implement capture and playback start, stop, cancellation, timeout, duration limits, queue policy, cleanup, and graceful shutdown.
-- Apply changed device selections to the next physical audio operation after
-  validation; never switch a device during an active capture or playback.
-- Implement a bounded input test that exposes live loudness only and discards
-  captured samples immediately.
-- Implement an output test with a bundled local audio sample and explicit
-  completion/failure status, independent of TTS provider availability.
-- Release handles after success, failure, cancellation, shutdown, or removal.
-- Normalize busy, disconnect, overrun, underrun, permission, format, timeout, and backend errors.
+- Add an explicitly labeled **This browser** section with independent
+  Microphone and Speaker selectors.
+- Add an explicitly labeled **VoxMesh host** section with independent Input
+  device and Output device selectors.
+- Show all currently discovered endpoints and their ready, unavailable,
+  disconnected, busy, permission-denied, unsupported, or failed state.
+- Persist browser selections in browser-local storage.
+- Persist host selections in server configuration.
+- Browser Test microphone and Test speaker use the selected browser endpoints.
+- Host Test input exposes transient loudness and discards samples immediately.
+- Host Test output plays a bundled local sample without a TTS dependency.
+- Provide explicit refresh and react to browser `devicechange` and host
+  hot-plug events without replacing saved selections.
+- Apply changed selections only to the next operation.
 
-### 10.3 Permissions and Qualification
+### 10.3 Platform Adapters and Lifecycle
 
-- Document and validate `/dev/snd`, audio groups, udev behavior, and service-account access.
-- Map only required devices in Docker; never require privileged mode.
-- Use a dedicated service account for systemd and manual deployment.
-- Run platform-independent audio contract tests on macOS, Linux, and Windows.
-- Run fake ALSA integration in default CI and native ALSA integration only on Linux.
-- Qualify representative USB Audio Class hardware on Debian or Ubuntu ARM64.
-- Component- and Playwright-test dropdown loading, explicit selection,
-  persistence, missing saved devices, refresh, input level testing, output
-  testing, validation errors, keyboard behavior, localization, themes, and
-  responsive zoom with deterministic fake devices.
-- Test enumeration, selection, capture, Azure STT, Azure TTS playback,
-  cancellation, removal, reconnect, busy-device recovery, reboot persistence,
-  and stability on Linux.
+- macOS host audio uses a CoreAudio adapter.
+- Windows host audio uses Windows Audio Session API / MMDevice endpoints.
+- Linux host audio prefers PipeWire or PulseAudio discovery and may use ALSA as
+  a low-level compatibility boundary.
+- Configure and validate sample rate, channels, sample format, and buffering.
+- Default provider-bound capture to 16 kHz mono, 16-bit PCM after adapter
+  conversion.
+- Implement capture and playback start, stop, cancellation, timeout, duration
+  limits, queues, cleanup, and graceful shutdown.
+- Release handles after success, failure, cancellation, shutdown, hot removal,
+  or permission loss.
+- Normalize platform-specific busy, disconnect, overrun, underrun, permission,
+  format, timeout, and backend errors.
+- Never expose machine-specific device paths or raw platform errors through the
+  API.
 
-### 10.4 Offline Wake-Word Detection
+### 10.4 Testing and Qualification
+
+- Run deterministic browser and host-adapter contract tests on macOS, Windows,
+  and Linux.
+- Run platform-native integration tests only on their applicable CI runners.
+- Component- and Playwright-test both inventories, loading, permission-gated
+  labels, explicit selection, persistence, missing devices, refresh, tests,
+  errors, keyboard behavior, localization, themes, and 200% zoom.
+- Qualify representative built-in, USB, Bluetooth, HDMI/display, dock, and
+  virtual devices where hardware is available.
+- Test default-device changes, hot-plug, removal, reconnect, busy-device
+  recovery, cancellation, reboot/service restart persistence, and provider
+  format conversion.
+- Document macOS microphone permission, Windows privacy/device permission, and
+  Linux PipeWire/PulseAudio/ALSA service-account requirements.
+
+Phase 6 acceptance:
+
+- Users can select and test independent browser microphone and speaker devices
+  from the endpoints connected to the Web Console computer.
+- Administrators can select and persist independent host input and output
+  devices from the endpoints connected to the VoxMesh server computer.
+- A selected host device completes the non-streaming physical voice pipeline
+  on each supported desktop platform.
+- Missing, disconnected, or unauthorized selections remain visible but
+  unavailable; VoxMesh never substitutes another endpoint.
+- Device failures remain recoverable and do not crash Agent Core.
+- NanoPi uses the Linux adapter, but NanoPi-specific behavior remains outside
+  shared audio contracts.
+
+## 11. Phase 7 - Offline Wake-Word Detection
+
+Phase 7 requires explicit confirmation after Phase 6 acceptance and access to
+the selected VoxMesh-host input plus representative Linux ARM64 hardware.
+
+### 11.1 Selected Implementation
 
 Selected implementation:
 
@@ -1092,10 +1124,10 @@ Selected implementation:
   `text2token` tooling. Store the source phrase and generated profile together;
   do not require Python or keyword compilation on the deployed device.
 
-Runtime behavior:
+### 11.2 Runtime Behavior
 
-- Consume mono 16 kHz PCM frames from the explicitly selected physical input
-  device without opening a second ALSA handle.
+- Consume mono 16 kHz PCM frames from the explicitly selected VoxMesh-host
+  input without opening a second host-audio handle.
 - Keep wake-word processing local; do not send or persist pre-trigger audio.
 - Maintain only a bounded in-memory pre-roll buffer so the beginning of the
   post-trigger utterance is not clipped.
@@ -1112,7 +1144,7 @@ Runtime behavior:
 - A wake-word failure must not crash Agent Core or silently switch input
   devices. Manual browser voice testing remains available independently.
 
-Settings and operations:
+### 11.3 Settings and Operations
 
 - Add a default-off **Enable wake word** control in Audio Settings.
 - Provide a **Wake word profile** dropdown populated from packaged, validated
@@ -1130,7 +1162,7 @@ Settings and operations:
   unsupported-format, listening, triggered, cooldown, and failed states in the
   Dashboard and Settings.
 
-Validation and qualification:
+### 11.4 Validation and Qualification
 
 - Unit-test state transitions, threshold boundaries, duplicate suppression,
   cooldown, pre-roll bounds, timeouts, cancellation, cleanup, model validation,
@@ -1147,14 +1179,8 @@ Validation and qualification:
 - Define qualification thresholds before enabling a profile by default. No
   profile may be shipped as enabled by default.
 
-Phase 6 acceptance:
+Phase 7 acceptance:
 
-- A configured standard USB Audio Class device completes the non-streaming voice pipeline.
-- An administrator can explicitly choose and persist independent input and
-  output devices in Settings and verify both before starting the physical voice
-  flow.
-- Missing, disconnected, or unauthorized saved devices remain selected but
-  unavailable; VoxMesh never substitutes another device.
 - An administrator can explicitly enable a packaged wake-word profile and
   trigger one bounded physical voice request without cloud wake-word services.
 - Pre-trigger audio is not persisted or transmitted, and wake-word detection
@@ -1162,46 +1188,138 @@ Phase 6 acceptance:
 - Wake-word false-accept, false-reject, latency, CPU, memory, and thermal
   measurements satisfy documented qualification thresholds on the target
   Linux ARM64 hardware.
-- Device failures remain recoverable and do not crash Agent Core.
+- Wake-word failures remain recoverable and do not crash Agent Core.
 - R2S-specific code remains outside Agent Core and generic audio contracts.
 
-## 11. Phase 7 - Multi-Architecture and NanoPi R2S Deployment
+## 12. Phase 8 - Generic Third-Party MCP and MCP Console
 
-Phase 7 requires explicit confirmation after Phase 6 acceptance and final confirmation of the NanoPi OS image and resource budget.
+Phase 8 requires explicit confirmation after Phase 7 acceptance. Home
+Assistant is deferred and must later connect through this generic layer without
+integration-specific Agent Core code.
 
-### 11.1 Release Artifacts
+The user-facing MCP Console, inspection APIs, and manual execution are
+implemented in this phase together with real transports so the project does not
+build a temporary Mock-only management surface.
 
-- Produce versioned Linux amd64 and arm64 container images.
-- Produce native application archives and Debian packages for both architectures.
-- Include checksums, version metadata, release notes, migrations, and rollback compatibility.
-- Build from locked dependencies in CI.
-- Keep production artifacts Linux-only even though development supports macOS and Windows.
+### 12.1 Configuration Model
 
-### 11.2 Docker Compose
+- Define transport-discriminated configuration for Streamable HTTP and stdio.
+- Store name, description, enabled state, timeouts, retry policy, and tool policy.
+- Streamable HTTP supports no authentication, static HTTP authorization tokens, and custom sensitive headers.
+- stdio supports executable, ordered arguments, working directory, and environment variables.
+- Treat authorization values, sensitive headers, and sensitive environment values as write-only secrets.
+- Version configuration and use optimistic concurrency.
 
-- Provide non-root multi-architecture Docker and Compose deployments.
-- Map only required ports, persistent paths, configuration, and `/dev/snd`.
-- Add health checks, restart behavior, log rotation, resource limits, and graceful shutdown.
-- Persist SQLite, configuration, logs, backups, and release metadata outside image layers.
+### 12.2 Streamable HTTP
+
+- Use a maintained MCP SDK and the current Streamable HTTP protocol.
+- Validate URL schemes and reject unsupported endpoints.
+- Bound initialization, discovery, calls, reconnect, and shutdown.
+- Use backoff and jitter for connection recovery.
+- Do not retry tool calls unless they are explicitly known to be idempotent.
+- Normalize protocol, authentication, connection, timeout, schema, and server errors.
+- Defer OAuth.
+
+### 12.3 stdio and Process Security
+
+- Spawn executables directly with `shell: false` and explicit argument arrays.
+- Use platform-aware executable resolution and process tracking on macOS, Linux, and Windows.
+- Run with privileges no broader than the VoxMesh service account.
+- Bound startup, initialization, calls, idle time, shutdown, restart count, and crash-loop behavior.
+- Redact sensitive environment values from diagnostics.
+- Terminate only process trees started and tracked by VoxMesh.
+- Display a persistent Web Console warning that arbitrary stdio configuration grants command execution as the VoxMesh service account.
+- Require explicit confirmation before saving or enabling changed command, arguments, working directory, or environment.
+- Audit create, edit, enable, disable, start, stop, crash, and delete actions.
+
+### 12.4 Lifecycle and Tool Permissions
+
+- Implement initialization, capability negotiation, discovery, health, reconnect, disable, and graceful shutdown.
+- Cache tool metadata with refresh and stale-state indicators.
+- Isolate server failures and bound concurrency globally and per server.
+- Disable new servers and newly discovered tools by default.
+- Require explicit administrator enablement for each server and tool.
+- Include server identity in tool identity to prevent collisions.
+- Invalidate approval when a tool schema or relevant capability changes.
+- Validate tool arguments and result envelopes.
+
+### 12.5 MCP Console and Manual Execution
+
+- Add a stable `/mcp` route.
+- List configured servers, lifecycle state, capabilities, and discovered tools.
+- Add create, edit, test, enable, disable, reconnect, refresh, manual call, and delete flows.
+- Render argument forms from validated schemas with a JSON fallback.
+- Validate manual arguments and result envelopes.
+- Bound manual-call request size, result size, timeout, cancellation, and
+  concurrency.
+- Keep tokens, headers, and environment secrets write-only.
+- Clearly distinguish Streamable HTTP and stdio risks.
+- Distinguish manual calls from Agent Core calls in safe operational logs.
+
+### 12.6 Tests and Acceptance
+
+- Unit-test validation, masking, permissions, schema invalidation, lifecycle,
+  retries, process construction, schema-to-form rendering, and result limits.
+- Integration-test deterministic Streamable HTTP and stdio fixture servers,
+  discovery, approval, Agent calls, manual calls, timeouts, cancellation,
+  reconnect, and failure isolation on supported platforms.
+- Playwright-test warnings, confirmations, configuration, discovery,
+  approvals, manual execution, Agent execution, reconnect, failure isolation,
+  deletion, localization, themes, keyboard use, responsive zoom, and axe.
+
+Phase 8 acceptance:
+
+- Generic compatible servers connect through Streamable HTTP or stdio.
+- The MCP Console safely manages servers, tools, permissions, and manual calls.
+- Agent Core can see and call only explicitly enabled tools.
+- stdio never uses an implicit shell and never reveals sensitive environment values.
+- No Home Assistant-specific code, schemas, labels, or branches exist in Agent Core.
+
+## 13. Phase 9 - Scripted Deployment and NanoPi R2S Qualification
+
+Phase 9 requires explicit confirmation after Phase 8 acceptance and final
+confirmation of the NanoPi OS image and resource budget.
+
+### 13.1 Supported Deployment Model
+
+- Provide versioned deployment scripts for Linux amd64 and arm64.
+- Use a checked-out release tag or another explicitly versioned source/bundle
+  as the native deployment input.
+- Validate architecture, operating system, Node.js, pnpm, disk space,
+  permissions, required tools, and checksums for any downloaded assets before
+  mutation.
+- Build from locked dependencies and record application, schema, and deployed
+  revision metadata.
+- Do not produce Debian packages or maintain a package repository.
+- Keep deployment tooling Linux-only even though development supports macOS
+  and Windows.
+
+### 13.2 Native systemd Deployment
+
+- Install through scripts into a documented, stable runtime layout.
+- Create a dedicated service account, application directories, permissions,
+  and secret-free defaults.
+- Install and manage a hardened systemd unit compatible with network, storage,
+  stdio MCP child processes, and ALSA.
 - Support configurable listen host and port.
-
-### 11.3 systemd and Debian Packages
-
-- Install a dedicated user, service unit, directories, permissions, and secret-free defaults.
-- Apply systemd hardening compatible with network, storage, stdio MCP child processes, and ALSA.
 - Preserve configuration and data during upgrades.
-- Provide install, status, start, stop, restart, upgrade, backup, restore, rollback, and uninstall operations.
+- Provide scripted install, status, start, stop, restart, upgrade, backup,
+  restore, rollback, and uninstall operations.
 
-### 11.4 Scripts and Manual Deployment
+### 13.3 Optional Docker Compose
 
-- Provide validated scripts for install, upgrade, backup, restore, rollback, and uninstall.
-- Validate architecture, OS, tools, disk, permissions, and checksums before mutation.
+- Docker Compose may be provided as an optional alternative to native systemd
+  deployment; it is not required for MVP acceptance.
+- If included, use non-root multi-architecture images and map only required
+  ports, persistent paths, configuration, and `/dev/snd`.
+- Include health checks, restart behavior, log rotation, resource limits, and
+  graceful shutdown.
+- Persist SQLite, configuration, logs, backups, and release metadata outside
+  image layers.
+
+### 13.4 Upgrade, Backup, and Rollback
+
 - Never overwrite configuration or perform broad deletion without confirmation and backup.
-- Document manual archive deployment, runtime requirements, layout, service account, permissions, systemd, ALSA, and lifecycle.
-- Ensure package, scripted, and manual paths produce equivalent runtime layouts.
-
-### 11.5 Secrets, Upgrade, and Rollback
-
 - Define stable paths for binaries, configuration, SQLite, logs, cache, backups, and temporary files.
 - Restrict plaintext-secret SQLite, configuration, and backups to the service account.
 - Detect dangerously broad permissions.
@@ -1212,22 +1330,29 @@ Phase 7 requires explicit confirmation after Phase 6 acceptance and final confir
 - Refuse unsafe rollback and document the required restore path.
 - Test fresh install, repeated install, upgrade, failed upgrade, interruption, backup, restore, and rollback.
 
-### 11.6 NanoPi Qualification
+### 13.5 NanoPi Qualification
 
-- Validate Docker Compose and native deployment on the confirmed Debian or Ubuntu ARM64 image.
+- Validate the native scripted deployment on the confirmed Debian or Ubuntu
+  ARM64 image.
+- Validate Docker Compose separately only if the optional path is retained.
 - Measure CPU, memory, disk, startup, provider latency, and audio stability.
-- Verify reboot recovery, persistence, sessions, MCP child processes, USB audio, logs, backup, restore, upgrade, and rollback.
+- Verify reboot recovery, persistence, sessions, MCP child processes, selected
+  host audio, logs, backup, restore, upgrade, and rollback.
 - Set resource ceilings from measurements rather than guesses.
 - Document the exact qualified hardware, OS image, limitations, and evidence.
 
-Phase 7 acceptance:
+Phase 9 acceptance:
 
-- Docker Compose, Debian package, scripts, and manual deployment are reproducible.
-- Linux amd64 and arm64 artifacts pass applicable validation.
-- NanoPi runs Mock Mode plus Azure, generic MCP, and USB audio integrations.
+- Native install, upgrade, backup, restore, rollback, and uninstall scripts are
+  reproducible on supported Linux amd64 and arm64 systems.
+- No Debian package or package repository is required.
+- Optional Docker Compose validation does not block native scripted deployment
+  acceptance.
+- NanoPi runs Mock Mode plus Azure, generic MCP, and selected host-audio
+  integrations.
 - Failed upgrades can be diagnosed and safely rolled back.
 
-## 12. Documentation Deliverables
+## 14. Documentation Deliverables
 
 Add and maintain documentation as the relevant phase begins:
 
@@ -1272,7 +1397,7 @@ Architecture decisions should cover:
 - WebSocket delivery and reconnection semantics
 - cross-platform commands, CI matrix, and Linux-only adapter boundaries
 
-## 13. Final MVP Acceptance
+## 15. Final MVP Acceptance Gate
 
 The MVP is complete only when:
 
@@ -1281,23 +1406,29 @@ The MVP is complete only when:
 3. The Web Console supports dashboard, text chat, browser voice testing, conversation inspection, MCP inspection and manual execution, logs, and configuration.
 4. The platform-independent Agent Core supports direct and MCP-assisted responses.
 5. Azure OpenAI LLM and Audio STT/TTS work without Agent Core changes.
-6. Generic MCP works through Streamable HTTP and stdio with explicit server and tool enablement.
-7. Linux USB audio works through a platform adapter.
-8. NanoPi R2S deployment is reproducible and documented.
-9. Required unit, integration, and end-to-end tests pass.
-10. macOS, Linux, and Windows development validation passes, including Mock Mode and Playwright.
-11. Linux ALSA, packaging, deployment, and hardware qualification passes on applicable targets.
-12. Every Web Console feature passes English and Simplified Chinese coverage, and the language preference persists correctly.
-13. Every Web Console feature passes Light and Dark coverage, and System mode follows the operating-system preference.
-14. Every Web Console page supports direct loading, refresh, and browser history through TanStack Router.
-15. Remote Web Console state uses typed TanStack Query keys and explicit mutation invalidation.
-16. Every Web Console feature passes WCAG 2.2 AA accessibility validation, including contrast, keyboard, focus, themes, locales, zoom, and representative axe scans.
-17. Secrets are redacted, migrations are safe, and backup and rollback procedures are documented.
-18. No commit, push, pull request, merge, or release occurs without separate explicit user confirmation.
+6. Supported routes complete capability-gated Streaming STT, Chat LLM, and TTS
+   without buffered fallback for enabled streaming roles.
+7. Generic MCP works through Streamable HTTP and stdio with explicit server and tool enablement.
+8. Browser and host audio-device selection works on supported macOS, Windows,
+   and Linux environments through platform adapters.
+9. A qualified local wake-word profile triggers a bounded physical voice
+   request without cloud wake-word services.
+10. NanoPi R2S deployment is reproducible and documented.
+11. Required unit, integration, and end-to-end tests pass.
+12. macOS, Linux, and Windows development validation passes, including Mock Mode and Playwright.
+13. Linux ALSA, wake-word, scripted deployment, and hardware qualification
+    passes on applicable targets.
+14. Every Web Console feature passes English and Simplified Chinese coverage, and the language preference persists correctly.
+15. Every Web Console feature passes Light and Dark coverage, and System mode follows the operating-system preference.
+16. Every Web Console page supports direct loading, refresh, and browser history through TanStack Router.
+17. Remote Web Console state uses typed TanStack Query keys and explicit mutation invalidation.
+18. Every Web Console feature passes WCAG 2.2 AA accessibility validation, including contrast, keyboard, focus, themes, locales, zoom, and representative axe scans.
+19. Secrets are redacted, migrations are safe, and backup and rollback procedures are documented.
+20. No commit, push, pull request, merge, or release occurs without separate explicit user confirmation.
 
-## 14. Constraints and Deferred Decisions
+## 16. Constraints and Deferred Decisions
 
-- Publishing this plan does not authorize Phase 1 implementation.
+- Publishing this plan does not authorize any functional phase.
 - HTTPS implementation is not part of the current MVP. Cookie and proxy behavior must remain compatible with future HTTPS.
 - Authentication is part of Phase 1 because the default scenario is a LAN rather than localhost-only.
 - LAN trust does not justify weak password storage, secret logging, permissive cross-origin defaults, or unauthenticated WebSockets.
@@ -1305,14 +1436,14 @@ The MVP is complete only when:
 - Arbitrary stdio MCP configuration is an explicitly accepted command-execution capability for administrators. The Web Console must show a prominent warning and require explicit confirmation.
 - Home Assistant is deferred and is not an MVP acceptance requirement. Future support must use the generic MCP layer.
 - macOS, Linux, and Windows are supported development environments. macOS and Linux are primary; Windows is a required CI and Mock Mode platform, not a production target.
-- Linux audio and deployment dependencies must remain optional on unsupported development platforms.
+- Platform-specific host-audio dependencies must remain isolated and optional
+  on other operating systems.
 - Multi-user roles, external identity providers, public-internet hardening, and certificate management are outside the MVP unless separately confirmed.
 - VAD, full-duplex barge-in, long-term memory, multi-agent behavior, and other
   MVP non-goals remain excluded.
-- Capability-gated full-chain Streaming STT/Chat LLM/TTS is included after
-  buffered Phase 4 acceptance and remains separately confirmed before
-  implementation.
-- Offline wake-word detection is included in Phase 6 using sherpa-onnx and
-  remains separately gated from ALSA implementation by explicit confirmation
-  and hardware qualification.
+- Capability-gated full-chain Streaming STT/Chat LLM/TTS is Phase 5 and
+  requires separate confirmation after buffered Phase 4 acceptance.
+- Offline wake-word detection is Phase 7 using sherpa-onnx and requires
+  separate confirmation after Phase 6 audio-device acceptance plus hardware
+  qualification.
 - Every phase requires fresh user confirmation even when its technical direction is documented.
