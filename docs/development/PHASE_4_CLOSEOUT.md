@@ -263,7 +263,8 @@ Acceptance criteria:
 Required evidence:
 
 - offline tests for every live-suite branch and assertion
-- successful opt-in execution against approved Azure test resources
+- successful opt-in execution against approved Azure test resources for every
+  capability the operator is authorized to use
 - sanitized qualification evidence reviewed before inclusion
 - unchanged passing `pnpm validate`
 
@@ -278,6 +279,18 @@ Out of scope:
 - performance or load benchmarking
 - production deployment certification
 - streaming Azure APIs
+
+Execution decision recorded on 2026-08-22:
+
+- Azure direct and MCP-assisted Chat passed through the configured Runtime
+  Route.
+- The operator explicitly deferred Azure STT, TTS, and Azure-only composed
+  voice because the required Azure Speech permissions are unavailable.
+- The missing live execution remains tracked by
+  [issue #18](https://github.com/AntaresQAQ/VoxMesh/issues/18) and must not be
+  reported as qualified.
+- This approved access limitation does not block the remaining
+  OpenAI-compatible and Alibaba Phase 4 work packages.
 
 ### PR 4 - `test: qualify OpenAI-compatible buffered providers`
 
@@ -511,8 +524,10 @@ time. It is not a provider-wide compatibility or uptime guarantee.
 Before declaring Phase 4 complete:
 
 1. PR 1 through PR 6 are reviewed and merged with required CI.
-2. Azure direct and MCP-assisted Chat, STT, TTS, and one composed voice flow
-   pass against approved non-production resources.
+2. Azure direct and MCP-assisted Chat pass against an approved non-production
+   resource. Azure STT, TTS, and Azure-only composed voice either pass or
+   remain explicitly unqualified and tracked by issue #18 under the approved
+   access limitation.
 3. OpenAI-compatible direct and MCP-assisted Chat, STT, and TTS pass for every
    capability claimed as qualified.
 4. Alibaba/OpenAI-compatible direct and MCP-assisted Chat plus dedicated

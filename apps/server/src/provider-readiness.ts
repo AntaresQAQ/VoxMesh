@@ -31,15 +31,15 @@ export function safeProviderReadinessError(
       ? safeError("cancelled")
       : safeError("timeout");
   }
+  if (/\b429\b|\bquota\b|\brate limit\b|\bthrottl/iu.test(message)) {
+    return safeError("quota");
+  }
   if (
     /\b401\b|\b403\b|\bauthentication\b|\bunauthorized\b|\bforbidden\b|\bapi[-_ ]?key\b|\bcredential/iu.test(
       message
     )
   ) {
     return safeError("authentication");
-  }
-  if (/\b429\b|\bquota\b|\brate limit\b|\bthrottl/iu.test(message)) {
-    return safeError("quota");
   }
   if (/\btimeout\b|\btimed out\b/iu.test(message)) {
     return safeError("timeout");

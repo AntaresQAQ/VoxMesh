@@ -1,6 +1,8 @@
 import { inspect } from "node:util";
 
 import { encodePcm16Wav } from "../../packages/audio/src/pcm-wav.js";
+import { providerReadinessErrorMessage } from "../../packages/shared/src/provider-readiness.js";
+import type { ProviderReadinessErrorCategory } from "../../packages/shared/src/schemas.js";
 
 export const LIVE_TEST_OPT_IN = "VOXMESH_LIVE_TESTS";
 export const LIVE_TEST_PROVIDERS = "VOXMESH_LIVE_PROVIDERS";
@@ -37,6 +39,7 @@ export interface LiveSpeechToTextConfiguration {
   model: string;
   apiVersion?: string;
   language?: string;
+  fixturePath?: string;
   timeoutMs: number;
 }
 
@@ -67,13 +70,7 @@ export interface LiveTestPlan {
   alibabaModelStudio?: LiveProviderConfiguration;
 }
 
-export type LiveTestErrorCategory =
-  | "authentication"
-  | "cancelled"
-  | "configuration"
-  | "provider"
-  | "quota"
-  | "timeout";
+export type LiveTestErrorCategory = ProviderReadinessErrorCategory;
 
 export interface SanitizedLiveTestError {
   category: LiveTestErrorCategory;
@@ -91,7 +88,6 @@ const DEFAULT_TIMEOUT_MS = 30_000;
 const MAX_TIMEOUT_MS = 120_000;
 const DEFAULT_MAXIMUM_REQUESTS = 12;
 const MAXIMUM_REQUEST_LIMIT = 50;
-const MAX_SAFE_ERROR_LENGTH = 500;
 const REDACTED = "[REDACTED]";
 
 const supportedCapabilities: Readonly<
@@ -360,35 +356,38 @@ export function sanitizeLiveTestError(
   error: unknown,
   secrets: readonly SecretValue[] = []
 ): SanitizedLiveTestError {
-  const message = boundedMessage(
-    redactSensitiveText(errorMessage(error), secrets)
-  );
+  const message = redactSensitiveText(errorMessage(error), secrets);
+  let category: LiveTestErrorCategory;
   if (
     error instanceof LiveTestTimeoutError ||
     /\btimeout|timed out\b/iu.test(message)
   ) {
-    return { category: "timeout", message };
-  }
-  if (
+    category = "timeout";
+  } else if (
     (error instanceof DOMException && error.name === "AbortError") ||
     /\bcancelled|canceled|aborted\b/iu.test(message)
   ) {
-    return { category: "cancelled", message };
-  }
-  if (
-    /\b401\b|\b403\b|\bauthentication\b|\bunauthorized\b|\bforbidden\b/iu.test(
+    category = "cancelled";
+  } else if (/\b429\b|\bquota\b|\brate limit\b|\bthrottl/iu.test(message)) {
+    category = "quota";
+  } else if (
+    /\b401\b|\b403\b|\bauthentication\b|\bunauthorized\b|\bforbidden\b|\bapi[-_ ]?key\b|\bcredential/iu.test(
       message
     )
   ) {
-    return { category: "authentication", message };
+    category = "authentication";
+  } else if (
+    /\bmalformed\b|\binvalid (?:response|json)\b|\bempty (?:response|audio|text)\b/iu.test(
+      message
+    )
+  ) {
+    category = "invalid-response";
+  } else if (error instanceof LiveTestConfigurationError) {
+    category = "configuration";
+  } else {
+    category = "provider";
   }
-  if (/\b429\b|\bquota\b|\brate limit\b|\bthrottl/iu.test(message)) {
-    return { category: "quota", message };
-  }
-  if (error instanceof LiveTestConfigurationError) {
-    return { category: "configuration", message };
-  }
-  return { category: "provider", message };
+  return { category, message: providerReadinessErrorMessage(category) };
 }
 
 export class LiveTestConfigurationError extends Error {
@@ -553,6 +552,11 @@ function loadSttConfiguration(
         }
       : {}),
     ...optionalValue(environment, `${options.prefix}_LANGUAGE`, "language"),
+    ...optionalValue(
+      environment,
+      `${options.prefix}_FIXTURE_PATH`,
+      "fixturePath"
+    ),
     timeoutMs: parseInteger(
       environment[`${options.prefix}_TIMEOUT_MS`],
       `${options.prefix}_TIMEOUT_MS`,
@@ -736,11 +740,4 @@ function errorMessage(error: unknown): string {
     return error;
   }
   return "Live provider request failed without an error message";
-}
-
-function boundedMessage(message: string): string {
-  if (message.length <= MAX_SAFE_ERROR_LENGTH) {
-    return message;
-  }
-  return `${message.slice(0, MAX_SAFE_ERROR_LENGTH - 3)}...`;
 }

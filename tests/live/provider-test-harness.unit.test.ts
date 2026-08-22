@@ -176,7 +176,7 @@ describe("live provider test harness", () => {
       )
     ).toEqual({
       category: "authentication",
-      message: "HTTP 401 for api-key=[REDACTED]"
+      message: "Provider authentication failed."
     });
     expect(
       sanitizeLiveTestError(
@@ -230,7 +230,10 @@ describe("live provider test harness", () => {
         }
       )
     ).rejects.toEqual(
-      new LiveTestRequestError("quota", "HTTP 429 api-key=[REDACTED]")
+      new LiveTestRequestError(
+        "quota",
+        "Provider quota or rate limit was exceeded."
+      )
     );
   });
 

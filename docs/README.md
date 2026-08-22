@@ -65,6 +65,14 @@ Provider guides cover configuration, adapter boundaries, security, failure
 behavior, and validation. Runtime provider selection is managed through
 Runtime Routing.
 
+## Qualification Evidence
+
+- [Azure OpenAI Chat — 2026-08-22](./qualification/AZURE_OPENAI_CHAT_2026-08-22.md)
+
+Qualification records contain only sanitized provider family, capability,
+date, outcome, and limitations. They never contain credentials, account
+identifiers, raw payloads, prompts, transcripts, or audio.
+
 ## Operations
 
 - [Security Operations](./operations/SECURITY_OPERATIONS.md)
