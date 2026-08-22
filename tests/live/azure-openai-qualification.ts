@@ -12,13 +12,14 @@ import {
   bufferedMinimumRequestCount,
   type BufferedQualificationDependencies
 } from "./buffered-provider-qualification.js";
-import type {
-  LiveCapabilityId,
-  LiveChatConfiguration,
-  LiveProviderConfiguration,
-  LiveRequestBudget,
-  LiveSpeechToTextConfiguration,
-  LiveTextToSpeechConfiguration
+import {
+  LiveTestConfigurationError,
+  type LiveCapabilityId,
+  type LiveChatConfiguration,
+  type LiveProviderConfiguration,
+  type LiveRequestBudget,
+  type LiveSpeechToTextConfiguration,
+  type LiveTextToSpeechConfiguration
 } from "./provider-test-harness.js";
 
 const dependencies: BufferedQualificationDependencies = {
@@ -81,7 +82,7 @@ function createTts(
 
 function required<T>(value: T | undefined, label: string): T {
   if (value === undefined) {
-    throw new Error(`${label} is required`);
+    throw new LiveTestConfigurationError(`${label} is required`);
   }
   return value;
 }

@@ -148,9 +148,9 @@ does not have Azure Speech permissions; the approved deferral is tracked by
 [issue #18](https://github.com/AntaresQAQ/VoxMesh/issues/18).
 
 OpenAI-compatible direct and MCP-assisted Chat passed against Alibaba Model
-Studio compatible mode on 2026-08-23. Compatible STT, TTS, and composed voice
-remain explicitly unqualified because no approved configured provider exposes
-the standard compatible Audio endpoints; this is tracked by
+Studio compatible mode on 2026-08-23 (UTC+08:00). Compatible STT, TTS, and
+composed voice remain explicitly unqualified because no approved configured
+provider exposes the standard compatible Audio endpoints; this is tracked by
 [issue #20](https://github.com/AntaresQAQ/VoxMesh/issues/20).
 
 ### Planned streaming voice work

@@ -347,7 +347,7 @@ Out of scope:
 - provider performance comparisons
 - production deployment certification
 
-Execution decision recorded on 2026-08-23:
+Execution decision recorded on 2026-08-23 (UTC+08:00):
 
 - OpenAI-compatible direct and MCP-assisted Chat passed against Alibaba Model
   Studio compatible mode with the exact three-request budget.

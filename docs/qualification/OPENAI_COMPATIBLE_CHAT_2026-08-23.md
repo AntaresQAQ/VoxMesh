@@ -18,10 +18,13 @@
 | Model family         | Operator-configured                  |
 | Request budget       | 3                                    |
 | Requests used        | 3                                    |
-| Evidence date        | 2026-08-23                           |
+| Evidence date        | 2026-08-23 (UTC+08:00)               |
 
 The opt-in suite completed one direct Chat request, requested and executed the
 allow-listed Mock MCP tool, and completed the final Chat response.
+
+The evidence date uses the operator's UTC+08:00 local time. GitHub review and
+provider request timestamps may display the preceding UTC calendar date.
 
 ## Safety Review
 

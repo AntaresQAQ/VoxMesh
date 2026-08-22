@@ -105,7 +105,7 @@ Provider-specific WebSocket, asynchronous task, file-transcription, or native
 multimodal APIs require dedicated adapters and qualification.
 
 Direct and MCP-assisted Chat passed against Alibaba Model Studio compatible
-mode on 2026-08-23; see the
+mode on 2026-08-23 (UTC+08:00); see the
 [sanitized evidence](../qualification/OPENAI_COMPATIBLE_CHAT_2026-08-23.md).
 Compatible STT, TTS, and composed voice remain unqualified because no approved
 configured provider currently exposes the standard compatible Audio endpoints.
