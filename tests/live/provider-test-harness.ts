@@ -650,15 +650,16 @@ function assertSupportedSelection(
   providers: readonly LiveProviderId[],
   capabilities: readonly LiveCapabilityId[]
 ): void {
-  if (
-    !providers.some((provider) =>
-      capabilities.some((capability) =>
-        supportedCapabilities[provider].has(capability)
-      )
-    )
-  ) {
+  const provider = providers[0];
+  if (!provider) {
+    throw new LiveTestConfigurationError("Live provider selection is required");
+  }
+  const unsupported = capabilities.filter(
+    (capability) => !supportedCapabilities[provider].has(capability)
+  );
+  if (unsupported.length > 0) {
     throw new LiveTestConfigurationError(
-      "The selected providers and capabilities do not contain a supported live scenario"
+      `${provider} does not support selected capabilities: ${unsupported.join(", ")}`
     );
   }
 }
