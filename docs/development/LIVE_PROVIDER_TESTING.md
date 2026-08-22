@@ -69,6 +69,10 @@ TTS scenarios. Its composed voice scenario uses the independently configured
 OpenAI-compatible Chat role. Alibaba Chat by itself therefore uses the
 `openai-compatible` provider selector.
 
+Select exactly one provider family per command. This keeps
+`VOXMESH_LIVE_MAX_REQUESTS` a hard bound for the complete process. Run separate
+commands when qualifying multiple provider families.
+
 `VOXMESH_LIVE_MAX_REQUESTS` defaults to `12` and accepts `1` through `50`.
 Provider-specific qualification suites consume this shared budget before each
 billable request. Do not raise it merely to hide an unexpected retry loop.
@@ -138,6 +142,7 @@ VOXMESH_LIVE_OPENAI_STT_ENDPOINT=https://<compatible-host>/v1
 VOXMESH_LIVE_OPENAI_STT_API_KEY=<secret>
 VOXMESH_LIVE_OPENAI_STT_MODEL=<model>
 VOXMESH_LIVE_OPENAI_STT_LANGUAGE=en
+VOXMESH_LIVE_OPENAI_STT_FIXTURE_PATH=/absolute/path/to/synthetic-check-light.wav
 VOXMESH_LIVE_OPENAI_STT_TIMEOUT_MS=30000
 ```
 

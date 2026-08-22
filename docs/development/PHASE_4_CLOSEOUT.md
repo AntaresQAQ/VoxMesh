@@ -347,6 +347,18 @@ Out of scope:
 - provider performance comparisons
 - production deployment certification
 
+Execution decision recorded on 2026-08-23 (UTC+08:00):
+
+- OpenAI-compatible direct and MCP-assisted Chat passed against Alibaba Model
+  Studio compatible mode with the exact three-request budget.
+- Compatible STT, TTS, and composed voice remain explicitly unqualified
+  because no approved configured provider exposes the standard compatible
+  Audio endpoints.
+- The missing compatible Audio evidence is tracked by
+  [issue #20](https://github.com/AntaresQAQ/VoxMesh/issues/20).
+- Alibaba dedicated WebSocket speech evidence must not be reported as
+  OpenAI-compatible Audio qualification.
+
 ### PR 5 - `test: qualify Alibaba buffered providers`
 
 Purpose:

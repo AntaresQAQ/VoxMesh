@@ -59,6 +59,7 @@ evidence. Mandatory policy remains in
 ## Providers
 
 - [Azure OpenAI](./providers/AZURE_OPENAI.md)
+- [OpenAI-compatible Providers](./providers/OPENAI_COMPATIBLE.md)
 - [Alibaba Cloud Model Studio](./providers/ALIBABA_CLOUD_MODEL_STUDIO.md)
 
 Provider guides cover configuration, adapter boundaries, security, failure
@@ -68,6 +69,7 @@ Runtime Routing.
 ## Qualification Evidence
 
 - [Azure OpenAI Chat — 2026-08-22](./qualification/AZURE_OPENAI_CHAT_2026-08-22.md)
+- [OpenAI-compatible Chat — 2026-08-23](./qualification/OPENAI_COMPATIBLE_CHAT_2026-08-23.md)
 
 Qualification records contain only sanitized provider family, capability,
 date, outcome, and limitations. They never contain credentials, account

@@ -150,6 +150,11 @@ export function loadLiveTestPlan(
     LIVE_TEST_PROVIDERS,
     liveProviderIds
   );
+  if (providers.length !== 1) {
+    throw new LiveTestConfigurationError(
+      `${LIVE_TEST_PROVIDERS} must select exactly one provider family per live run`
+    );
+  }
   const capabilities = parseSelector(
     environment[LIVE_TEST_CAPABILITIES],
     LIVE_TEST_CAPABILITIES,
