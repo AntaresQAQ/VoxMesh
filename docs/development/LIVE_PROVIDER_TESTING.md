@@ -72,6 +72,7 @@ OpenAI-compatible Chat role. Alibaba Chat by itself therefore uses the
 `VOXMESH_LIVE_MAX_REQUESTS` defaults to `12` and accepts `1` through `50`.
 Provider-specific qualification suites consume this shared budget before each
 billable request. Do not raise it merely to hide an unexpected retry loop.
+The live runner disables retries and stops after the first failed scenario.
 
 ## 4. Configuration Groups
 
@@ -98,8 +99,14 @@ VOXMESH_LIVE_AZURE_STT_API_KEY=<secret>
 VOXMESH_LIVE_AZURE_STT_MODEL=<deployment>
 VOXMESH_LIVE_AZURE_STT_API_VERSION=<api-version>
 VOXMESH_LIVE_AZURE_STT_LANGUAGE=en
+VOXMESH_LIVE_AZURE_STT_FIXTURE_PATH=/absolute/path/to/synthetic-check-light.wav
 VOXMESH_LIVE_AZURE_STT_TIMEOUT_MS=30000
 ```
+
+The Azure STT and composed-voice scenarios require a local mono 16 kHz PCM16
+WAV fixture no larger than 5 MB. Use synthetic speech with no personal or
+production content. For composed voice, the recording must ask the agent to
+check the light status so the deterministic Mock MCP tool path is exercised.
 
 ### Azure OpenAI TTS
 
@@ -210,6 +217,7 @@ as:
 - `authentication`
 - `cancelled`
 - `configuration`
+- `invalid-response`
 - `provider`
 - `quota`
 - `timeout`

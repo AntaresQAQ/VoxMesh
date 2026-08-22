@@ -183,3 +183,78 @@ Azure AI Speech Service remains a possible future adapter for:
 - long-form or high-volume workloads
 
 It must implement the existing provider-independent speech interfaces without modifying Agent Core.
+
+## 9. Opt-in Live Qualification
+
+The live suite uses the production Azure OpenAI adapters but remains outside
+default CI. Configure only dedicated, non-production resources and follow the
+[Live Provider Testing](../development/LIVE_PROVIDER_TESTING.md) safety model.
+
+Each capability selector has a fixed maximum provider request count:
+
+| Selector         | Scenarios                         | Requests |
+| ---------------- | --------------------------------- | -------- |
+| `chat`           | direct Chat and MCP-assisted Chat | 3        |
+| `stt`            | one buffered transcription        | 1        |
+| `tts`            | one buffered synthesis            | 1        |
+| `composed-voice` | STT, MCP-assisted Chat, and TTS   | 4        |
+| all selectors    | all scenarios above               | 9        |
+
+The tool-assisted scenarios permit one tool call followed by one final Chat
+completion. The harness does not retry a timed-out scenario. Set
+`VOXMESH_LIVE_MAX_REQUESTS` to at least the selected total and no higher than
+the approved cost ceiling.
+
+Example Chat-only execution:
+
+```bash
+VOXMESH_LIVE_TESTS=true \
+VOXMESH_LIVE_PROVIDERS=azure-openai \
+VOXMESH_LIVE_CAPABILITIES=chat \
+VOXMESH_LIVE_MAX_REQUESTS=3 \
+pnpm test:live
+```
+
+Example full Azure execution:
+
+```bash
+VOXMESH_LIVE_TESTS=true \
+VOXMESH_LIVE_PROVIDERS=azure-openai \
+VOXMESH_LIVE_CAPABILITIES=chat,stt,tts,composed-voice \
+VOXMESH_LIVE_MAX_REQUESTS=9 \
+pnpm test:live
+```
+
+Supply the role-specific environment variables documented in the live testing
+guide. The STT fixture must be synthetic mono 16 kHz PCM16 WAV, no larger than
+5 MB. The composed fixture must say a short phrase that asks to check the light
+status so Agent Core executes `mock.get_device_status`.
+
+Before execution:
+
+1. Confirm Chat, STT, and TTS deployment names and API versions in the selected
+   Azure regions.
+2. Use separate role credentials when the resources, subscriptions, regions,
+   or quotas differ.
+3. Set Azure budgets, alerts, and conservative per-deployment quota.
+4. Review the selected resource's data-retention and abuse-monitoring terms.
+5. Confirm no production data, personal speech, or customer prompt is used.
+6. Ensure every credential can be rotated or revoked immediately.
+
+The suite keeps audio in memory except for the operator-provided input fixture.
+It does not save provider responses, transcripts, prompts, tool payloads, or
+audio. Console evidence contains only provider family, capability, the literal
+`operator-configured` region/model categories, timestamp, outcome, duration,
+and a safe error category. Review output before sharing it.
+
+After execution, remove shell environment values, revoke credentials that are
+no longer required, and delete temporary resources and the local audio fixture.
+Passing evidence qualifies only the exact tested deployments at that time; it
+is not a production availability, latency, cost, or regional compatibility
+guarantee.
+
+Azure direct and MCP-assisted Chat were qualified on 2026-08-22; see the
+[sanitized evidence](../qualification/AZURE_OPENAI_CHAT_2026-08-22.md). Azure
+STT, TTS, and Azure-only composed voice remain unqualified because the operator
+does not currently have Azure Speech permissions. That explicit deferral is
+tracked by [issue #18](https://github.com/AntaresQAQ/VoxMesh/issues/18).

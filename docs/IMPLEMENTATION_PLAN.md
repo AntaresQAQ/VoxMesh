@@ -142,6 +142,11 @@ The executable PR sequence, dependencies, safeguards, acceptance evidence, and
 exclusions are defined in
 [Phase 4 Closeout Plan](./development/PHASE_4_CLOSEOUT.md).
 
+Azure direct and MCP-assisted Chat passed on 2026-08-22. Azure STT, TTS, and
+Azure-only composed voice remain explicitly unqualified because the operator
+does not have Azure Speech permissions; the approved deferral is tracked by
+[issue #18](https://github.com/AntaresQAQ/VoxMesh/issues/18).
+
 ### Planned streaming voice work
 
 - [ ] authenticated, versioned bidirectional browser voice WebSocket transport
