@@ -12,7 +12,6 @@ import Fastify, {
 
 import {
   MockMcpServer,
-  NativeVoiceRuntime,
   type LlmProvider,
   type McpServer
 } from "@voxmesh/agent-core";
@@ -54,6 +53,7 @@ import { LoginRateLimiter } from "./login-rate-limiter.js";
 import { createNativeVoiceProvider } from "./native-voice-providers.js";
 import { RealtimeEventHub } from "./realtime-event-hub.js";
 import { registerRealtimeEventStream } from "./realtime-event-stream.js";
+import { RuntimeRouteTester } from "./runtime-route-tester.js";
 import {
   createSessionToken,
   hashPassword,
@@ -62,9 +62,7 @@ import {
 } from "./security.js";
 import {
   createSpeechToTextProvider,
-  createTextToSpeechProvider,
-  testSpeechProviders,
-  validateSpeechConfiguration
+  createTextToSpeechProvider
 } from "./speech-providers.js";
 
 const SESSION_COOKIE = "voxmesh_session";
@@ -95,18 +93,21 @@ export async function buildServer(
   const mcp = dependencies.mcp ?? new MockMcpServer();
   const deviceStatusProvider =
     dependencies.deviceStatusProvider ?? new UnavailableDeviceStatusProvider();
+  const createLlm =
+    dependencies.createLlm ??
+    ((routeId?: string) =>
+      createLlmProvider(store.getRuntimeLlmConfiguration(routeId)));
   const conversationService = new ConversationService(
     store,
     mcp,
-    dependencies.createLlm ??
-      ((routeId) =>
-        createLlmProvider(store.getRuntimeLlmConfiguration(routeId))),
+    createLlm,
     (routeId) =>
       createSpeechToTextProvider(store.getRuntimeSpeechConfiguration(routeId)),
     (routeId) =>
       createTextToSpeechProvider(store.getRuntimeSpeechConfiguration(routeId)),
     createNativeVoiceProvider
   );
+  const runtimeRouteTester = new RuntimeRouteTester(store, mcp, createLlm);
   const loginRateLimiter = new LoginRateLimiter();
   const activeRuns = new ActiveRunRegistry();
   const startedAt = Date.now();
@@ -609,99 +610,7 @@ export async function buildServer(
         }
       }
     },
-    async (request) => {
-      const route = store.getRuntimeRoute(request.params.id);
-      const verification = store.captureRuntimeRouteVerification(route.id);
-      if (route.mode === "composed") {
-        const speechConfiguration = store.getRuntimeSpeechConfiguration(
-          route.id
-        );
-        validateSpeechConfiguration(speechConfiguration);
-        const llmProvider = createLlmProvider(
-          store.getRuntimeLlmConfiguration(route.id)
-        );
-        const result = await llmProvider.complete({
-          messages: [
-            {
-              role: "user",
-              content:
-                "Reply with a short confirmation that the connection works."
-            }
-          ],
-          tools: []
-        });
-        if (result.type !== "message") {
-          throw Object.assign(
-            new Error("Chat model returned an unexpected tool call"),
-            { statusCode: 400 }
-          );
-        }
-        const diagnosticTool = (await mcp.listTools())[0];
-        if (!diagnosticTool) {
-          throw Object.assign(
-            new Error("No MCP tool is available for tool-calling verification"),
-            { statusCode: 400 }
-          );
-        }
-        const toolPrompt = `Call the ${diagnosticTool.name} tool exactly once to verify tool calling.`;
-        const toolResult = await llmProvider.complete({
-          messages: [{ role: "user", content: toolPrompt }],
-          tools: [diagnosticTool]
-        });
-        if (
-          toolResult.type !== "tool_call" ||
-          toolResult.toolCall.name !== diagnosticTool.name
-        ) {
-          throw Object.assign(
-            new Error(
-              `Chat model did not return the ${diagnosticTool.name} tool call`
-            ),
-            { statusCode: 400 }
-          );
-        }
-        const mcpResult = await mcp.callTool(
-          toolResult.toolCall.name,
-          toolResult.toolCall.arguments
-        );
-        const finalResult = await llmProvider.complete({
-          messages: [
-            { role: "user", content: toolPrompt },
-            {
-              role: "assistant",
-              content: "",
-              toolCall: toolResult.toolCall
-            },
-            {
-              role: "tool",
-              content: JSON.stringify({
-                name: toolResult.toolCall.name,
-                result: mcpResult
-              }),
-              toolCallId: toolResult.toolCall.id
-            }
-          ],
-          tools: [diagnosticTool]
-        });
-        if (finalResult.type !== "message") {
-          throw Object.assign(
-            new Error("Chat model did not complete after the test tool call"),
-            { statusCode: 400 }
-          );
-        }
-        await testSpeechProviders(speechConfiguration);
-      } else {
-        const pipeline = store.getRuntimeVoiceRouteConfiguration(route.id);
-        await new NativeVoiceRuntime(
-          createNativeVoiceProvider(pipeline),
-          mcp
-        ).run({
-          data: new Uint8Array([1]),
-          mimeType: "audio/wav"
-        });
-      }
-      store.markRuntimeRouteVerified(verification);
-      return store.getRuntimeRoutingSummary();
-    }
+    async (request) => runtimeRouteTester.test(request.params.id)
   );
 
   app.put(

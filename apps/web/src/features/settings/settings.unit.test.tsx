@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { apiClient } from "../../api.js";
+import { unknownReadiness } from "../../test/readiness.js";
 import { renderWithProviders } from "../../test/render.js";
 import {
   AppearanceSettingsCard,
@@ -44,7 +45,8 @@ beforeEach(() => {
         fallbackRouteId: null,
         sttStreamingEnabled: false,
         ttsStreamingEnabled: false,
-        enabled: true
+        enabled: true,
+        readiness: unknownReadiness
       }
     ],
     activeRouteId: "system-route-composed"

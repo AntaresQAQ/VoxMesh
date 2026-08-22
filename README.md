@@ -22,6 +22,7 @@ VoxMesh has an initial Mock Mode vertical slice for development and architecture
 - Dashboard, Chat, Conversations, and live Logs pages
 - Settings page for password rotation and Runtime Routing configuration
 - write-only provider credentials and route-bound capability verification
+- persisted, configuration-bound provider and route readiness diagnostics
 - generic OpenAI-compatible LLM configuration, including Alibaba Cloud Model Studio
 - English and Simplified Chinese Web Console localization
 - browser-language detection and persisted language selection

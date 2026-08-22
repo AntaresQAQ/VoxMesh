@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import type { RuntimeRoutingSummary } from "@voxmesh/shared";
 
+import { unknownReadiness } from "../../test/readiness.js";
 import { renderWithProviders } from "../../test/render.js";
 import { DashboardRouteOverview } from "./DashboardRouteOverview.js";
 
@@ -35,7 +36,8 @@ describe("DashboardRouteOverview", () => {
           displayName: "Native Connection",
           endpoint: "",
           apiKeyConfigured: false,
-          enabled: true
+          enabled: true,
+          readiness: unknownReadiness
         }
       ],
       models: [
@@ -74,7 +76,15 @@ describe("DashboardRouteOverview", () => {
           fallbackRouteId: null,
           sttStreamingEnabled: false,
           ttsStreamingEnabled: false,
-          enabled: true
+          enabled: true,
+          readiness: {
+            state: "failed",
+            lastTestedAt: "2026-08-22T07:00:00.000Z",
+            lastError: {
+              category: "authentication",
+              message: "Provider authentication failed."
+            }
+          }
         }
       ],
       activeRouteId: "route-native"
@@ -88,5 +98,8 @@ describe("DashboardRouteOverview", () => {
     expect(screen.getByText("4/5 required capabilities verified")).toHaveClass(
       "error"
     );
+    expect(screen.getByText("Readiness: Failed")).toBeVisible();
+    expect(screen.getByText("Readiness: Not tested")).toBeVisible();
+    expect(screen.getByText("Last error: Authentication failed")).toBeVisible();
   });
 });

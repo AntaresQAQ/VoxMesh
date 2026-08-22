@@ -32,7 +32,10 @@ export function useRuntimeRoutingMutations() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
     },
     onError: (_error, operation) => {
-      if (operation.type === "test-and-activate-route") {
+      if (
+        operation.type === "test-route" ||
+        operation.type === "test-and-activate-route"
+      ) {
         void queryClient.invalidateQueries({
           queryKey: queryKeys.runtimeRouting
         });

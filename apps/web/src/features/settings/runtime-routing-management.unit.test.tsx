@@ -9,6 +9,7 @@ import type { RuntimeRoutingSummary } from "@voxmesh/shared";
 
 import { apiClient } from "../../api.js";
 import { runtimeRoutingQueryOptions } from "../../query.js";
+import { unknownReadiness } from "../../test/readiness.js";
 import { renderWithProviders } from "../../test/render.js";
 import { ConnectionManagement } from "./ConnectionManagement.js";
 import { ModelManagement } from "./ModelManagement.js";
@@ -26,7 +27,8 @@ const routing: RuntimeRoutingSummary = {
       displayName: "Mock connection",
       endpoint: "",
       apiKeyConfigured: false,
-      enabled: true
+      enabled: true,
+      readiness: unknownReadiness
     }
   ],
   models: [
@@ -74,7 +76,8 @@ const routingWithRoute: RuntimeRoutingSummary = {
       fallbackRouteId: null,
       sttStreamingEnabled: false,
       ttsStreamingEnabled: false,
-      enabled: true
+      enabled: true,
+      readiness: unknownReadiness
     }
   ],
   activeRouteId: "route-a"
@@ -89,7 +92,8 @@ const routingWithUnusedConnection: RuntimeRoutingSummary = {
       displayName: "Unused connection",
       endpoint: "",
       apiKeyConfigured: false,
-      enabled: true
+      enabled: true,
+      readiness: unknownReadiness
     }
   ]
 };
@@ -108,7 +112,8 @@ const routingWithFallback: RuntimeRoutingSummary = {
       fallbackRouteId: "route-a",
       sttStreamingEnabled: false,
       ttsStreamingEnabled: false,
-      enabled: true
+      enabled: true,
+      readiness: unknownReadiness
     }
   ],
   activeRouteId: "route-native"
@@ -578,6 +583,24 @@ describe("runtime routing management", () => {
       expect(apiClient.runtimeRouting).toHaveBeenCalledTimes(2)
     );
   });
+
+  it("refetches readiness when an active route test fails", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(apiClient, "runtimeRouting").mockResolvedValue(routing);
+    vi.spyOn(apiClient, "testRuntimeRoute").mockRejectedValue(
+      new Error("Provider connection test failed")
+    );
+    renderWithProviders(<TestRouteWithRoutingProbe />);
+    await waitFor(() =>
+      expect(apiClient.runtimeRouting).toHaveBeenCalledOnce()
+    );
+
+    await user.click(screen.getByRole("button", { name: "Run route test" }));
+
+    await waitFor(() =>
+      expect(apiClient.runtimeRouting).toHaveBeenCalledTimes(2)
+    );
+  });
 });
 
 function TestAndActivateProbe() {
@@ -600,6 +623,23 @@ function TestAndActivateProbe() {
 function TestAndActivateWithRoutingProbe() {
   useQuery(runtimeRoutingQueryOptions());
   return <TestAndActivateProbe />;
+}
+
+function TestRouteWithRoutingProbe() {
+  useQuery(runtimeRoutingQueryOptions());
+  const { execute } = useRuntimeRoutingMutations();
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        void execute({ type: "test-route", id: "route-a" }).catch(
+          () => undefined
+        );
+      }}
+    >
+      Run route test
+    </button>
+  );
 }
 
 function model(

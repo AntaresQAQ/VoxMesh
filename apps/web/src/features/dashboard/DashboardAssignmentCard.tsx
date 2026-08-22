@@ -1,5 +1,6 @@
 import type { ModelCapability, RuntimeRoutingSummary } from "@voxmesh/shared";
 
+import { ProviderReadinessStatus } from "../../components/ProviderReadinessStatus.js";
 import { useI18n } from "../../i18n/i18n.js";
 
 export interface DashboardAssignment {
@@ -45,9 +46,12 @@ export function DashboardAssignmentCard({
         {connection?.displayName ?? t("dashboard.missingConnection")}
       </p>
       {connection ? (
-        <p>
-          {t("dashboard.provider")}: {providerLabel(connection.providerId, t)}
-        </p>
+        <>
+          <p>
+            {t("dashboard.provider")}: {providerLabel(connection.providerId, t)}
+          </p>
+          <ProviderReadinessStatus readiness={connection.readiness} />
+        </>
       ) : null}
       {assignment.transport ? (
         <p>

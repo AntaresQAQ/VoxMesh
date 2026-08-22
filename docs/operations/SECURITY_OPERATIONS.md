@@ -66,6 +66,12 @@ Any secret alert requires immediate credential revocation or rotation before
 repository cleanup. Rewriting Git history alone does not invalidate an exposed
 credential.
 
+Provider readiness persists only a reviewed category and bounded generic
+message. It must never retain or return raw provider response bodies,
+credentials, authorization headers, endpoints, workspace or account
+identifiers, stack traces, prompts, transcripts, tool payloads, or audio.
+Operators should use provider-side diagnostics for account-specific detail.
+
 ## Validation
 
 Security remediation pull requests must run:

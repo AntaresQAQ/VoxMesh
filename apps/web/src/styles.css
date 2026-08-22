@@ -212,6 +212,29 @@ p {
   color: var(--color-success);
 }
 
+.provider-readiness {
+  display: grid;
+  gap: 0.2rem;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+}
+
+.provider-readiness-state {
+  font-weight: 700;
+}
+
+.provider-readiness.ready .provider-readiness-state {
+  color: var(--color-success);
+}
+
+.provider-readiness.testing .provider-readiness-state {
+  color: var(--color-accent);
+}
+
+.provider-readiness.failed .provider-readiness-state {
+  color: var(--color-error);
+}
+
 .shell {
   display: grid;
   grid-template-columns: 250px 1fr;

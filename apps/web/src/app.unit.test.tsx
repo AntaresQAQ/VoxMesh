@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./App.js";
 import { apiClient } from "./api.js";
+import { unknownReadiness } from "./test/readiness.js";
 import { renderWithProviders } from "./test/render.js";
 
 beforeEach(() => {
@@ -76,7 +77,8 @@ describe("authenticated routing", () => {
             fallbackRouteId: null,
             sttStreamingEnabled: false,
             ttsStreamingEnabled: false,
-            enabled: true
+            enabled: true,
+            readiness: unknownReadiness
           }
         ],
         activeRouteId: "system-route-composed"
@@ -97,7 +99,8 @@ describe("authenticated routing", () => {
           fallbackRouteId: null,
           sttStreamingEnabled: false,
           ttsStreamingEnabled: false,
-          enabled: true
+          enabled: true,
+          readiness: unknownReadiness
         }
       ],
       activeRouteId: "system-route-composed"
