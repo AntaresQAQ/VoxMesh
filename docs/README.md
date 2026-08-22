@@ -49,6 +49,7 @@ Sections explicitly marked as planned are not claims of implemented behavior.
 - [Accessibility Standard and Audit](./development/ACCESSIBILITY.md)
 - [Mock Mode Development Guide](./development/MOCK_MODE.md)
 - [Phase 3 Closeout Plan](./development/PHASE_3_CLOSEOUT.md)
+- [Phase 4 Closeout Plan](./development/PHASE_4_CLOSEOUT.md)
 
 Development guides explain local workflows, deterministic testing, and quality
 evidence. Mandatory policy remains in
