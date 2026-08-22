@@ -5,7 +5,7 @@ import { safeProviderReadinessError } from "./provider-readiness.js";
 describe("safeProviderReadinessError", () => {
   it.each([
     ["HTTP 401 secret response", "authentication"],
-    ["HTTP 429 quota exhausted", "quota"],
+    ["HTTP 429 quota exhausted for api-key=secret", "quota"],
     ["Provider request timed out", "timeout"],
     ["Provider returned malformed JSON", "invalid-response"],
     ["Azure OpenAI requires an endpoint", "configuration"],
