@@ -7,6 +7,10 @@ import type {
   TextToSpeechProvider,
   TranscriptionResult
 } from "./types.js";
+import {
+  validateAlibabaModelStudioSttConfiguration,
+  validateAlibabaModelStudioTtsConfiguration
+} from "./alibaba-model-studio-config.js";
 
 const AUDIO_CHUNK_BYTES = 3_200;
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -54,7 +58,13 @@ export class AlibabaModelStudioSpeechToTextProvider implements SpeechToTextProvi
   public constructor(
     private readonly config: AlibabaModelStudioSttConfig,
     private readonly createSocket: AlibabaWebSocketFactory = defaultWebSocketFactory
-  ) {}
+  ) {
+    validateAlibabaModelStudioSttConfiguration({
+      endpoint: config.endpoint,
+      apiKeyConfigured: Boolean(config.apiKey),
+      model: config.model
+    });
+  }
 
   public async transcribe(audio: AudioData): Promise<TranscriptionResult> {
     if (audio.data.byteLength === 0) {
@@ -133,7 +143,14 @@ export class AlibabaModelStudioTextToSpeechProvider implements TextToSpeechProvi
   public constructor(
     private readonly config: AlibabaModelStudioTtsConfig,
     private readonly createSocket: AlibabaWebSocketFactory = defaultWebSocketFactory
-  ) {}
+  ) {
+    validateAlibabaModelStudioTtsConfiguration({
+      endpoint: config.endpoint,
+      apiKeyConfigured: Boolean(config.apiKey),
+      model: config.model,
+      voice: config.voice
+    });
+  }
 
   public async synthesize(text: string): Promise<AudioData> {
     if (!text.trim()) {

@@ -28,6 +28,7 @@ import { recordQualificationEvidence } from "./qualification-evidence.js";
 const MAX_AUDIO_BYTES = 5 * 1024 * 1024;
 
 export interface BufferedQualificationDependencies {
+  validateConfiguration?: (config: LiveProviderConfiguration) => void;
   createChat: (config: LiveChatConfiguration) => LlmProvider;
   createStt: (config: LiveSpeechToTextConfiguration) => SpeechToTextProvider;
   createTts: (config: LiveTextToSpeechConfiguration) => TextToSpeechProvider;
@@ -55,6 +56,7 @@ export class BufferedProviderQualification {
     private readonly budget: LiveRequestBudget,
     private readonly dependencies: BufferedQualificationDependencies
   ) {
+    dependencies.validateConfiguration?.(config);
     this.#readAudioFixture = dependencies.readAudioFixture ?? readAudioFixture;
     this.#recordEvidence =
       dependencies.recordEvidence ?? recordQualificationEvidence;
@@ -110,9 +112,10 @@ export class BufferedProviderQualification {
         `${this.providerLabel} STT configuration`
       );
       const audio = await this.inputAudio(config);
+      const provider = this.dependencies.createStt(config);
       const result = await executeLiveProviderRequest(
         requestOptions(`${this.providerLabel} STT`, config, this.budget),
-        () => this.dependencies.createStt(config).transcribe(audio)
+        () => provider.transcribe(audio)
       );
       if (!result.text.trim()) {
         throw new Error(
@@ -222,9 +225,10 @@ export class BufferedProviderQualification {
         `${this.providerLabel} qualification requires WAV TTS output`
       );
     }
+    const provider = this.dependencies.createTts(config);
     const audio = await executeLiveProviderRequest(
       requestOptions(`${this.providerLabel} TTS`, config, this.budget),
-      () => this.dependencies.createTts(config).synthesize(text)
+      () => provider.synthesize(text)
     );
     validatePcmWav(audio, `${this.providerLabel} TTS`);
     return audio;

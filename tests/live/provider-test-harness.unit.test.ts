@@ -54,7 +54,16 @@ describe("live provider test harness", () => {
         VOXMESH_LIVE_CAPABILITIES: "chat"
       })
     ).toThrow(
-      "The selected providers and capabilities do not contain a supported live scenario"
+      "alibaba-model-studio does not support selected capabilities: chat"
+    );
+    expect(() =>
+      loadLiveTestPlan({
+        VOXMESH_LIVE_TESTS: "true",
+        VOXMESH_LIVE_PROVIDERS: "alibaba-model-studio",
+        VOXMESH_LIVE_CAPABILITIES: "chat,stt"
+      })
+    ).toThrow(
+      "alibaba-model-studio does not support selected capabilities: chat"
     );
     expect(() =>
       loadLiveTestPlan({

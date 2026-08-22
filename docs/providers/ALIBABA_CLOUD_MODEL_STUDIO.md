@@ -198,6 +198,59 @@ A live Model Studio smoke test still requires user-provided credentials and is n
 
 The default CI suite must remain offline and deterministic.
 
+### Opt-in live qualification
+
+The Alibaba suite qualifies dedicated speech protocols separately from
+OpenAI-compatible Chat:
+
+| Selector         | Scenarios                                         | Requests |
+| ---------------- | ------------------------------------------------- | -------- |
+| `stt`            | one dedicated Fun-ASR transcription               | 1        |
+| `tts`            | one dedicated Qwen/CosyVoice synthesis            | 1        |
+| `composed-voice` | dedicated STT, compatible Chat/MCP, dedicated TTS | 4        |
+| all selectors    | all scenarios above                               | 6        |
+
+Example full execution:
+
+```bash
+VOXMESH_LIVE_TESTS=true \
+VOXMESH_LIVE_PROVIDERS=alibaba-model-studio \
+VOXMESH_LIVE_CAPABILITIES=stt,tts,composed-voice \
+VOXMESH_LIVE_MAX_REQUESTS=6 \
+pnpm test:live
+```
+
+STT and composed voice require an absolute
+`VOXMESH_LIVE_ALIBABA_STT_FIXTURE_PATH` to a synthetic mono 16 kHz PCM16 WAV
+file no larger than 5 MB. The composed fixture must ask to check the light
+status so Agent Core executes the deterministic Mock MCP tool.
+
+Composed voice also requires the independently configured
+`VOXMESH_LIVE_OPENAI_CHAT_*` group for Alibaba compatible-mode Chat. The
+harness never rewrites the WebSocket speech endpoint into a Chat endpoint or
+copies a speech credential into Chat implicitly.
+
+Before execution:
+
+1. Confirm the workspace and API key belong to the intended region.
+2. Confirm the selected Fun-ASR and Qwen/CosyVoice models are enabled.
+3. Confirm the selected system or custom voice belongs to the TTS model family.
+4. Configure workspace budgets, quota limits, and alerts.
+5. Review regional retention and abuse-monitoring settings.
+6. Use only non-production credentials and synthetic content.
+
+The runner stops at the first failure and does not retry a scenario. Evidence
+contains no workspace ID, endpoint, key, model, voice, prompt, transcript,
+provider event, tool payload, or audio. After execution, clear environment
+values, revoke temporary credentials, remove the local fixture, and delete
+temporary resources.
+
+Dedicated STT, dedicated TTS, and buffered composed voice passed on 2026-08-23
+(UTC+08:00); see the
+[sanitized evidence](../qualification/ALIBABA_MODEL_STUDIO_2026-08-23.md).
+This evidence does not qualify application-level streaming or standard
+OpenAI-compatible Audio endpoints.
+
 ## 7. Migration
 
 Migrating existing OpenAI-compatible code to Alibaba Cloud Model Studio requires only:

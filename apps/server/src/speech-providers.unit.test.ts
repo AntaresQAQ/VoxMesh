@@ -141,6 +141,15 @@ describe("speech provider factory", () => {
         sttApiKey: "secret"
       })
     ).toThrow("requires a realtime Fun-ASR or Qwen Audio streaming model");
+    expect(() =>
+      validateSpeechConfiguration({
+        ...mockConfig,
+        sttMode: "alibaba-model-studio",
+        sttEndpoint: "wss://attacker.example.test/api-ws/v1/inference",
+        sttDeployment: "fun-asr-realtime",
+        sttApiKey: "secret"
+      })
+    ).toThrow("endpoint must use an Alibaba Cloud host");
   });
 
   it("rejects Alibaba Qwen Audio voices from a different model family", () => {
