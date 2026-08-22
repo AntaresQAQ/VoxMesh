@@ -23,7 +23,7 @@ real Azure OpenAI and Alibaba Cloud Model Studio resources. It also adds the
 minimum operational status needed to diagnose configured providers without
 exposing credentials or turning a failed provider into a successful fallback.
 
-## 2. Current Baseline
+## 2. Delivered Baseline
 
 Implemented on `main`:
 
@@ -39,15 +39,23 @@ Implemented on `main`:
   coverage
 - Mock Mode as the default route for a new database
 
-Remaining acceptance gaps:
+Delivered through PRs #16, #17, #19, #21, and #22:
 
-- no opt-in live-provider test suites
-- no recorded live qualification for Azure Chat/STT/TTS or composed voice
-- no recorded live qualification for Alibaba/OpenAI-compatible Chat and
-  Alibaba speech
-- no safe provider readiness and last-error status
-- incomplete live-test safeguards for cost, quota, region, retention, and
-  credential handling
+- opt-in live-provider suites with strict provider/capability selection
+- hard request budgets, fail-fast behavior, no retries, bounded timeouts, and
+  safe evidence output
+- persisted provider/route readiness and allow-listed last-error diagnostics
+- Azure and OpenAI-compatible direct and MCP-assisted Chat qualification
+- Alibaba dedicated STT, TTS, and buffered composed-voice qualification
+- provider-specific cost, quota, region, retention, credential, and cleanup
+  guidance
+
+Explicitly unqualified follow-up work:
+
+- Azure Speech live qualification in
+  [issue #18](https://github.com/AntaresQAQ/VoxMesh/issues/18)
+- standard OpenAI-compatible Audio qualification in
+  [issue #20](https://github.com/AntaresQAQ/VoxMesh/issues/20)
 
 ## 3. Governing Boundaries
 
@@ -566,3 +574,14 @@ Before declaring Phase 4 complete:
 10. Any incomplete provider combination is explicit and does not receive a
     success-shaped acceptance claim.
 11. The user explicitly accepts the Phase 4 result before Phase 5 starts.
+
+Closeout status:
+
+- Items 2 through 10 are satisfied for the capabilities claimed as qualified.
+- Issues #18 and #20 preserve the explicitly unqualified Audio combinations;
+  neither is represented as passing evidence.
+- Item 1 completes when the Phase 4 closeout pull request is reviewed, passes
+  required CI, and merges.
+- Item 11 remains the final gate before any Phase 5 behavior is implemented.
+- The consolidated evidence is the
+  [Phase 4 Acceptance Report](../qualification/PHASE_4_ACCEPTANCE.md).
