@@ -9,7 +9,7 @@ This document is the project-visible implementation roadmap. It does not authori
 
 ## Implementation Progress
 
-Last updated: 2026-08-23
+Last updated: 2026-08-23 (UTC+08:00)
 
 Implementation baseline: merged `main` through PR #22
 (`test: add Alibaba live qualification`).

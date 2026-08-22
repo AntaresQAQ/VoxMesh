@@ -49,15 +49,16 @@ The detailed evidence records are:
 
 - Live tests require explicit opt-in and exactly one provider family.
 - Capability selection controls which role configuration is required.
-- Every live process has a hard request budget, no retries, and first-failure
-  bail.
+- Every live process has a hard request budget, disables retries, and stops
+  after the first failed scenario.
 - Provider requests use bounded timeouts and cancellation where supported.
 - Alibaba endpoint host/path and known model/voice mismatches fail before key
   disclosure to an adapter, socket creation, or request-budget consumption.
 - Provider and route readiness is updated only by explicit tests.
 - Configuration changes invalidate related readiness, and stale test
   generations cannot overwrite newer state.
-- Readiness persists only allow-listed categories and fixed messages.
+- Persisted readiness errors contain only allow-listed categories and fixed
+  messages.
 - Default `pnpm validate` remains offline and deterministic.
 - Qualification evidence excludes credentials, endpoints, account/workspace
   identifiers, deployment/model/voice identifiers, provider payloads, prompts,
