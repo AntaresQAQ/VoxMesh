@@ -1,4 +1,5 @@
 import {
+  AlibabaModelStudioConfigurationError,
   AlibabaModelStudioSpeechToTextProvider,
   AlibabaModelStudioTextToSpeechProvider,
   AzureOpenAiSpeechToTextProvider,
@@ -7,6 +8,8 @@ import {
   MockTextToSpeechProvider,
   OpenAiCompatibleSpeechToTextProvider,
   OpenAiCompatibleTextToSpeechProvider,
+  validateAlibabaModelStudioSttConfiguration,
+  validateAlibabaModelStudioTtsConfiguration,
   type SpeechToTextProvider,
   type TextToSpeechProvider
 } from "@voxmesh/audio";
@@ -211,48 +214,24 @@ function validateCompatibleTts(config: StoredSpeechConfiguration): void {
 }
 
 function validateAlibabaStt(config: StoredSpeechConfiguration): void {
-  validateAlibabaConnection(
-    config.sttEndpoint,
-    config.sttApiKey,
-    config.sttDeployment,
-    "Alibaba Model Studio STT"
+  asBadRequest(() =>
+    validateAlibabaModelStudioSttConfiguration({
+      endpoint: config.sttEndpoint,
+      apiKeyConfigured: Boolean(config.sttApiKey),
+      model: config.sttDeployment
+    })
   );
-  if (
-    !/^fun-asr-(?:flash-8k-)?realtime(?:-|$)/u.test(config.sttDeployment) &&
-    !/^qwen-audio-3\.0-asr-flash-streaming(?:-|$)/u.test(config.sttDeployment)
-  ) {
-    throw badRequest(
-      "Alibaba Model Studio STT requires a realtime Fun-ASR or Qwen Audio streaming model"
-    );
-  }
 }
 
 function validateAlibabaTts(config: StoredSpeechConfiguration): void {
-  validateAlibabaConnection(
-    config.ttsEndpoint,
-    config.ttsApiKey,
-    config.ttsDeployment,
-    "Alibaba Model Studio TTS"
+  asBadRequest(() =>
+    validateAlibabaModelStudioTtsConfiguration({
+      endpoint: config.ttsEndpoint,
+      apiKeyConfigured: Boolean(config.ttsApiKey),
+      model: config.ttsDeployment,
+      voice: config.ttsVoice
+    })
   );
-  if (!config.ttsVoice) {
-    throw badRequest("Alibaba Model Studio TTS requires a voice");
-  }
-  if (
-    config.ttsDeployment === "qwen-audio-3.0-tts-plus" &&
-    QWEN_AUDIO_FLASH_SYSTEM_VOICES.has(config.ttsVoice)
-  ) {
-    throw badRequest(
-      "qwen-audio-3.0-tts-plus does not support this Flash voice; use longanlingxin, longanlufeng, or a Plus-compatible cloned voice"
-    );
-  }
-  if (
-    config.ttsDeployment === "qwen-audio-3.0-tts-flash" &&
-    QWEN_AUDIO_PLUS_SYSTEM_VOICES.has(config.ttsVoice)
-  ) {
-    throw badRequest(
-      "qwen-audio-3.0-tts-flash does not support this Plus voice; select a Flash-compatible voice"
-    );
-  }
 }
 
 function validateAzureConnection(
@@ -294,58 +273,17 @@ function validateCompatibleConnection(
   }
 }
 
-function validateAlibabaConnection(
-  endpointValue: string,
-  apiKey: string | null,
-  model: string,
-  label: string
-): void {
-  if (!endpointValue || !apiKey || !model) {
-    throw badRequest(
-      `${label} requires a WebSocket endpoint, API key, and model`
-    );
-  }
-  let endpoint: URL;
-  try {
-    endpoint = new URL(endpointValue);
-  } catch {
-    throw badRequest(`${label} WebSocket endpoint must be valid`);
-  }
-  if (endpoint.protocol !== "wss:") {
-    throw badRequest(`${label} endpoint must use WSS`);
-  }
-  if (endpoint.pathname !== "/api-ws/v1/inference") {
-    throw badRequest(`${label} endpoint path must be /api-ws/v1/inference`);
-  }
-  const supportedHost =
-    endpoint.hostname === "dashscope.aliyuncs.com" ||
-    endpoint.hostname === "dashscope-intl.aliyuncs.com" ||
-    endpoint.hostname.endsWith(".cn-beijing.maas.aliyuncs.com") ||
-    endpoint.hostname.endsWith(".ap-southeast-1.maas.aliyuncs.com");
-  if (!supportedHost) {
-    throw badRequest(`${label} endpoint must use an Alibaba Cloud host`);
-  }
-}
-
 function badRequest(message: string): Error & { statusCode: number } {
   return Object.assign(new Error(message), { statusCode: 400 });
 }
 
-const QWEN_AUDIO_PLUS_SYSTEM_VOICES = new Set([
-  "longanlingxin",
-  "longanlufeng"
-]);
-const QWEN_AUDIO_FLASH_SYSTEM_VOICES = new Set([
-  "longanfengyue",
-  "longanyuanfei",
-  "longanlingxi",
-  "longanxiaoxin",
-  "longanhuan_v3.6",
-  "longjielidou_v3.6",
-  "longpaopao_v3.6",
-  "longhuohuo_v3.6",
-  "longchuanshu_v3.6",
-  "loongmary",
-  "loongeva_v3.6",
-  "loongjohn"
-]);
+function asBadRequest(validate: () => void): void {
+  try {
+    validate();
+  } catch (error) {
+    if (error instanceof AlibabaModelStudioConfigurationError) {
+      throw badRequest(error.message);
+    }
+    throw error;
+  }
+}

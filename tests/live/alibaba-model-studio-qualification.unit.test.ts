@@ -12,6 +12,7 @@ import {
 import {
   createSyntheticPcm16Wav,
   LiveRequestBudget,
+  LiveTestConfigurationError,
   SecretValue,
   type LiveProviderConfiguration
 } from "./provider-test-harness.js";
@@ -120,5 +121,55 @@ describe("AlibabaModelStudioQualification", () => {
     expect(alibabaMinimumRequestCount(["stt", "tts", "composed-voice"])).toBe(
       6
     );
+  });
+
+  it("rejects an untrusted speech endpoint before consuming budget", () => {
+    const budget = new LiveRequestBudget(1);
+
+    expect(
+      () =>
+        new AlibabaModelStudioQualification(
+          {
+            stt: {
+              ...config.stt!,
+              endpoint: new URL(
+                "wss://attacker.example.test/api-ws/v1/inference"
+              )
+            }
+          },
+          budget
+        )
+    ).toThrow(
+      new LiveTestConfigurationError(
+        "Alibaba Model Studio STT endpoint must use an Alibaba Cloud host"
+      )
+    );
+    expect(budget.remaining).toBe(1);
+  });
+
+  it("rejects a known model and voice mismatch before consuming budget", () => {
+    const budget = new LiveRequestBudget(1);
+
+    expect(
+      () =>
+        new AlibabaModelStudioQualification(
+          {
+            tts: {
+              ...config.tts!,
+              endpoint: new URL(
+                "wss://workspace.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference"
+              ),
+              model: "qwen-audio-3.0-tts-plus",
+              voice: "longpaopao_v3.6"
+            }
+          },
+          budget
+        )
+    ).toThrow(
+      new LiveTestConfigurationError(
+        "qwen-audio-3.0-tts-plus does not support this Flash voice; use longanlingxin, longanlufeng, or a Plus-compatible cloned voice"
+      )
+    );
+    expect(budget.remaining).toBe(1);
   });
 });

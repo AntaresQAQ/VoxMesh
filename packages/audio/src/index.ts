@@ -1,4 +1,5 @@
 export * from "./alibaba-model-studio-speech.js";
+export * from "./alibaba-model-studio-config.js";
 export * from "./azure-openai-speech.js";
 export * from "./mock-speech.js";
 export * from "./openai-compatible-speech.js";

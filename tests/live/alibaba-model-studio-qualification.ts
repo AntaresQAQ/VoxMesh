@@ -1,8 +1,12 @@
 import type { LlmProvider } from "../../packages/agent-core/src/index.js";
 import { OpenAiCompatibleProvider } from "../../packages/ai/src/index.js";
 import {
+  AlibabaModelStudioConfigurationError,
   AlibabaModelStudioSpeechToTextProvider,
   AlibabaModelStudioTextToSpeechProvider,
+  validateAlibabaModelStudioCompatibleEndpoint,
+  validateAlibabaModelStudioSttConfiguration,
+  validateAlibabaModelStudioTtsConfiguration,
   type SpeechToTextProvider,
   type TextToSpeechProvider
 } from "../../packages/audio/src/index.js";
@@ -20,8 +24,10 @@ import type {
   LiveSpeechToTextConfiguration,
   LiveTextToSpeechConfiguration
 } from "./provider-test-harness.js";
+import { LiveTestConfigurationError } from "./provider-test-harness.js";
 
 const dependencies: BufferedQualificationDependencies = {
+  validateConfiguration,
   createChat,
   createStt,
   createTts
@@ -47,6 +53,34 @@ export function alibabaMinimumRequestCount(
   capabilities: readonly LiveCapabilityId[]
 ): number {
   return bufferedMinimumRequestCount(capabilities);
+}
+
+function validateConfiguration(config: LiveProviderConfiguration): void {
+  try {
+    if (config.chat) {
+      validateAlibabaModelStudioCompatibleEndpoint(config.chat.endpoint.href);
+    }
+    if (config.stt) {
+      validateAlibabaModelStudioSttConfiguration({
+        endpoint: config.stt.endpoint.href,
+        apiKeyConfigured: true,
+        model: config.stt.model
+      });
+    }
+    if (config.tts) {
+      validateAlibabaModelStudioTtsConfiguration({
+        endpoint: config.tts.endpoint.href,
+        apiKeyConfigured: true,
+        model: config.tts.model,
+        voice: config.tts.voice
+      });
+    }
+  } catch (error) {
+    if (error instanceof AlibabaModelStudioConfigurationError) {
+      throw new LiveTestConfigurationError(error.message);
+    }
+    throw error;
+  }
 }
 
 function createChat(config: LiveChatConfiguration): LlmProvider {
