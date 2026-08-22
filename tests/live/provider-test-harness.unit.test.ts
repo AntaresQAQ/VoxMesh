@@ -253,6 +253,28 @@ describe("live provider test harness", () => {
     vi.useRealTimers();
   });
 
+  it("observes a provider rejection that arrives after timeout", async () => {
+    vi.useFakeTimers();
+    let rejectProvider: ((error: Error) => void) | undefined;
+    const result = runWithLiveTestTimeout(
+      "late provider request",
+      50,
+      () =>
+        new Promise<string>((_resolve, reject) => {
+          rejectProvider = reject;
+        })
+    );
+    const rejection = expect(result).rejects.toEqual(
+      new LiveTestTimeoutError("late provider request timed out after 50ms")
+    );
+
+    await vi.advanceTimersByTimeAsync(50);
+    await rejection;
+    rejectProvider?.(new Error("late provider rejection"));
+    await Promise.resolve();
+    vi.useRealTimers();
+  });
+
   it("generates deterministic non-speech mono PCM16 WAV data", () => {
     const first = createSyntheticPcm16Wav(100, 440, 16_000);
     const second = createSyntheticPcm16Wav(100, 440, 16_000);

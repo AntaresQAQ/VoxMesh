@@ -104,8 +104,9 @@ const supportedCapabilities: Readonly<
 
 /**
  * Wraps a credential so JSON serialization, string conversion, and Node
- * inspection cannot reveal it accidentally. Call `reveal` only at the request
- * boundary that writes the provider authorization header.
+ * inspection cannot reveal it accidentally. Call `reveal` only within the
+ * request-authorization boundary or the redaction boundary that removes the
+ * same credential from diagnostic text.
  */
 export class SecretValue {
   readonly #value: string;
@@ -264,23 +265,33 @@ export async function runWithLiveTestTimeout<T>(
   }
 
   const controller = new AbortController();
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_resolve, reject) => {
-    timer = setTimeout(() => {
+  return await new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
       controller.abort();
       reject(
         new LiveTestTimeoutError(`${label} timed out after ${timeoutMs}ms`)
       );
     }, timeoutMs);
-  });
 
-  try {
-    return await Promise.race([operation(controller.signal), timeout]);
-  } finally {
-    if (timer) {
-      clearTimeout(timer);
-    }
-  }
+    // Both handlers stay attached after a timeout so a late provider result,
+    // including rejection after cancellation, can never become unhandled.
+    void Promise.resolve()
+      .then(() => operation(controller.signal))
+      .then(
+        (value) => {
+          clearTimeout(timer);
+          resolve(value);
+        },
+        (error: unknown) => {
+          clearTimeout(timer);
+          reject(
+            error instanceof Error
+              ? error
+              : new Error("Live provider operation rejected without an Error")
+          );
+        }
+      );
+  });
 }
 
 /** Creates deterministic, non-speech PCM16 WAV data without personal content. */
