@@ -35,7 +35,7 @@ Implemented on `main`:
   testing, activation, and explicit Native-to-Composed fallback
 - write-only provider credentials stored in SQLite under the documented
   host-filesystem trust model
-- deterministic offline unit, integration, component, Playwright, and axe
+- deterministic offline unit, integration, component tests, Playwright, and axe
   coverage
 - Mock Mode as the default route for a new database
 
@@ -405,7 +405,7 @@ Scope:
   troubleshooting notes
 - document live-test cost, quota, region, retention, credential rotation,
   revocation, and incident-response safeguards
-- update Runtime Routing and Voice Pipeline documentation with readiness and
+- update Runtime Routing and Voice Pipelines documentation with readiness and
   qualification semantics
 - mark only completed Phase 4 acceptance items in the Implementation Plan
 - identify any deferred provider/model combinations and assign them to an
