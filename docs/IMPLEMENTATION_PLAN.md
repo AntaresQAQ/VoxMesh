@@ -138,6 +138,10 @@ in [Phase 3 Closeout Plan](./development/PHASE_3_CLOSEOUT.md).
 - [ ] real Native Multimodal provider adapter; this is an extension and is not
       required before the original non-streaming Azure/Alibaba acceptance gate
 
+The executable PR sequence, dependencies, safeguards, acceptance evidence, and
+exclusions are defined in
+[Phase 4 Closeout Plan](./development/PHASE_4_CLOSEOUT.md).
+
 ### Planned streaming voice work
 
 - [ ] authenticated, versioned bidirectional browser voice WebSocket transport
