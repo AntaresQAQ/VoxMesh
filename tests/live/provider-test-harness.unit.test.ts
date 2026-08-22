@@ -56,6 +56,15 @@ describe("live provider test harness", () => {
     ).toThrow(
       "The selected providers and capabilities do not contain a supported live scenario"
     );
+    expect(() =>
+      loadLiveTestPlan({
+        VOXMESH_LIVE_TESTS: "true",
+        VOXMESH_LIVE_PROVIDERS: "azure-openai,openai-compatible",
+        VOXMESH_LIVE_CAPABILITIES: "chat"
+      })
+    ).toThrow(
+      "VOXMESH_LIVE_PROVIDERS must select exactly one provider family per live run"
+    );
   });
 
   it("loads only selected Azure configuration with bounded defaults", () => {
