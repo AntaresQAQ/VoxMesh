@@ -415,6 +415,17 @@ Out of scope:
 - provider performance comparisons
 - production deployment certification
 
+Execution decision recorded on 2026-08-23 (UTC+08:00):
+
+- Dedicated Alibaba STT passed with the approved synthetic PCM16 WAV fixture.
+- Dedicated Alibaba TTS passed and returned validated WAV audio.
+- Buffered Alibaba composed voice passed through dedicated STT,
+  OpenAI-compatible Chat, deterministic Mock MCP, and dedicated TTS.
+- The six-request hard budget was fully consumed without retries or additional
+  provider calls.
+- This evidence does not qualify application-level streaming or standard
+  OpenAI-compatible Audio endpoints.
+
 ### PR 6 - `docs: close Phase 4 provider acceptance`
 
 Purpose:

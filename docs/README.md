@@ -70,6 +70,7 @@ Runtime Routing.
 
 - [Azure OpenAI Chat — 2026-08-22](./qualification/AZURE_OPENAI_CHAT_2026-08-22.md)
 - [OpenAI-compatible Chat — 2026-08-23](./qualification/OPENAI_COMPATIBLE_CHAT_2026-08-23.md)
+- [Alibaba Model Studio — 2026-08-23](./qualification/ALIBABA_MODEL_STUDIO_2026-08-23.md)
 
 Qualification records contain only sanitized provider family, capability,
 date, outcome, and limitations. They never contain credentials, account

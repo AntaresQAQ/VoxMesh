@@ -153,6 +153,11 @@ composed voice remain explicitly unqualified because no approved configured
 provider exposes the standard compatible Audio endpoints; this is tracked by
 [issue #20](https://github.com/AntaresQAQ/VoxMesh/issues/20).
 
+Alibaba dedicated STT, dedicated TTS, and buffered composed voice passed on
+2026-08-23 (UTC+08:00) with the exact six-request budget. The evidence covers
+the provider-internal WebSocket speech protocols and does not claim standard
+OpenAI-compatible Audio or application-level streaming support.
+
 ### Planned streaming voice work
 
 - [ ] authenticated, versioned bidirectional browser voice WebSocket transport
