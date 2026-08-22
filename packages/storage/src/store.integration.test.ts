@@ -1110,14 +1110,16 @@ describe("VoxMeshStore", () => {
       "superseded"
     );
     store.beginRuntimeConnectionReadinessTest(second, "chat");
-    store.markRuntimeConnectionReadinessFailed(second, "chat", {
+    const unsafeCallerError = {
       category: "authentication",
-      message: "Provider authentication failed."
-    });
-    store.markRuntimeRouteReadinessFailed(second, {
-      category: "authentication",
-      message: "Provider authentication failed."
-    });
+      message: "https://workspace.example.test api-key=caller-provided-secret"
+    } as const;
+    store.markRuntimeConnectionReadinessFailed(
+      second,
+      "chat",
+      unsafeCallerError
+    );
+    store.markRuntimeRouteReadinessFailed(second, unsafeCallerError);
 
     const routing = store.getRuntimeRoutingSummary();
     const routeReadiness = routing.routes.find(
@@ -1131,6 +1133,8 @@ describe("VoxMeshStore", () => {
       }
     });
     expect(typeof routeReadiness?.lastTestedAt).toBe("string");
+    expect(JSON.stringify(routing)).not.toContain("caller-provided-secret");
+    expect(JSON.stringify(routing)).not.toContain("workspace.example.test");
     const chatConnectionId = snapshot.assignments.find(
       (assignment) => assignment.role === "chat"
     )?.connectionId;

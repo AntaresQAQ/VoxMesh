@@ -1,4 +1,7 @@
-import type { ProviderReadinessErrorCategory } from "@voxmesh/shared";
+import {
+  providerReadinessErrorMessage,
+  type ProviderReadinessErrorCategory
+} from "@voxmesh/shared";
 
 export interface SafeProviderReadinessError {
   category: ProviderReadinessErrorCategory;
@@ -25,31 +28,28 @@ export function safeProviderReadinessError(
     (error.name === "AbortError" || error.name === "TimeoutError")
   ) {
     return error.name === "AbortError"
-      ? safeError("cancelled", "Provider connection test was cancelled.")
-      : safeError("timeout", "Provider connection test timed out.");
+      ? safeError("cancelled")
+      : safeError("timeout");
   }
   if (
     /\b401\b|\b403\b|\bauthentication\b|\bunauthorized\b|\bforbidden\b|\bapi[-_ ]?key\b|\bcredential/iu.test(
       message
     )
   ) {
-    return safeError("authentication", "Provider authentication failed.");
+    return safeError("authentication");
   }
   if (/\b429\b|\bquota\b|\brate limit\b|\bthrottl/iu.test(message)) {
-    return safeError("quota", "Provider quota or rate limit was exceeded.");
+    return safeError("quota");
   }
   if (/\btimeout\b|\btimed out\b/iu.test(message)) {
-    return safeError("timeout", "Provider connection test timed out.");
+    return safeError("timeout");
   }
   if (
     /\bmalformed\b|\binvalid (?:response|json)\b|\bempty (?:response|audio|text)\b/iu.test(
       message
     )
   ) {
-    return safeError(
-      "invalid-response",
-      "Provider returned an invalid response."
-    );
+    return safeError("invalid-response");
   }
   if (
     statusCode === 400 ||
@@ -57,14 +57,13 @@ export function safeProviderReadinessError(
       message
     )
   ) {
-    return safeError("configuration", "Provider configuration is invalid.");
+    return safeError("configuration");
   }
-  return safeError("provider", "Provider connection test failed.");
+  return safeError("provider");
 }
 
 function safeError(
-  category: ProviderReadinessErrorCategory,
-  message: string
+  category: ProviderReadinessErrorCategory
 ): SafeProviderReadinessError {
-  return { category, message };
+  return { category, message: providerReadinessErrorMessage(category) };
 }

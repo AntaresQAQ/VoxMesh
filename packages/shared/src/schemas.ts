@@ -328,17 +328,36 @@ export const ProviderReadinessErrorCategorySchema = Type.Union([
   Type.Literal("provider")
 ]);
 
-export const ProviderReadinessSchema = Type.Object({
-  state: ProviderReadinessStateSchema,
-  lastTestedAt: Type.Union([Type.String({ format: "date-time" }), Type.Null()]),
-  lastError: Type.Union([
-    Type.Object({
-      category: ProviderReadinessErrorCategorySchema,
-      message: Type.String({ minLength: 1, maxLength: 500 })
-    }),
-    Type.Null()
-  ])
+const ProviderReadinessErrorSchema = Type.Object({
+  category: ProviderReadinessErrorCategorySchema,
+  message: Type.String({ minLength: 1, maxLength: 500 })
 });
+
+export const ProviderReadinessSchema = Type.Union([
+  Type.Object({
+    state: Type.Literal("unknown"),
+    lastTestedAt: Type.Null(),
+    lastError: Type.Null()
+  }),
+  Type.Object({
+    state: Type.Literal("testing"),
+    lastTestedAt: Type.Union([
+      Type.String({ format: "date-time" }),
+      Type.Null()
+    ]),
+    lastError: Type.Null()
+  }),
+  Type.Object({
+    state: Type.Literal("ready"),
+    lastTestedAt: Type.String({ format: "date-time" }),
+    lastError: Type.Null()
+  }),
+  Type.Object({
+    state: Type.Literal("failed"),
+    lastTestedAt: Type.String({ format: "date-time" }),
+    lastError: ProviderReadinessErrorSchema
+  })
+]);
 
 export const ProviderConnectionSummarySchema = Type.Object({
   id: Type.String(),

@@ -17,6 +17,7 @@ import type {
   SpeechProviderMode,
   VoicePipelineMode
 } from "@voxmesh/shared";
+import { providerReadinessErrorMessage } from "@voxmesh/shared";
 
 interface LlmRoutingConfiguration {
   mode: LlmMode;
@@ -124,7 +125,6 @@ export interface RuntimeRouteReadinessTest {
 
 export interface RuntimeReadinessError {
   category: ProviderReadinessErrorCategory;
-  message: string;
 }
 
 /** Owns system-managed provider, model, and route persistence. */
@@ -928,7 +928,7 @@ export class RuntimeRoutingStore {
       .run(
         now,
         error.category,
-        boundedReadinessMessage(error.message),
+        providerReadinessErrorMessage(error.category),
         now,
         connectionId,
         test.generation
@@ -977,7 +977,7 @@ export class RuntimeRoutingStore {
       .run(
         now,
         error.category,
-        boundedReadinessMessage(error.message),
+        providerReadinessErrorMessage(error.category),
         now,
         test.routeId,
         test.generation
@@ -1702,40 +1702,57 @@ function mapReadiness(row: {
   ) {
     throw new Error("Provider readiness error fields are inconsistent");
   }
-  if (
-    row.readiness_state !== "failed" &&
-    row.readiness_error_category !== null
-  ) {
-    throw new Error(
-      "Provider readiness errors require the failed readiness state"
-    );
-  }
-  if (
-    row.readiness_state === "failed" &&
-    row.readiness_error_category === null
-  ) {
-    throw new Error("Failed provider readiness requires a safe error");
-  }
-  if (
-    (row.readiness_state === "ready" || row.readiness_state === "failed") &&
-    row.readiness_last_tested_at === null
-  ) {
-    throw new Error(
-      "Completed provider readiness requires a last-tested timestamp"
-    );
-  }
-  const lastError =
-    row.readiness_error_category && row.readiness_error_message
-      ? {
+  switch (row.readiness_state) {
+    case "unknown":
+      if (
+        row.readiness_last_tested_at !== null ||
+        row.readiness_error_category !== null
+      ) {
+        throw new Error("Unknown provider readiness must not retain test data");
+      }
+      return { state: "unknown", lastTestedAt: null, lastError: null };
+    case "testing":
+      if (row.readiness_error_category !== null) {
+        throw new Error("Testing provider readiness must not retain an error");
+      }
+      return {
+        state: "testing",
+        lastTestedAt: row.readiness_last_tested_at,
+        lastError: null
+      };
+    case "ready":
+      if (
+        row.readiness_last_tested_at === null ||
+        row.readiness_error_category !== null
+      ) {
+        throw new Error(
+          "Ready provider readiness requires a timestamp without an error"
+        );
+      }
+      return {
+        state: "ready",
+        lastTestedAt: row.readiness_last_tested_at,
+        lastError: null
+      };
+    case "failed":
+      if (
+        row.readiness_last_tested_at === null ||
+        row.readiness_error_category === null ||
+        row.readiness_error_message === null
+      ) {
+        throw new Error(
+          "Failed provider readiness requires a timestamp and safe error"
+        );
+      }
+      return {
+        state: "failed",
+        lastTestedAt: row.readiness_last_tested_at,
+        lastError: {
           category: row.readiness_error_category,
           message: row.readiness_error_message
         }
-      : null;
-  return {
-    state: row.readiness_state,
-    lastTestedAt: row.readiness_last_tested_at,
-    lastError
-  };
+      };
+  }
 }
 
 function isReadinessState(value: string): value is ProviderReadiness["state"] {
@@ -1821,13 +1838,6 @@ function connectionIdForRole(
     throw new Error(`Runtime route readiness test has no ${role} assignment`);
   }
   return assignment.connectionId;
-}
-
-function boundedReadinessMessage(message: string): string {
-  const normalized = message.trim() || "Provider connection test failed";
-  return normalized.length <= 500
-    ? normalized
-    : `${normalized.slice(0, 497)}...`;
 }
 
 function routeModelId(
