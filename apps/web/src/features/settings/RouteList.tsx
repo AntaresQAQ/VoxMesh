@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 
 import type { RuntimeRouteSummary } from "@voxmesh/shared";
 
+import { ProviderReadinessStatus } from "../../components/ProviderReadinessStatus.js";
 import { useI18n } from "../../i18n/i18n.js";
 
 export function RouteList(props: {
@@ -40,6 +41,7 @@ export function RouteList(props: {
                 ? t("settings.voiceModeComposed")
                 : t("settings.voiceModeNative")}
             </span>
+            <ProviderReadinessStatus readiness={route.readiness} />
             {isActive ? (
               <>
                 <button

@@ -31,6 +31,8 @@ import type {
 
 import {
   RuntimeRoutingStore,
+  type RuntimeReadinessError,
+  type RuntimeRouteReadinessTest,
   type RuntimeRouteVerificationSnapshot
 } from "./runtime-routing-store.js";
 
@@ -227,6 +229,9 @@ export class VoxMeshStore {
       }
       this.runtimeRouting = new RuntimeRoutingStore(this.database);
       this.runtimeRouting.initializeDefaults();
+      if (ownershipClaimed) {
+        this.runtimeRouting.reconcileInterruptedReadinessTests();
+      }
       this.startOwnershipHeartbeat();
     } catch (error) {
       const lastLease = releaseLocalDatabaseLease(this.leaseKey);
@@ -418,6 +423,45 @@ export class VoxMeshStore {
     snapshot: RuntimeRouteVerificationSnapshot
   ): void {
     this.runtimeRouting.markRouteVerified(snapshot);
+  }
+
+  public beginRuntimeRouteReadinessTest(
+    snapshot: RuntimeRouteVerificationSnapshot
+  ): RuntimeRouteReadinessTest {
+    return this.runtimeRouting.beginRouteReadinessTest(snapshot);
+  }
+
+  public beginRuntimeConnectionReadinessTest(
+    test: RuntimeRouteReadinessTest,
+    role: "stt" | "chat" | "tts" | "native"
+  ): void {
+    this.runtimeRouting.beginConnectionReadinessTest(test, role);
+  }
+
+  public markRuntimeConnectionReadinessReady(
+    test: RuntimeRouteReadinessTest,
+    role: "stt" | "chat" | "tts" | "native"
+  ): void {
+    this.runtimeRouting.markConnectionReadinessReady(test, role);
+  }
+
+  public markRuntimeConnectionReadinessFailed(
+    test: RuntimeRouteReadinessTest,
+    role: "stt" | "chat" | "tts" | "native",
+    error: RuntimeReadinessError
+  ): void {
+    this.runtimeRouting.markConnectionReadinessFailed(test, role, error);
+  }
+
+  public markRuntimeRouteReadinessReady(test: RuntimeRouteReadinessTest): void {
+    this.runtimeRouting.markRouteReadinessReady(test);
+  }
+
+  public markRuntimeRouteReadinessFailed(
+    test: RuntimeRouteReadinessTest,
+    error: RuntimeReadinessError
+  ): void {
+    this.runtimeRouting.markRouteReadinessFailed(test, error);
   }
 
   public createConversation(userMessage: string): string {
@@ -1247,6 +1291,11 @@ export class VoxMeshStore {
         initialized INTEGER NOT NULL CHECK (initialized IN (0, 1))
       );
 
+      CREATE TABLE IF NOT EXISTS schema_migrations (
+        id TEXT PRIMARY KEY,
+        applied_at TEXT NOT NULL
+      );
+
       CREATE TABLE IF NOT EXISTS conversation_events (
         id TEXT PRIMARY KEY,
         conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
@@ -1301,6 +1350,52 @@ export class VoxMeshStore {
       "enabled",
       "INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1))"
     );
+    this.applyMigration("2026-08-22-provider-readiness-v1", () => {
+      for (const table of ["provider_connections", "runtime_routes"]) {
+        this.ensureColumn(
+          table,
+          "readiness_state",
+          "TEXT NOT NULL DEFAULT 'unknown' CHECK (readiness_state IN ('unknown', 'testing', 'ready', 'failed'))"
+        );
+        this.ensureColumn(table, "readiness_last_tested_at", "TEXT");
+        this.ensureColumn(
+          table,
+          "readiness_error_category",
+          "TEXT CHECK (readiness_error_category IS NULL OR readiness_error_category IN ('authentication', 'quota', 'timeout', 'invalid-response', 'configuration', 'cancelled', 'provider'))"
+        );
+        this.ensureColumn(
+          table,
+          "readiness_error_message",
+          "TEXT CHECK (readiness_error_message IS NULL OR length(readiness_error_message) <= 500)"
+        );
+        this.ensureColumn(
+          table,
+          "readiness_generation",
+          "INTEGER NOT NULL DEFAULT 0 CHECK (readiness_generation >= 0)"
+        );
+      }
+      this.database.exec(`
+        CREATE TABLE IF NOT EXISTS runtime_readiness_sequence (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          generation INTEGER NOT NULL CHECK (generation >= 0)
+        );
+        INSERT OR IGNORE INTO runtime_readiness_sequence (id, generation)
+        VALUES (1, 0);
+      `);
+    });
+  }
+
+  private applyMigration(id: string, migrate: () => void): void {
+    const applied = this.database
+      .prepare("SELECT 1 FROM schema_migrations WHERE id = ?")
+      .get(id);
+    if (applied) return;
+    this.database.transaction(() => {
+      migrate();
+      this.database
+        .prepare("INSERT INTO schema_migrations (id, applied_at) VALUES (?, ?)")
+        .run(id, new Date().toISOString());
+    })();
   }
 
   private ensureColumn(

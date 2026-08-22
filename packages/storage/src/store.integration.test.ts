@@ -1050,6 +1050,283 @@ describe("VoxMeshStore", () => {
       "configuration changed during testing"
     );
   });
+
+  it("persists route and connection readiness for explicit tests", () => {
+    store = new VoxMeshStore(":memory:");
+    const snapshot = store.captureRuntimeRouteVerification(
+      "system-route-composed"
+    );
+    const test = store.beginRuntimeRouteReadinessTest(snapshot);
+
+    expect(
+      store
+        .getRuntimeRoutingSummary()
+        .routes.find((route) => route.id === "system-route-composed")?.readiness
+    ).toEqual({
+      state: "testing",
+      lastTestedAt: null,
+      lastError: null
+    });
+
+    for (const role of ["chat", "tts", "stt"] as const) {
+      store.beginRuntimeConnectionReadinessTest(test, role);
+      store.markRuntimeConnectionReadinessReady(test, role);
+    }
+    store.markRuntimeRouteReadinessReady(test);
+
+    const routing = store.getRuntimeRoutingSummary();
+    const routeReadiness = routing.routes.find(
+      (route) => route.id === "system-route-composed"
+    )?.readiness;
+    expect(routeReadiness).toMatchObject({
+      state: "ready",
+      lastError: null
+    });
+    expect(typeof routeReadiness?.lastTestedAt).toBe("string");
+    expect(
+      routing.connections
+        .filter((connection) =>
+          snapshot.assignments.some(
+            (assignment) => assignment.connectionId === connection.id
+          )
+        )
+        .every(
+          (connection) =>
+            connection.readiness.state === "ready" &&
+            typeof connection.readiness.lastTestedAt === "string"
+        )
+    ).toBe(true);
+  });
+
+  it("records safe failures only for the current readiness generation", () => {
+    store = new VoxMeshStore(":memory:");
+    const snapshot = store.captureRuntimeRouteVerification(
+      "system-route-composed"
+    );
+    const first = store.beginRuntimeRouteReadinessTest(snapshot);
+    const second = store.beginRuntimeRouteReadinessTest(snapshot);
+
+    expect(() => store?.markRuntimeRouteReadinessReady(first)).toThrow(
+      "superseded"
+    );
+    store.beginRuntimeConnectionReadinessTest(second, "chat");
+    store.markRuntimeConnectionReadinessFailed(second, "chat", {
+      category: "authentication",
+      message: "Provider authentication failed."
+    });
+    store.markRuntimeRouteReadinessFailed(second, {
+      category: "authentication",
+      message: "Provider authentication failed."
+    });
+
+    const routing = store.getRuntimeRoutingSummary();
+    const routeReadiness = routing.routes.find(
+      (route) => route.id === "system-route-composed"
+    )?.readiness;
+    expect(routeReadiness).toMatchObject({
+      state: "failed",
+      lastError: {
+        category: "authentication",
+        message: "Provider authentication failed."
+      }
+    });
+    expect(typeof routeReadiness?.lastTestedAt).toBe("string");
+    const chatConnectionId = snapshot.assignments.find(
+      (assignment) => assignment.role === "chat"
+    )?.connectionId;
+    expect(
+      routing.connections.find(
+        (connection) => connection.id === chatConnectionId
+      )?.readiness
+    ).toMatchObject({
+      state: "failed",
+      lastError: { category: "authentication" }
+    });
+  });
+
+  it("invalidates readiness after related runtime configuration changes", () => {
+    store = new VoxMeshStore(":memory:");
+    let routing = store.createRuntimeConnection({
+      providerId: "mock",
+      displayName: "Readiness Connection",
+      endpoint: "",
+      enabled: true
+    });
+    const connection = routing.connections.find(
+      (entry) => entry.displayName === "Readiness Connection"
+    );
+    routing = store.createRuntimeModel({
+      connectionId: connection?.id ?? "",
+      displayName: "Readiness Model",
+      modelName: "readiness-model",
+      apiVersion: "",
+      providerOptions: {},
+      declaredCapabilities: [
+        "audio-input",
+        "audio-output",
+        "text-input",
+        "text-output",
+        "transcription",
+        "speech-synthesis",
+        "tool-calling",
+        "non-streaming"
+      ],
+      enabled: true
+    });
+    const model = routing.models.find(
+      (entry) => entry.displayName === "Readiness Model"
+    );
+    routing = store.createRuntimeRoute({
+      displayName: "Readiness Route",
+      mode: "composed",
+      sttModelDeploymentId: model?.id ?? null,
+      chatModelDeploymentId: model?.id ?? null,
+      ttsModelDeploymentId: model?.id ?? null,
+      nativeModelDeploymentId: null,
+      fallbackRouteId: null,
+      sttStreamingEnabled: false,
+      ttsStreamingEnabled: false,
+      enabled: true
+    });
+    const route = routing.routes.find(
+      (entry) => entry.displayName === "Readiness Route"
+    );
+    const test = store.beginRuntimeRouteReadinessTest(
+      store.captureRuntimeRouteVerification(route?.id ?? "")
+    );
+    for (const role of ["chat", "tts", "stt"] as const) {
+      store.beginRuntimeConnectionReadinessTest(test, role);
+      store.markRuntimeConnectionReadinessReady(test, role);
+    }
+    store.markRuntimeRouteReadinessReady(test);
+
+    store.updateRuntimeModel(model?.id ?? "", {
+      connectionId: connection?.id ?? "",
+      displayName: "Readiness Model",
+      modelName: "changed-readiness-model",
+      apiVersion: "",
+      providerOptions: {},
+      declaredCapabilities: model?.declaredCapabilities ?? [],
+      enabled: true
+    });
+
+    const invalidated = store.getRuntimeRoutingSummary();
+    expect(
+      invalidated.connections.find((entry) => entry.id === connection?.id)
+        ?.readiness
+    ).toEqual({
+      state: "unknown",
+      lastTestedAt: null,
+      lastError: null
+    });
+    expect(
+      invalidated.routes.find((entry) => entry.id === route?.id)?.readiness
+    ).toEqual({
+      state: "unknown",
+      lastTestedAt: null,
+      lastError: null
+    });
+    expect(() => store?.markRuntimeRouteReadinessReady(test)).toThrow(
+      "configuration changed during testing"
+    );
+  });
+
+  it("resets interrupted readiness tests to unknown after restart", () => {
+    const directory = mkdtempSync(join(tmpdir(), "voxmesh-readiness-"));
+    const databasePath = join(directory, "voxmesh.sqlite");
+    try {
+      store = new VoxMeshStore(databasePath);
+      const snapshot = store.captureRuntimeRouteVerification(
+        "system-route-composed"
+      );
+      const test = store.beginRuntimeRouteReadinessTest(snapshot);
+      store.beginRuntimeConnectionReadinessTest(test, "chat");
+      store.close();
+      store = new VoxMeshStore(databasePath);
+
+      const routing = store.getRuntimeRoutingSummary();
+      expect(
+        routing.routes.find((route) => route.id === "system-route-composed")
+          ?.readiness
+      ).toEqual({
+        state: "unknown",
+        lastTestedAt: null,
+        lastError: null
+      });
+      const chatConnectionId = snapshot.assignments.find(
+        (assignment) => assignment.role === "chat"
+      )?.connectionId;
+      expect(
+        routing.connections.find(
+          (connection) => connection.id === chatConnectionId
+        )?.readiness
+      ).toEqual({
+        state: "unknown",
+        lastTestedAt: null,
+        lastError: null
+      });
+    } finally {
+      store?.close();
+      store = undefined;
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("migrates existing provider records to unknown readiness", () => {
+    const directory = mkdtempSync(join(tmpdir(), "voxmesh-readiness-migrate-"));
+    const databasePath = join(directory, "voxmesh.sqlite");
+    try {
+      const database = new Database(databasePath);
+      database.exec(`
+        CREATE TABLE provider_connections (
+          id TEXT PRIMARY KEY,
+          provider_id TEXT NOT NULL,
+          display_name TEXT NOT NULL,
+          endpoint TEXT NOT NULL,
+          api_key TEXT,
+          enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        INSERT INTO provider_connections (
+          id, provider_id, display_name, endpoint, api_key, enabled,
+          created_at, updated_at
+        ) VALUES (
+          'legacy-connection', 'mock', 'Legacy Connection', '', NULL, 1,
+          '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z'
+        );
+      `);
+      database.close();
+
+      store = new VoxMeshStore(databasePath);
+      expect(
+        store
+          .getRuntimeRoutingSummary()
+          .connections.find(
+            (connection) => connection.id === "legacy-connection"
+          )?.readiness
+      ).toEqual({
+        state: "unknown",
+        lastTestedAt: null,
+        lastError: null
+      });
+      store.close();
+      store = undefined;
+
+      const migrated = new Database(databasePath);
+      const migration = migrated
+        .prepare(
+          "SELECT id FROM schema_migrations WHERE id = '2026-08-22-provider-readiness-v1'"
+        )
+        .get() as { id: string } | undefined;
+      migrated.close();
+      expect(migration?.id).toBe("2026-08-22-provider-readiness-v1");
+    } finally {
+      store?.close();
+      store = undefined;
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
 });
 
 function routeInput(

@@ -9,6 +9,8 @@ import type {
   ModelDeploymentSummary,
   ProviderConnectionInput,
   ProviderConnectionSummary,
+  ProviderReadiness,
+  ProviderReadinessErrorCategory,
   RuntimeRouteInput,
   RuntimeRouteSummary,
   RuntimeRoutingSummary,
@@ -58,6 +60,11 @@ interface ProviderConnectionRow {
   endpoint: string;
   api_key: string | null;
   enabled: number;
+  readiness_state: string;
+  readiness_last_tested_at: string | null;
+  readiness_error_category: string | null;
+  readiness_error_message: string | null;
+  readiness_generation: number;
 }
 
 interface ModelDeploymentRow {
@@ -85,6 +92,11 @@ interface RuntimeRouteRow {
   stt_streaming_enabled: number;
   tts_streaming_enabled: number;
   enabled: number;
+  readiness_state: string;
+  readiness_last_tested_at: string | null;
+  readiness_error_category: string | null;
+  readiness_error_message: string | null;
+  readiness_generation: number;
 }
 
 interface ActiveRuntimeRouteRow {
@@ -99,8 +111,20 @@ export interface RuntimeRouteVerificationSnapshot {
   assignments: Array<{
     role: RuntimeRouteRole;
     modelId: string;
+    connectionId: string;
     verificationToken: string;
   }>;
+}
+
+export interface RuntimeRouteReadinessTest {
+  routeId: string;
+  generation: number;
+  snapshot: RuntimeRouteVerificationSnapshot;
+}
+
+export interface RuntimeReadinessError {
+  category: ProviderReadinessErrorCategory;
+  message: string;
 }
 
 /** Owns system-managed provider, model, and route persistence. */
@@ -361,7 +385,12 @@ export class RuntimeRoutingStore {
   public getSummary(): RuntimeRoutingSummary {
     const connections = this.database
       .prepare(
-        "SELECT id, provider_id, display_name, endpoint, api_key, enabled FROM provider_connections ORDER BY display_name, id"
+        `SELECT id, provider_id, display_name, endpoint, api_key, enabled,
+                readiness_state, readiness_last_tested_at,
+                readiness_error_category, readiness_error_message,
+                readiness_generation
+         FROM provider_connections
+         ORDER BY display_name, id`
       )
       .all() as ProviderConnectionRow[];
     const models = this.database
@@ -378,7 +407,10 @@ export class RuntimeRoutingStore {
         `SELECT id, display_name, mode, stt_model_deployment_id,
                 chat_model_deployment_id, tts_model_deployment_id,
                 native_model_deployment_id, fallback_route_id,
-                stt_streaming_enabled, tts_streaming_enabled, enabled
+                stt_streaming_enabled, tts_streaming_enabled, enabled,
+                readiness_state, readiness_last_tested_at,
+                readiness_error_category, readiness_error_message,
+                readiness_generation
          FROM runtime_routes
          ORDER BY display_name, id`
       )
@@ -429,15 +461,20 @@ export class RuntimeRoutingStore {
         "Connection is assigned to the active runtime route; activate another route before changing it"
       );
     }
-    this.upsertConnection({
-      id,
-      providerId: input.providerId,
-      displayName: input.displayName,
-      endpoint: input.endpoint,
-      apiKey,
-      enabled: input.enabled
-    });
-    if (changed) this.resetConnectionVerification(id);
+    this.database.transaction(() => {
+      this.upsertConnection({
+        id,
+        providerId: input.providerId,
+        displayName: input.displayName,
+        endpoint: input.endpoint,
+        apiKey,
+        enabled: input.enabled
+      });
+      if (changed) {
+        this.resetConnectionVerification(id);
+        this.invalidateConnectionReadiness(id);
+      }
+    })();
     return this.getSummary();
   }
 
@@ -490,19 +527,27 @@ export class RuntimeRoutingStore {
         "Model deployment is assigned to the active runtime route; activate another route before changing it"
       );
     }
-    this.upsertModel({
-      id,
-      connectionId: input.connectionId,
-      displayName: input.displayName,
-      modelName: input.modelName,
-      apiVersion: input.apiVersion,
-      declaredCapabilities: input.declaredCapabilities,
-      providerOptions: input.providerOptions,
-      verifiedByDefault: isMockProvider(connection.provider_id),
-      enabled: input.enabled,
-      fingerprintValues: modelFingerprintValues(connection, input),
-      preserveVerification: !runtimeChanged
-    });
+    this.database.transaction(() => {
+      this.upsertModel({
+        id,
+        connectionId: input.connectionId,
+        displayName: input.displayName,
+        modelName: input.modelName,
+        apiVersion: input.apiVersion,
+        declaredCapabilities: input.declaredCapabilities,
+        providerOptions: input.providerOptions,
+        verifiedByDefault: isMockProvider(connection.provider_id),
+        enabled: input.enabled,
+        fingerprintValues: modelFingerprintValues(connection, input),
+        preserveVerification: !runtimeChanged
+      });
+      if (runtimeChanged) {
+        this.invalidateModelReadiness(id, [
+          current.connection_id,
+          input.connectionId
+        ]);
+      }
+    })();
     return this.getSummary();
   }
 
@@ -550,7 +595,15 @@ export class RuntimeRoutingStore {
         "Active runtime route cannot be changed; activate another route first"
       );
     }
-    this.upsertRoute({ id, ...normalized });
+    this.database.transaction(() => {
+      this.upsertRoute({ id, ...normalized });
+      if (
+        routeVerificationSignature(current) !==
+        routeVerificationSignatureFromInput(id, normalized)
+      ) {
+        this.invalidateRouteReadiness(id);
+      }
+    })();
     return this.getSummary();
   }
 
@@ -760,6 +813,7 @@ export class RuntimeRoutingStore {
     const assignments = routeAssignments(route).map(({ role, modelId }) => ({
       role,
       modelId,
+      connectionId: this.getModel(modelId).connection_id,
       verificationToken: this.modelVerificationToken(modelId)
     }));
     return {
@@ -769,21 +823,203 @@ export class RuntimeRoutingStore {
     };
   }
 
-  public markRouteVerified(snapshot: RuntimeRouteVerificationSnapshot): void {
-    this.database.transaction(() => {
-      const route = this.getRoute(snapshot.routeId);
-      if (
-        routeVerificationSignature(route) !== snapshot.routeSignature ||
-        snapshot.assignments.some(
-          ({ role, modelId, verificationToken }) =>
-            routeModelId(route, role) !== modelId ||
-            this.modelVerificationToken(modelId) !== verificationToken
+  /**
+   * Starts an explicit route test. The generation prevents an older test from
+   * overwriting status after a newer test or configuration change.
+   */
+  public beginRouteReadinessTest(
+    snapshot: RuntimeRouteVerificationSnapshot
+  ): RuntimeRouteReadinessTest {
+    return this.database.transaction(() => {
+      this.assertVerificationCurrent(snapshot);
+      const generation = this.nextReadinessGeneration();
+      this.database
+        .prepare(
+          `UPDATE runtime_routes
+           SET readiness_state = 'testing',
+               readiness_error_category = NULL,
+               readiness_error_message = NULL,
+               readiness_generation = ?,
+               updated_at = ?
+           WHERE id = ?`
         )
-      ) {
+        .run(generation, new Date().toISOString(), snapshot.routeId);
+      return { routeId: snapshot.routeId, generation, snapshot };
+    })();
+  }
+
+  public beginConnectionReadinessTest(
+    test: RuntimeRouteReadinessTest,
+    role: RuntimeRouteRole
+  ): void {
+    const connectionId = connectionIdForRole(test.snapshot, role);
+    const currentRoute = this.database
+      .prepare("SELECT readiness_generation FROM runtime_routes WHERE id = ?")
+      .get(test.routeId) as { readiness_generation: number } | undefined;
+    if (currentRoute?.readiness_generation !== test.generation) {
+      throw badRequest(
+        "Runtime route test was superseded; test the route again"
+      );
+    }
+    const result = this.database
+      .prepare(
+        `UPDATE provider_connections
+         SET readiness_state = 'testing',
+             readiness_error_category = NULL,
+             readiness_error_message = NULL,
+             readiness_generation = ?,
+             updated_at = ?
+         WHERE id = ? AND readiness_generation <= ?`
+      )
+      .run(
+        test.generation,
+        new Date().toISOString(),
+        connectionId,
+        test.generation
+      );
+    if (result.changes !== 1) {
+      throw badRequest(
+        "Provider connection test was superseded; test the route again"
+      );
+    }
+  }
+
+  public markConnectionReadinessReady(
+    test: RuntimeRouteReadinessTest,
+    role: RuntimeRouteRole
+  ): void {
+    const connectionId = connectionIdForRole(test.snapshot, role);
+    const now = new Date().toISOString();
+    const result = this.database
+      .prepare(
+        `UPDATE provider_connections
+         SET readiness_state = 'ready',
+             readiness_last_tested_at = ?,
+             readiness_error_category = NULL,
+             readiness_error_message = NULL,
+             updated_at = ?
+         WHERE id = ? AND readiness_generation = ?`
+      )
+      .run(now, now, connectionId, test.generation);
+    if (result.changes !== 1) {
+      throw badRequest(
+        "Provider connection test was superseded; test the route again"
+      );
+    }
+  }
+
+  public markConnectionReadinessFailed(
+    test: RuntimeRouteReadinessTest,
+    role: RuntimeRouteRole,
+    error: RuntimeReadinessError
+  ): void {
+    const connectionId = connectionIdForRole(test.snapshot, role);
+    const now = new Date().toISOString();
+    this.database
+      .prepare(
+        `UPDATE provider_connections
+         SET readiness_state = 'failed',
+             readiness_last_tested_at = ?,
+             readiness_error_category = ?,
+             readiness_error_message = ?,
+             updated_at = ?
+         WHERE id = ? AND readiness_generation = ?`
+      )
+      .run(
+        now,
+        error.category,
+        boundedReadinessMessage(error.message),
+        now,
+        connectionId,
+        test.generation
+      );
+  }
+
+  public markRouteReadinessReady(test: RuntimeRouteReadinessTest): void {
+    this.database.transaction(() => {
+      this.assertVerificationCurrent(test.snapshot);
+      const now = new Date().toISOString();
+      const result = this.database
+        .prepare(
+          `UPDATE runtime_routes
+           SET readiness_state = 'ready',
+               readiness_last_tested_at = ?,
+               readiness_error_category = NULL,
+               readiness_error_message = NULL,
+               updated_at = ?
+           WHERE id = ? AND readiness_generation = ?`
+        )
+        .run(now, now, test.routeId, test.generation);
+      if (result.changes !== 1) {
         throw badRequest(
-          "Runtime route configuration changed during testing; test the route again"
+          "Runtime route test was superseded; test the route again"
         );
       }
+      this.markRouteVerified(test.snapshot);
+    })();
+  }
+
+  public markRouteReadinessFailed(
+    test: RuntimeRouteReadinessTest,
+    error: RuntimeReadinessError
+  ): void {
+    const now = new Date().toISOString();
+    this.database
+      .prepare(
+        `UPDATE runtime_routes
+         SET readiness_state = 'failed',
+             readiness_last_tested_at = ?,
+             readiness_error_category = ?,
+             readiness_error_message = ?,
+             updated_at = ?
+         WHERE id = ? AND readiness_generation = ?`
+      )
+      .run(
+        now,
+        error.category,
+        boundedReadinessMessage(error.message),
+        now,
+        test.routeId,
+        test.generation
+      );
+  }
+
+  public reconcileInterruptedReadinessTests(): void {
+    const interrupted =
+      (
+        this.database
+          .prepare(
+            `SELECT
+               (SELECT COUNT(*) FROM provider_connections WHERE readiness_state = 'testing') +
+               (SELECT COUNT(*) FROM runtime_routes WHERE readiness_state = 'testing')
+               AS count`
+          )
+          .get() as { count: number }
+      ).count > 0;
+    if (!interrupted) return;
+    this.database.transaction(() => {
+      const generation = this.nextReadinessGeneration();
+      const now = new Date().toISOString();
+      for (const table of ["provider_connections", "runtime_routes"]) {
+        this.database
+          .prepare(
+            `UPDATE ${table}
+             SET readiness_state = 'unknown',
+                 readiness_last_tested_at = NULL,
+                 readiness_error_category = NULL,
+                 readiness_error_message = NULL,
+                 readiness_generation = ?,
+                 updated_at = ?
+             WHERE readiness_state = 'testing'`
+          )
+          .run(generation, now);
+      }
+    })();
+  }
+
+  public markRouteVerified(snapshot: RuntimeRouteVerificationSnapshot): void {
+    this.database.transaction(() => {
+      this.assertVerificationCurrent(snapshot);
       const capabilitiesByModel = new Map<string, Set<ModelCapability>>();
       for (const assignment of snapshot.assignments) {
         const capabilities =
@@ -798,6 +1034,25 @@ export class RuntimeRoutingStore {
         this.markCapabilitiesVerified(modelId, [...capabilities]);
       }
     })();
+  }
+
+  private assertVerificationCurrent(
+    snapshot: RuntimeRouteVerificationSnapshot
+  ): void {
+    const route = this.getRoute(snapshot.routeId);
+    if (
+      routeVerificationSignature(route) !== snapshot.routeSignature ||
+      snapshot.assignments.some(
+        ({ role, modelId, connectionId, verificationToken }) =>
+          routeModelId(route, role) !== modelId ||
+          this.getModel(modelId).connection_id !== connectionId ||
+          this.modelVerificationToken(modelId) !== verificationToken
+      )
+    ) {
+      throw badRequest(
+        "Runtime route configuration changed during testing; test the route again"
+      );
+    }
   }
 
   private activeRouteUsesConnection(connectionId: string): boolean {
@@ -840,7 +1095,11 @@ export class RuntimeRoutingStore {
   private getConnection(id: string): ProviderConnectionRow {
     const row = this.database
       .prepare(
-        "SELECT id, provider_id, display_name, endpoint, api_key, enabled FROM provider_connections WHERE id = ?"
+        `SELECT id, provider_id, display_name, endpoint, api_key, enabled,
+                readiness_state, readiness_last_tested_at,
+                readiness_error_category, readiness_error_message,
+                readiness_generation
+         FROM provider_connections WHERE id = ?`
       )
       .get(id) as ProviderConnectionRow | undefined;
     if (!row) throw notFound("Connection was not found");
@@ -866,7 +1125,10 @@ export class RuntimeRoutingStore {
         `SELECT id, display_name, mode, stt_model_deployment_id,
                 chat_model_deployment_id, tts_model_deployment_id,
                 native_model_deployment_id, fallback_route_id,
-                stt_streaming_enabled, tts_streaming_enabled, enabled
+                stt_streaming_enabled, tts_streaming_enabled, enabled,
+                readiness_state, readiness_last_tested_at,
+                readiness_error_category, readiness_error_message,
+                readiness_generation
          FROM runtime_routes WHERE id = ?`
       )
       .get(id) as RuntimeRouteRow | undefined;
@@ -1017,6 +1279,126 @@ export class RuntimeRoutingStore {
     }
   }
 
+  private invalidateConnectionReadiness(connectionId: string): void {
+    const generation = this.nextReadinessGeneration();
+    const now = new Date().toISOString();
+    this.resetReadiness(
+      "provider_connections",
+      "id = ?",
+      [connectionId],
+      generation,
+      now
+    );
+    this.database
+      .prepare(
+        `UPDATE runtime_routes
+         SET readiness_state = 'unknown',
+             readiness_last_tested_at = NULL,
+             readiness_error_category = NULL,
+             readiness_error_message = NULL,
+             readiness_generation = ?,
+             updated_at = ?
+         WHERE stt_model_deployment_id IN (
+                 SELECT id FROM model_deployments WHERE connection_id = ?
+               )
+            OR chat_model_deployment_id IN (
+                 SELECT id FROM model_deployments WHERE connection_id = ?
+               )
+            OR tts_model_deployment_id IN (
+                 SELECT id FROM model_deployments WHERE connection_id = ?
+               )
+            OR native_model_deployment_id IN (
+                 SELECT id FROM model_deployments WHERE connection_id = ?
+               )`
+      )
+      .run(
+        generation,
+        now,
+        connectionId,
+        connectionId,
+        connectionId,
+        connectionId
+      );
+  }
+
+  private invalidateModelReadiness(
+    modelId: string,
+    connectionIds: readonly string[]
+  ): void {
+    const generation = this.nextReadinessGeneration();
+    const now = new Date().toISOString();
+    for (const connectionId of new Set(connectionIds)) {
+      this.resetReadiness(
+        "provider_connections",
+        "id = ?",
+        [connectionId],
+        generation,
+        now
+      );
+    }
+    this.database
+      .prepare(
+        `UPDATE runtime_routes
+         SET readiness_state = 'unknown',
+             readiness_last_tested_at = NULL,
+             readiness_error_category = NULL,
+             readiness_error_message = NULL,
+             readiness_generation = ?,
+             updated_at = ?
+         WHERE stt_model_deployment_id = ?
+            OR chat_model_deployment_id = ?
+            OR tts_model_deployment_id = ?
+            OR native_model_deployment_id = ?`
+      )
+      .run(generation, now, modelId, modelId, modelId, modelId);
+  }
+
+  private invalidateRouteReadiness(routeId: string): void {
+    this.resetReadiness(
+      "runtime_routes",
+      "id = ?",
+      [routeId],
+      this.nextReadinessGeneration(),
+      new Date().toISOString()
+    );
+  }
+
+  private resetReadiness(
+    table: "provider_connections" | "runtime_routes",
+    predicate: string,
+    parameters: readonly unknown[],
+    generation: number,
+    now: string
+  ): void {
+    this.database
+      .prepare(
+        `UPDATE ${table}
+         SET readiness_state = 'unknown',
+             readiness_last_tested_at = NULL,
+             readiness_error_category = NULL,
+             readiness_error_message = NULL,
+             readiness_generation = ?,
+             updated_at = ?
+         WHERE ${predicate}`
+      )
+      .run(generation, now, ...parameters);
+  }
+
+  private nextReadinessGeneration(): number {
+    this.database
+      .prepare(
+        "UPDATE runtime_readiness_sequence SET generation = generation + 1 WHERE id = 1"
+      )
+      .run();
+    const row = this.database
+      .prepare("SELECT generation FROM runtime_readiness_sequence WHERE id = 1")
+      .get() as { generation: number } | undefined;
+    if (!row) {
+      throw new Error("Runtime readiness sequence is not initialized");
+    }
+    return row.generation;
+  }
+
   private resetConnectionVerification(connectionId: string): void {
     this.database
       .prepare(
@@ -1163,7 +1545,7 @@ export class RuntimeRoutingStore {
       );
   }
 
-  private upsertRoute(input: RuntimeRouteSummary): void {
+  private upsertRoute(input: RuntimeRouteInput & { id: string }): void {
     const now = new Date().toISOString();
     this.database
       .prepare(
@@ -1261,7 +1643,8 @@ function mapProviderConnection(
     displayName: row.display_name,
     endpoint: row.endpoint,
     apiKeyConfigured: row.api_key !== null,
-    enabled: row.enabled === 1
+    enabled: row.enabled === 1,
+    readiness: mapReadiness(row)
   };
 }
 
@@ -1291,8 +1674,91 @@ function mapRuntimeRoute(row: RuntimeRouteRow): RuntimeRouteSummary {
     fallbackRouteId: row.fallback_route_id,
     sttStreamingEnabled: row.stt_streaming_enabled === 1,
     ttsStreamingEnabled: row.tts_streaming_enabled === 1,
-    enabled: row.enabled === 1
+    enabled: row.enabled === 1,
+    readiness: mapReadiness(row)
   };
+}
+
+function mapReadiness(row: {
+  readiness_state: string;
+  readiness_last_tested_at: string | null;
+  readiness_error_category: string | null;
+  readiness_error_message: string | null;
+}): ProviderReadiness {
+  if (!isReadinessState(row.readiness_state)) {
+    throw new Error(`Invalid provider readiness state: ${row.readiness_state}`);
+  }
+  if (
+    row.readiness_error_category !== null &&
+    !isReadinessErrorCategory(row.readiness_error_category)
+  ) {
+    throw new Error(
+      `Invalid provider readiness error category: ${row.readiness_error_category}`
+    );
+  }
+  if (
+    (row.readiness_error_category === null) !==
+    (row.readiness_error_message === null)
+  ) {
+    throw new Error("Provider readiness error fields are inconsistent");
+  }
+  if (
+    row.readiness_state !== "failed" &&
+    row.readiness_error_category !== null
+  ) {
+    throw new Error(
+      "Provider readiness errors require the failed readiness state"
+    );
+  }
+  if (
+    row.readiness_state === "failed" &&
+    row.readiness_error_category === null
+  ) {
+    throw new Error("Failed provider readiness requires a safe error");
+  }
+  if (
+    (row.readiness_state === "ready" || row.readiness_state === "failed") &&
+    row.readiness_last_tested_at === null
+  ) {
+    throw new Error(
+      "Completed provider readiness requires a last-tested timestamp"
+    );
+  }
+  const lastError =
+    row.readiness_error_category && row.readiness_error_message
+      ? {
+          category: row.readiness_error_category,
+          message: row.readiness_error_message
+        }
+      : null;
+  return {
+    state: row.readiness_state,
+    lastTestedAt: row.readiness_last_tested_at,
+    lastError
+  };
+}
+
+function isReadinessState(value: string): value is ProviderReadiness["state"] {
+  return (
+    value === "unknown" ||
+    value === "testing" ||
+    value === "ready" ||
+    value === "failed"
+  );
+}
+
+function isReadinessErrorCategory(
+  value: string
+): value is ProviderReadinessErrorCategory {
+  return (
+    value === "authentication" ||
+    value === "quota" ||
+    value === "timeout" ||
+    value === "invalid-response" ||
+    value === "configuration" ||
+    value === "cancelled" ||
+    value === "provider"
+  );
 }
 
 function routeInputFromRow(row: RuntimeRouteRow): RuntimeRouteInput {
@@ -1342,6 +1808,26 @@ function routeAssignments(
     throw new Error(`Runtime route ${route.id} has no Native model assignment`);
   }
   return [{ role: "native", modelId: route.native_model_deployment_id }];
+}
+
+function connectionIdForRole(
+  snapshot: RuntimeRouteVerificationSnapshot,
+  role: RuntimeRouteRole
+): string {
+  const assignment = snapshot.assignments.find(
+    (candidate) => candidate.role === role
+  );
+  if (!assignment) {
+    throw new Error(`Runtime route readiness test has no ${role} assignment`);
+  }
+  return assignment.connectionId;
+}
+
+function boundedReadinessMessage(message: string): string {
+  const normalized = message.trim() || "Provider connection test failed";
+  return normalized.length <= 500
+    ? normalized
+    : `${normalized.slice(0, 497)}...`;
 }
 
 function routeModelId(

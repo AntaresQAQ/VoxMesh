@@ -311,13 +311,43 @@ export const ModelCapabilitySchema = Type.Union([
   Type.Literal("non-streaming")
 ]);
 
+export const ProviderReadinessStateSchema = Type.Union([
+  Type.Literal("unknown"),
+  Type.Literal("testing"),
+  Type.Literal("ready"),
+  Type.Literal("failed")
+]);
+
+export const ProviderReadinessErrorCategorySchema = Type.Union([
+  Type.Literal("authentication"),
+  Type.Literal("quota"),
+  Type.Literal("timeout"),
+  Type.Literal("invalid-response"),
+  Type.Literal("configuration"),
+  Type.Literal("cancelled"),
+  Type.Literal("provider")
+]);
+
+export const ProviderReadinessSchema = Type.Object({
+  state: ProviderReadinessStateSchema,
+  lastTestedAt: Type.Union([Type.String({ format: "date-time" }), Type.Null()]),
+  lastError: Type.Union([
+    Type.Object({
+      category: ProviderReadinessErrorCategorySchema,
+      message: Type.String({ minLength: 1, maxLength: 500 })
+    }),
+    Type.Null()
+  ])
+});
+
 export const ProviderConnectionSummarySchema = Type.Object({
   id: Type.String(),
   providerId: Type.String(),
   displayName: Type.String(),
   endpoint: Type.String(),
   apiKeyConfigured: Type.Boolean(),
-  enabled: Type.Boolean()
+  enabled: Type.Boolean(),
+  readiness: ProviderReadinessSchema
 });
 
 export const ModelDeploymentSummarySchema = Type.Object({
@@ -346,7 +376,8 @@ export const RuntimeRouteSummarySchema = Type.Object({
   fallbackRouteId: Type.Union([Type.String(), Type.Null()]),
   sttStreamingEnabled: Type.Boolean(),
   ttsStreamingEnabled: Type.Boolean(),
-  enabled: Type.Boolean()
+  enabled: Type.Boolean(),
+  readiness: ProviderReadinessSchema
 });
 
 export const RuntimeRoutingSummarySchema = Type.Object({
@@ -542,6 +573,13 @@ export type LlmMode = Static<typeof LlmModeSchema>;
 export type SpeechProviderMode = Static<typeof SpeechProviderModeSchema>;
 export type VoicePipelineMode = Static<typeof VoicePipelineModeSchema>;
 export type ModelCapability = Static<typeof ModelCapabilitySchema>;
+export type ProviderReadinessState = Static<
+  typeof ProviderReadinessStateSchema
+>;
+export type ProviderReadinessErrorCategory = Static<
+  typeof ProviderReadinessErrorCategorySchema
+>;
+export type ProviderReadiness = Static<typeof ProviderReadinessSchema>;
 export type ProviderConnectionSummary = Static<
   typeof ProviderConnectionSummarySchema
 >;

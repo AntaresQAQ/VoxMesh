@@ -141,6 +141,14 @@ describe("server API", () => {
       headers: { cookie }
     });
     expect(routeTest.statusCode).toBe(200);
+    const testedRoute = routeTest
+      .json<RuntimeRoutingSummary>()
+      .routes.find((route) => route.id === routeId);
+    expect(testedRoute?.readiness).toMatchObject({
+      state: "ready",
+      lastError: null
+    });
+    expect(typeof testedRoute?.readiness.lastTestedAt).toBe("string");
     const activation = await app.inject({
       method: "PUT",
       url: "/api/runtime-routing/active",
@@ -163,11 +171,17 @@ describe("server API", () => {
         activeRouteId: routeId
       }
     });
-    expect(
-      dashboardBody.routing.routes.find((route) => route.id === routeId)
-    ).toMatchObject({
-      displayName: "Custom Streaming Composed"
+    const dashboardRoute = dashboardBody.routing.routes.find(
+      (route) => route.id === routeId
+    );
+    expect(dashboardRoute).toMatchObject({
+      displayName: "Custom Streaming Composed",
+      readiness: {
+        state: "ready",
+        lastError: null
+      }
     });
+    expect(typeof dashboardRoute?.readiness.lastTestedAt).toBe("string");
     expect(dashboardBody).not.toHaveProperty("providers");
 
     const chat = await app.inject({
@@ -201,6 +215,80 @@ describe("server API", () => {
     });
     expect(logout.statusCode).toBe(204);
 
+    await app.close();
+  });
+
+  it("persists sanitized readiness after a provider test failure", async () => {
+    store = new VoxMeshStore(":memory:");
+    const failingProvider: LlmProvider = {
+      complete: async () => {
+        throw new Error(
+          "HTTP 401 from https://secret-resource.example.test api-key=secret"
+        );
+      }
+    };
+    const app = await buildServer({
+      config,
+      store,
+      createLlm: () => failingProvider
+    });
+    await app.inject({
+      method: "POST",
+      url: "/api/setup",
+      payload: { password: "a secure administrator password" }
+    });
+    const login = await app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      payload: { password: "a secure administrator password" }
+    });
+    const setCookie = login.headers["set-cookie"];
+    const cookie = (Array.isArray(setCookie) ? setCookie[0] : setCookie)?.split(
+      ";"
+    )[0];
+
+    const routeTest = await app.inject({
+      method: "POST",
+      url: "/api/runtime-routing/routes/system-route-composed/test",
+      headers: { cookie }
+    });
+    expect(routeTest.statusCode).toBe(500);
+    expect(routeTest.body).not.toContain("secret-resource");
+    expect(routeTest.body).not.toContain("api-key");
+
+    const routingResponse = await app.inject({
+      method: "GET",
+      url: "/api/runtime-routing",
+      headers: { cookie }
+    });
+    const routing = routingResponse.json<RuntimeRoutingSummary>();
+    const route = routing.routes.find(
+      (entry) => entry.id === "system-route-composed"
+    );
+    expect(route?.readiness).toMatchObject({
+      state: "failed",
+      lastError: {
+        category: "authentication",
+        message: "Provider authentication failed."
+      }
+    });
+    expect(typeof route?.readiness.lastTestedAt).toBe("string");
+    const chatConnectionId = routing.models.find(
+      (model) => model.id === route?.chatModelDeploymentId
+    )?.connectionId;
+    expect(
+      routing.connections.find(
+        (connection) => connection.id === chatConnectionId
+      )?.readiness
+    ).toMatchObject({
+      state: "failed",
+      lastError: {
+        category: "authentication",
+        message: "Provider authentication failed."
+      }
+    });
+    expect(routingResponse.body).not.toContain("secret-resource");
+    expect(routingResponse.body).not.toContain("api-key");
     await app.close();
   });
 

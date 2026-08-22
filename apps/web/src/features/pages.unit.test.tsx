@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ModelCapability } from "@voxmesh/shared";
 
 import { apiClient } from "../api.js";
+import { unknownReadiness } from "../test/readiness.js";
 import { renderWithProviders } from "../test/render.js";
 import { ChatPage } from "./chat/ChatPage.js";
 import { ConversationsPage } from "./conversations/ConversationsPage.js";
@@ -98,7 +99,8 @@ describe("feature pages", () => {
             displayName: "Alibaba Chat",
             endpoint: "https://example.com/v1",
             apiKeyConfigured: true,
-            enabled: true
+            enabled: true,
+            readiness: unknownReadiness
           },
           {
             id: "connection-speech",
@@ -106,7 +108,8 @@ describe("feature pages", () => {
             displayName: "Alibaba Speech",
             endpoint: "wss://example.com",
             apiKeyConfigured: true,
-            enabled: true
+            enabled: true,
+            readiness: unknownReadiness
           }
         ],
         models: [
@@ -138,7 +141,8 @@ describe("feature pages", () => {
             fallbackRouteId: null,
             sttStreamingEnabled: false,
             ttsStreamingEnabled: false,
-            enabled: true
+            enabled: true,
+            readiness: unknownReadiness
           }
         ],
         activeRouteId: "route-composed"

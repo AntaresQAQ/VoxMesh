@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RuntimeRoutingSummary } from "@voxmesh/shared";
 
 import { apiClient } from "../../api.js";
+import { unknownReadiness } from "../../test/readiness.js";
 import { renderWithProviders } from "../../test/render.js";
 import { RuntimeRoutingSummaryCard } from "./RuntimeRoutingSummaryCard.js";
 
@@ -32,12 +33,16 @@ describe("RuntimeRoutingSummaryCard", () => {
     await user.click(screen.getByText("Connections (2)"));
     expect(screen.getAllByText("Chat · OpenAI-compatible")[0]).toBeVisible();
     expect(screen.getByText("API key configured")).toBeVisible();
+    expect(screen.getByText("Readiness: Failed")).toBeVisible();
+    expect(screen.getByText("Last error: Authentication failed")).toBeVisible();
     expect(screen.queryByText("Not configured")).not.toBeInTheDocument();
     await user.click(screen.getByText("Models (1)"));
     expect(screen.getByText("Verified: Text input, Text output")).toBeVisible();
     expect(
       screen.getByText("Declared: Text input, Text output, Tool calling")
     ).toBeVisible();
+    await user.click(screen.getByText("Routes (1)"));
+    expect(screen.getByText("Readiness: Ready")).toBeVisible();
   });
 
   it("announces routing load failures", async () => {
@@ -83,7 +88,15 @@ function routingSummary(): RuntimeRoutingSummary {
         displayName: "Chat · OpenAI-compatible",
         endpoint: "https://provider.example.com/v1",
         apiKeyConfigured: true,
-        enabled: true
+        enabled: true,
+        readiness: {
+          state: "failed",
+          lastTestedAt: "2026-08-22T07:00:00.000Z",
+          lastError: {
+            category: "authentication",
+            message: "Provider authentication failed."
+          }
+        }
       },
       {
         id: "connection-native",
@@ -91,7 +104,8 @@ function routingSummary(): RuntimeRoutingSummary {
         displayName: "Native · Mock Native Multimodal",
         endpoint: "",
         apiKeyConfigured: false,
-        enabled: true
+        enabled: true,
+        readiness: unknownReadiness
       }
     ],
     models: [
@@ -119,7 +133,12 @@ function routingSummary(): RuntimeRoutingSummary {
         fallbackRouteId: null,
         sttStreamingEnabled: false,
         ttsStreamingEnabled: false,
-        enabled: true
+        enabled: true,
+        readiness: {
+          state: "ready",
+          lastTestedAt: "2026-08-22T07:01:00.000Z",
+          lastError: null
+        }
       }
     ],
     activeRouteId: "route-composed"

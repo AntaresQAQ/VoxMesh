@@ -813,6 +813,7 @@ test("completes setup, tool-assisted chat, inspection, and logout", async ({
   await expect(page.getByRole("alert")).toContainText(
     "Streaming routes cannot be activated"
   );
+  await expect(customRoute.getByText("Readiness: Ready")).toBeVisible();
   await expectAccessible(page, "English dark provider settings");
   const nativeRoute = routeManager
     .getByText("Default Native Voice")
@@ -822,6 +823,7 @@ test("completes setup, tool-assisted chat, inspection, and logout", async ({
     "Route test succeeded and the route is active."
   );
   await expect(nativeRoute.getByText("Active route")).toBeVisible();
+  await expect(nativeRoute.getByText("Readiness: Ready")).toBeVisible();
   await page.getByRole("link", { name: "Chat" }).click();
   await page.getByRole("button", { name: "Start recording" }).click();
   await expect(
@@ -843,6 +845,52 @@ test("completes setup, tool-assisted chat, inspection, and logout", async ({
     "Route test succeeded and the route is active."
   );
   await expect(composedRoute.getByText("Active route")).toBeVisible();
+  await expect(composedRoute.getByText("Readiness: Ready")).toBeVisible();
+
+  await page.route("**/api/runtime-routing", async (route) => {
+    if (route.request().method() !== "GET") {
+      await route.continue();
+      return;
+    }
+    const response = await route.fetch();
+    const body = (await response.json()) as {
+      routes: Array<{
+        id: string;
+        readiness: {
+          state: string;
+          lastTestedAt: string | null;
+          lastError: { category: string; message: string } | null;
+        };
+      }>;
+    };
+    for (const entry of body.routes) {
+      if (entry.id === "system-route-composed") {
+        entry.readiness = {
+          state: "failed",
+          lastTestedAt: "2026-08-22T07:00:00.000Z",
+          lastError: {
+            category: "authentication",
+            message: "Provider authentication failed."
+          }
+        };
+      }
+    }
+    await route.fulfill({ response, json: body });
+  });
+  await page.reload();
+  const failedRoutes = page.locator("details.routing-management").nth(2);
+  await failedRoutes.locator("summary").click();
+  const failedComposedRoute = failedRoutes
+    .getByText("Default Composed Voice")
+    .locator("..");
+  await expect(
+    failedComposedRoute.getByText("Readiness: Failed")
+  ).toBeVisible();
+  await expect(
+    failedComposedRoute.getByText("Last error: Authentication failed")
+  ).toBeVisible();
+  await expectAccessible(page, "English dark failed provider readiness");
+  await page.unroute("**/api/runtime-routing");
 
   await page.getByRole("link", { name: "Security" }).click();
   await expect(page).toHaveURL(/section=security/);

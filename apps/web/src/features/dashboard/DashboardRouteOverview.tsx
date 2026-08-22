@@ -1,6 +1,7 @@
 import type { ModelCapability, RuntimeRoutingSummary } from "@voxmesh/shared";
 
 import { Metric } from "../../components/layout/Metric.js";
+import { ProviderReadinessStatus } from "../../components/ProviderReadinessStatus.js";
 import { useI18n } from "../../i18n/i18n.js";
 import {
   DashboardAssignmentCard,
@@ -111,6 +112,7 @@ export function DashboardRouteOverview({
           />
         ) : null}
       </div>
+      <ProviderReadinessStatus readiness={route.readiness} />
       <h4>{t("dashboard.assignedModels")}</h4>
       <div className="grid">
         {assignments.map((assignment) => (

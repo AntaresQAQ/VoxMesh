@@ -12,6 +12,7 @@ The routing implementation:
 - seeds a complete Mock connection/model/route set for a new database
 - resolves runtime providers through system route assignments
 - records declared and verified model capabilities
+- records explicit provider and route readiness tests
 - exposes authenticated routing CRUD and activation APIs
 - supports explicit Native-to-Composed fallback
 - provides independent STT and TTS streaming switches
@@ -27,6 +28,7 @@ The routing implementation:
 - display name
 - endpoint or base URL
 - write-only API key
+- readiness state and the last completed safe diagnostic
 - creation and update timestamps
 
 The initial migration intentionally creates separate Chat, STT, and TTS
@@ -61,6 +63,9 @@ The migration creates:
 The Composed route assigns STT, Chat, and TTS model deployments. The Native
 route assigns one Native Multimodal model deployment. `active_runtime_route`
 selects the route used by voice requests.
+
+Each route also stores readiness state and its last completed safe diagnostic.
+Readiness is separate from activation and capability declarations.
 
 Native routes may reference one explicit enabled Composed fallback route.
 Fallback is disabled when the reference is `null`. VoxMesh never silently
@@ -120,6 +125,34 @@ with an actual MCP tool-call request, MCP execution, and final model response
 instead of being inferred from a text completion. Capabilities verified by
 multiple unchanged routes are merged rather than replacing earlier results.
 
+## Provider Readiness
+
+Connections and routes expose one of four readiness states:
+
+- `unknown` before an applicable explicit test or after configuration changes
+- `testing` while an explicit route test is running
+- `ready` after the applicable provider stages complete
+- `failed` after a completed test fails
+
+Readiness stores the last completed test time plus an optional safe error
+category and bounded generic message. Raw provider response bodies, endpoints,
+workspace or account identifiers, credentials, authorization headers, and
+stack traces are never stored in readiness fields or returned to the browser.
+The Web Console localizes the safe category instead of displaying raw provider
+text.
+
+Every explicit route test receives a monotonic storage generation. Route and
+connection updates apply only when that generation is still current, so an
+older or slower test cannot overwrite a newer result. Relevant connection,
+credential, model, provider-option, capability, enabled-state, or route
+assignment changes reset affected readiness to `unknown` and invalidate any
+in-flight generation. Display-name-only changes preserve readiness.
+
+If the server restarts while a test is running, persisted `testing` states
+become `unknown`; they are never treated as healthy. Readiness does not perform
+background requests, automatic retries, activation, route switching, or Mock
+fallback.
+
 ## API
 
 Authenticated clients can read:
@@ -176,6 +209,8 @@ The AI Providers section provides routing management for:
 - inline editing directly beneath the selected connection, model, or route
 - explicit fallback
 - independent STT/TTS streaming switches
+- connection and route readiness, last test time, and localized safe failure
+  category
 
 Destructive actions require an explicit second confirmation in the UI.
 

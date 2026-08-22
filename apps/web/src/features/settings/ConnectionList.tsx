@@ -5,6 +5,7 @@ import type {
   ProviderConnectionSummary
 } from "@voxmesh/shared";
 
+import { ProviderReadinessStatus } from "../../components/ProviderReadinessStatus.js";
 import { useI18n } from "../../i18n/i18n.js";
 
 export function ConnectionList(props: {
@@ -48,6 +49,7 @@ export function ConnectionList(props: {
                 ? t("settings.enabled")
                 : t("settings.disabled")}
             </span>
+            <ProviderReadinessStatus readiness={connection.readiness} />
             <div className="button-row">
               <button
                 type="button"
