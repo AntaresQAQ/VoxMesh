@@ -35,6 +35,12 @@ VoxMesh has an initial Mock Mode vertical slice for development and architecture
 - TanStack Form for complex Settings workflows
 - unit, integration, and Playwright end-to-end tests
 
+Buffered real-provider Phase 4 is ready for explicit acceptance. Azure and
+OpenAI-compatible direct/tool-assisted Chat and Alibaba dedicated
+STT/TTS/composed voice are live-qualified. Azure Speech and standard compatible
+Audio remain explicitly unqualified and tracked as non-blocking follow-up work;
+see the [Phase 4 Acceptance Report](docs/qualification/PHASE_4_ACCEPTANCE.md).
+
 Azure AI Speech Service, generic external MCP transports, physical audio, and
 deployment packaging remain planned work. Azure OpenAI Audio STT/TTS is already
 implemented. The physical-audio phase also plans local offline wake-word

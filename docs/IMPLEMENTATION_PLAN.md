@@ -9,10 +9,10 @@ This document is the project-visible implementation roadmap. It does not authori
 
 ## Implementation Progress
 
-Last updated: 2026-08-21
+Last updated: 2026-08-23
 
-Implementation baseline: merged `main` through PR #12
-(`feat: add dashboard device status`).
+Implementation baseline: merged `main` through PR #22
+(`test: add Alibaba live qualification`).
 
 Recent merged milestones:
 
@@ -20,6 +20,13 @@ Recent merged milestones:
 - PR #10: Conversation Run lifecycle and cancellation
 - PR #11: Chat continuity and retry
 - PR #12: Dashboard device and physical-audio status foundations
+- PR #14: Phase 3 browser and accessibility closeout
+- PR #15: Phase 4 executable closeout plan
+- PR #16: opt-in live-provider test harness
+- PR #17: provider and route readiness diagnostics
+- PR #19: Azure live qualification
+- PR #21: OpenAI-compatible live qualification
+- PR #22: Alibaba live qualification
 
 ### Phase Status
 
@@ -28,8 +35,8 @@ Recent merged milestones:
 | 1     | Project skeleton and secure base | Complete                             |
 | 2     | Agent Core and Mock pipeline     | Complete                             |
 | 3     | Web Console                      | Complete                             |
-| 4     | Buffered real AI providers       | Implemented; live acceptance pending |
-| 5     | Full-chain streaming voice       | Planned; requires Phase 4 acceptance |
+| 4     | Buffered real AI providers       | Ready for acceptance; gaps tracked   |
+| 5     | Full-chain streaming voice       | Planned; requires user acceptance    |
 | 6     | Cross-platform audio devices     | Planned; requires Phase 5 acceptance |
 | 7     | Offline wake word                | Planned; requires Phase 6 acceptance |
 | 8     | Generic third-party MCP          | Planned; requires Phase 7 acceptance |
@@ -128,15 +135,19 @@ Recent merged milestones:
 The executable scope, PR split, acceptance criteria, and exclusions are defined
 in [Phase 3 Closeout Plan](./development/PHASE_3_CLOSEOUT.md).
 
-### Remaining buffered Phase 4 acceptance work
+### Buffered Phase 4 acceptance result
 
-- [ ] opt-in live Azure and Alibaba/OpenAI-compatible Chat/STT/TTS smoke tests
-      and one opt-in live composed-voice test
-- [ ] safe provider readiness and last-error status
-- [ ] documented live-test cost, quota, region, retention, and credential
-      safeguards
-- [ ] real Native Multimodal provider adapter; this is an extension and is not
-      required before the original non-streaming Azure/Alibaba acceptance gate
+- [x] opt-in, bounded, fail-fast live-provider harness outside default CI
+- [x] Azure and OpenAI-compatible direct and MCP-assisted Chat qualification
+- [x] Alibaba dedicated STT, TTS, and buffered composed-voice qualification
+- [x] safe provider and route readiness with bounded last-error status
+- [x] documented cost, quota, region, retention, credential, evidence, and
+      cleanup safeguards
+- [ ] Azure STT/TTS and Azure-only composed qualification, explicitly deferred
+      to [issue #18](https://github.com/AntaresQAQ/VoxMesh/issues/18)
+- [ ] standard OpenAI-compatible Audio qualification, explicitly deferred to
+      [issue #20](https://github.com/AntaresQAQ/VoxMesh/issues/20)
+- [ ] real Native Multimodal provider adapter; optional and non-blocking
 
 The executable PR sequence, dependencies, safeguards, acceptance evidence, and
 exclusions are defined in
@@ -157,6 +168,11 @@ Alibaba dedicated STT, dedicated TTS, and buffered composed voice passed on
 2026-08-23 (UTC+08:00) with the exact six-request budget. The evidence covers
 the provider-internal WebSocket speech protocols and does not claim standard
 OpenAI-compatible Audio or application-level streaming support.
+
+The consolidated evidence and limitations are recorded in the
+[Phase 4 Acceptance Report](./qualification/PHASE_4_ACCEPTANCE.md). Phase 4 is
+ready for explicit user acceptance after the closeout change is reviewed,
+passes required CI, and is merged.
 
 ### Planned streaming voice work
 
