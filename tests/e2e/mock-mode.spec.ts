@@ -370,7 +370,7 @@ test("completes setup, tool-assisted chat, inspection, and logout", async ({
         globalThis.fetch = originalFetch;
       }
     });
-    globalThis.fetch = async (input, init) => {
+    globalThis.fetch = async (input, init): Promise<Response> => {
       const url =
         typeof input === "string"
           ? input
@@ -378,7 +378,7 @@ test("completes setup, tool-assisted chat, inspection, and logout", async ({
             ? input.toString()
             : input.url;
       if (url === "/api/chat") {
-        return new Promise((_resolve, reject) => {
+        return new Promise<Response>((_resolve, reject) => {
           init?.signal?.addEventListener(
             "abort",
             () => reject(new DOMException("Aborted", "AbortError")),
@@ -509,10 +509,11 @@ test("completes setup, tool-assisted chat, inspection, and logout", async ({
   await page.unroute("**/api/conversations/retry-conversation");
   await page.unroute("**/api/chat/runs/*/retry");
   await page.goto("/chat");
+  await expect(page.getByRole("heading", { name: "Chat" })).toBeFocused();
 
   const messageInput = page.getByLabel("Message");
-  await messageInput.fill("Check the light status");
-  await messageInput.focus();
+  await messageInput.click();
+  await page.keyboard.type("Check the light status");
   await page.keyboard.press("Tab");
   const sendButton = page.getByRole("button", { name: "Send" });
   await expectVisibleFocus(sendButton);
