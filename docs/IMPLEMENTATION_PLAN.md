@@ -94,7 +94,7 @@ Recent merged milestones:
       downgrade
 - [x] buffered route testing, Test & activate, actionable result states, and
       provider configuration error reporting
-- [ ] independent STT/Chat/TTS streaming intent switches and a full-chain
+- [x] independent STT/Chat/TTS streaming intent switches and a full-chain
       profile, with explicit activation rejection while runtime surfaces remain
       unavailable
 - [x] route-aware Dashboard status, inline Settings editors, accessible
