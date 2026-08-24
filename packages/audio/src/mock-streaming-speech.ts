@@ -153,8 +153,8 @@ class MockStreamingSttSession implements StreamingSpeechToTextSession {
   public async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
-    this.localAbort.abort();
     this.detachAbort();
+    this.localAbort.abort();
     if (this.completed) {
       this.events.close();
     } else {
@@ -303,8 +303,8 @@ class MockStreamingTtsSession implements StreamingTextToSpeechSession {
   public async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
-    this.localAbort.abort();
     this.detachAbort();
+    this.localAbort.abort();
     if (this.completed) {
       this.events.close();
     } else {

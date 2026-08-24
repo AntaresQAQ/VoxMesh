@@ -183,6 +183,24 @@ describe("Mock streaming speech providers", () => {
     await expect(cancelledEvents).rejects.toMatchObject({ code: "CANCELLED" });
   });
 
+  it("closes an in-progress TTS session with explicit close semantics", async () => {
+    const session = await new MockStreamingTextToSpeechProvider({
+      eventDelayMs: 1_000
+    }).startSynthesis({
+      text: "Close",
+      signal: new AbortController().signal
+    });
+    const events = collect(session);
+
+    await session.close();
+
+    await expect(events).rejects.toMatchObject({
+      code: "CANCELLED",
+      message: "Mock Streaming TTS was closed"
+    });
+    await session.close();
+  });
+
   it("rejects unsupported provider formats and invalid TTS options", async () => {
     await expect(
       new MockStreamingSpeechToTextProvider().startSession({
