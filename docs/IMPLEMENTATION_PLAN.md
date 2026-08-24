@@ -208,6 +208,9 @@ Phase 5 PR 2 implementation is documented in
 Phase 5 PR 3 implementation is documented in
 [Streaming Agent Core](./architecture/STREAMING_AGENT.md).
 
+Phase 5 PR 4 implementation is documented in
+[Streaming Text-to-Speech Segmentation](./architecture/STREAMING_TTS_SEGMENTATION.md).
+
 ### Later confirmed phases
 
 - [ ] Phase 6 browser and host audio discovery, selection, testing, capture,
