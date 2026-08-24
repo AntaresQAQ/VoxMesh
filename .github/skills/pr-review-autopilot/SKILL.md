@@ -217,7 +217,7 @@ HEAD_SHA=$(gh pr view PR --repo OWNER/REPO \
 HEAD_BRANCH=$(gh pr view PR --repo OWNER/REPO \
   --json headRefName --jq .headRefName)
 
-gh run list --repo OWNER/REPO \
+RUN_ID=$(gh run list --repo OWNER/REPO \
   --branch "$HEAD_BRANCH" \
   --commit "$HEAD_SHA" \
   --limit 20 \
@@ -227,9 +227,11 @@ gh run list --repo OWNER/REPO \
       ((.name // "") | ascii_downcase | contains("copilot")) or
       ((.workflowName // "") | ascii_downcase | contains("copilot"))
     )
-  ][0]'
+  ][0].databaseId // empty')
 
-gh run watch RUN_ID --repo OWNER/REPO --exit-status
+test -n "$RUN_ID"
+
+gh run watch "$RUN_ID" --repo OWNER/REPO --exit-status
 ```
 
 If no automatic Copilot review starts for the current head within a reasonable
