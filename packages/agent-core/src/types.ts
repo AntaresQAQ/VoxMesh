@@ -21,6 +21,9 @@ export interface LlmProvider {
 export type StreamingLlmFinishReason =
   "stop" | "tool_call" | "length" | "content_filter" | "other";
 
+export type StreamingLlmFailureCode =
+  "provider_failed" | "timeout" | "content_filter" | "invalid_response";
+
 export type StreamingLlmEvent =
   | {
       type: "text_delta";
@@ -41,6 +44,12 @@ export type StreamingLlmEvent =
   | {
       type: "completed";
       finishReason: StreamingLlmFinishReason;
+    }
+  | {
+      type: "failure";
+      code: StreamingLlmFailureCode;
+      /** Provider-normalized safe text; never a raw response body or payload. */
+      safeMessage: string;
     };
 
 /**
@@ -55,6 +64,77 @@ export interface StreamingLlmProvider {
     tools: ToolDefinition[];
     signal: AbortSignal;
   }): AsyncIterable<StreamingLlmEvent>;
+}
+
+export type StreamingAgentErrorCode =
+  | "INVALID_STREAM_EVENT"
+  | "STREAM_LIMIT_EXCEEDED"
+  | "INCOMPLETE_TOOL_CALL"
+  | "UNSUPPORTED_FINISH_REASON"
+  | "PROVIDER_FAILED"
+  | "MCP_RESULT_INVALID";
+
+export class StreamingAgentError extends Error {
+  public constructor(
+    public readonly code: StreamingAgentErrorCode,
+    message: string,
+    options?: { cause?: unknown }
+  ) {
+    super(message, options);
+    this.name = "StreamingAgentError";
+  }
+}
+
+export type StreamingAgentEvent =
+  | {
+      type: "text_delta";
+      completionIndex: number;
+      delta: string;
+      speakable: boolean;
+    }
+  | {
+      type: "tool_call_delta";
+      completionIndex: number;
+      toolCallIndex: number;
+      toolName: string | null;
+      argumentsBytes: number;
+      complete: boolean;
+    }
+  | {
+      type: "tool_started";
+      completionIndex: number;
+      toolCallId: string;
+      toolName: string;
+    }
+  | {
+      type: "tool_finished";
+      completionIndex: number;
+      toolCallId: string;
+      toolName: string;
+      success: boolean;
+    }
+  | {
+      type: "usage";
+      completionIndex: number;
+      inputTokens: number;
+      outputTokens: number;
+    }
+  | {
+      type: "completion_finished";
+      completionIndex: number;
+      finishReason: StreamingLlmFinishReason;
+      text: string;
+      speakableText: string | null;
+      usage: {
+        inputTokens: number;
+        outputTokens: number;
+      } | null;
+    };
+
+export interface StreamingAgentRunOptions {
+  toolMode: "enabled" | "disabled";
+  signal: AbortSignal;
+  history?: AgentMessage[];
 }
 
 export interface McpServer {

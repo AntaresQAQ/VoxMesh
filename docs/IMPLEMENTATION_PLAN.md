@@ -205,6 +205,9 @@ Phase 5 PR 1 implementation is documented in
 Phase 5 PR 2 implementation is documented in
 [Bounded Streaming Primitives and Mock Speech](./architecture/STREAMING_PRIMITIVES.md).
 
+Phase 5 PR 3 implementation is documented in
+[Streaming Agent Core](./architecture/STREAMING_AGENT.md).
+
 ### Later confirmed phases
 
 - [ ] Phase 6 browser and host audio discovery, selection, testing, capture,

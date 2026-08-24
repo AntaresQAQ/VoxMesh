@@ -37,6 +37,7 @@ links back to the governing MVP and development rules.
 - [Voice Pipeline Architecture](./architecture/VOICE_PIPELINES.md)
 - [Voice Stream Protocol](./architecture/VOICE_STREAM_PROTOCOL.md)
 - [Bounded Streaming Primitives](./architecture/STREAMING_PRIMITIVES.md)
+- [Streaming Agent Core](./architecture/STREAMING_AGENT.md)
 - [Runtime Routing](./architecture/RUNTIME_ROUTING.md)
 - [WebSocket Event Delivery](./architecture/WEBSOCKET.md)
 - [Conversation Run Lifecycle](./architecture/CONVERSATION_LIFECYCLE.md)
