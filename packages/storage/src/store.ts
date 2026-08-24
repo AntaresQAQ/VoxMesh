@@ -1359,6 +1359,16 @@ export class VoxMeshStore {
         "tts_streaming_enabled",
         "INTEGER NOT NULL DEFAULT 0 CHECK (tts_streaming_enabled IN (0, 1))"
       );
+      this.database
+        .prepare(
+          `UPDATE runtime_routes
+           SET stt_streaming_enabled = 0,
+               chat_streaming_enabled = 0,
+               tts_streaming_enabled = 0,
+               updated_at = ?
+           WHERE mode = 'native-multimodal'`
+        )
+        .run(new Date().toISOString());
       const models = this.database
         .prepare(
           `SELECT id, declared_capabilities, verified_capabilities
@@ -1385,11 +1395,14 @@ export class VoxMeshStore {
         const nextDeclared = declared.includes("non-streaming")
           ? declared
           : [...declared, "non-streaming"];
+        const qualifiedVerified = verified.filter(
+          (capability) => capability !== "streaming"
+        );
         const nextVerified =
-          hasVerifiedBufferedRole(verified) &&
-          !verified.includes("non-streaming")
-            ? [...verified, "non-streaming"]
-            : verified;
+          hasVerifiedBufferedRole(qualifiedVerified) &&
+          !qualifiedVerified.includes("non-streaming")
+            ? [...qualifiedVerified, "non-streaming"]
+            : qualifiedVerified;
         update.run(
           JSON.stringify(nextDeclared),
           JSON.stringify(nextVerified),

@@ -1535,7 +1535,7 @@ describe("VoxMeshStore", () => {
           'legacy-streaming-model', 'legacy-streaming-connection',
           'Legacy Streaming Model', 'legacy', '',
           '["audio-input","audio-output","text-input","text-output","transcription","speech-synthesis","tool-calling"]',
-          '["audio-input","audio-output","text-input","text-output","transcription","speech-synthesis","tool-calling"]',
+          '["audio-input","audio-output","text-input","text-output","transcription","speech-synthesis","tool-calling","streaming"]',
           '{}',
           'legacy-fingerprint', 1, '2026-01-01T00:00:00.000Z',
           '2026-01-01T00:00:00.000Z'
@@ -1551,6 +1551,18 @@ describe("VoxMeshStore", () => {
           'legacy-unused-fingerprint', 1, '2026-01-01T00:00:00.000Z',
           '2026-01-01T00:00:00.000Z'
         );
+        INSERT INTO model_deployments (
+          id, connection_id, display_name, model_name, api_version,
+          declared_capabilities, verified_capabilities, provider_options,
+          configuration_fingerprint, enabled, created_at, updated_at
+        ) VALUES (
+          'legacy-native-model', 'legacy-streaming-connection',
+          'Legacy Native Model', 'legacy-native', '',
+          '["audio-input","audio-output","text-output","tool-calling","native-multimodal","streaming"]',
+          '["audio-input","audio-output","text-output","tool-calling","native-multimodal","streaming"]',
+          '{}', 'legacy-native-fingerprint', 1,
+          '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z'
+        );
         INSERT INTO runtime_routes (
           id, display_name, mode, stt_model_deployment_id,
           chat_model_deployment_id, tts_model_deployment_id,
@@ -1563,6 +1575,20 @@ describe("VoxMeshStore", () => {
           'legacy-streaming-route', 'Legacy Streaming Route', 'composed',
           'legacy-streaming-model', 'legacy-streaming-model',
           'legacy-streaming-model', NULL, NULL, 0, 0, 1,
+          'ready', '2026-01-01T00:00:00.000Z', NULL, NULL, 0,
+          '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z'
+        );
+        INSERT INTO runtime_routes (
+          id, display_name, mode, stt_model_deployment_id,
+          chat_model_deployment_id, tts_model_deployment_id,
+          native_model_deployment_id, fallback_route_id,
+          stt_streaming_enabled, tts_streaming_enabled, enabled,
+          readiness_state, readiness_last_tested_at,
+          readiness_error_category, readiness_error_message,
+          readiness_generation, created_at, updated_at
+        ) VALUES (
+          'legacy-native-route', 'Legacy Native Route', 'native-multimodal',
+          NULL, NULL, NULL, 'legacy-native-model', NULL, 1, 1, 1,
           'ready', '2026-01-01T00:00:00.000Z', NULL, NULL, 0,
           '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z'
         );
@@ -1581,6 +1607,7 @@ describe("VoxMeshStore", () => {
       );
       expect(legacyModel?.declaredCapabilities).toContain("non-streaming");
       expect(legacyModel?.verifiedCapabilities).toContain("non-streaming");
+      expect(legacyModel?.verifiedCapabilities).not.toContain("streaming");
       const unreferencedModel = migratedSummary.models.find(
         (model) => model.id === "legacy-unreferenced-model"
       );
@@ -1598,6 +1625,20 @@ describe("VoxMeshStore", () => {
       expect(
         store.activateRuntimeRoute("legacy-streaming-route").activeRouteId
       ).toBe("legacy-streaming-route");
+      const legacyNativeRoute = store.getRuntimeRoute("legacy-native-route");
+      expect(legacyNativeRoute).toMatchObject({
+        sttStreamingEnabled: false,
+        chatStreamingEnabled: false,
+        ttsStreamingEnabled: false
+      });
+      expect(
+        store.activateRuntimeRoute("legacy-native-route").activeRouteId
+      ).toBe("legacy-native-route");
+      expect(
+        migratedSummary.models.find(
+          (model) => model.id === "legacy-native-model"
+        )?.verifiedCapabilities
+      ).not.toContain("streaming");
       store.close();
       store = undefined;
 
