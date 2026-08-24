@@ -1,6 +1,6 @@
 ---
 name: pr-review-autopilot
-description: "Continuously shepherd a GitHub pull request through Copilot review until stable and clean, then automatically merge it. Use only when the user explicitly asks to keep monitoring/reviewing a PR and auto-merge after all comments and checks are clean, or explicitly invokes the pr-review-autopilot skill. Do not trigger for a one-time request to inspect or resolve comments without merge authorization."
+description: "Continuously shepherd a GitHub pull request through Copilot review until stable and clean, then automatically merge it. Use only when the user explicitly authorizes commit, push, and merge for the specified PR while asking for continuous review monitoring, or invokes the skill with those same operation-specific authorizations. Do not trigger for a one-time request to inspect or resolve comments."
 ---
 
 # PR Review Autopilot
@@ -11,7 +11,8 @@ no unresolved or new actionable comments remain, and the PR is merged.
 
 ## Authorization
 
-Invoking this skill is explicit authorization for this PR to:
+Use this skill only when the user has explicitly authorized each of these
+operations for the specified PR:
 
 - edit the PR branch
 - run tests, builds, lint, type checks, and E2E checks
@@ -21,8 +22,10 @@ Invoking this skill is explicit authorization for this PR to:
 - wait for repeated GitHub Copilot reviews
 - merge the PR after the stable-clean gate passes
 
-The invocation must contain explicit auto-merge intent or name this skill.
-Otherwise, do not use this skill and do not infer merge authorization.
+Naming this skill alone does not override repository rules that require
+operation-specific confirmation. The invocation must explicitly authorize
+commit, push, and merge for this PR. Otherwise, do not use this skill and do
+not infer authorization.
 
 Do not amend, rebase, force-push, or merge a different PR. Follow repository
 instructions and any stricter current-session rules. Include repository- or
@@ -63,8 +66,9 @@ view`. Stop only if multiple PRs are genuinely ambiguous.
 
 ## Tool Strategy
 
-Prefer GitHub MCP reads. Always call `get_me` before GitHub MCP searches or
-writes when required by the server.
+Prefer GitHub MCP reads when available. If an MCP server requires an identity
+or permission bootstrap step, use that server's documented context operation.
+Otherwise, verify the authenticated CLI identity with `gh auth status`.
 
 For GitHub writes, use GitHub MCP first when available. Enterprise Managed User
 tokens may return `403 Unauthorized`; on that exact failure, immediately fall
@@ -195,7 +199,7 @@ Do not resolve unaddressed human requests for changes.
 After every push:
 
 1. wait for all required PR checks
-2. identify the newest Copilot review workflow for the current branch/head
+2. discover the newest Copilot review workflow for the current branch/head
 3. wait for that workflow to complete
 
 Example:
@@ -205,9 +209,15 @@ gh pr checks PR --repo OWNER/REPO --watch --interval 10
 
 gh run list --repo OWNER/REPO \
   --branch HEAD_BRANCH \
-  --workflow Copilot \
-  --limit 1 \
-  --json databaseId,status,conclusion
+  --limit 20 \
+  --json databaseId,name,workflowName,status,conclusion,headSha \
+  --jq '[.[] |
+    select(.headSha == "HEAD_SHA") |
+    select(
+      ((.name // "") | ascii_downcase | contains("copilot")) or
+      ((.workflowName // "") | ascii_downcase | contains("copilot"))
+    )
+  ][0]'
 
 gh run watch RUN_ID --repo OWNER/REPO --exit-status
 ```
