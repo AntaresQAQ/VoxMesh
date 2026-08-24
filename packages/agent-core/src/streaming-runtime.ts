@@ -125,11 +125,6 @@ export class StreamingAgentRuntime {
           toolCallId: completion.toolCall.id,
           toolName: tool.name
         };
-        messages.push({
-          role: "assistant",
-          content: "",
-          toolCall: completion.toolCall
-        });
         let toolResultContent: string;
         try {
           throwIfAgentRunCancelled(signal);
@@ -151,6 +146,11 @@ export class StreamingAgentRuntime {
           throw error;
         }
         usedTools.push(tool.name);
+        messages.push({
+          role: "assistant",
+          content: "",
+          toolCall: completion.toolCall
+        });
         messages.push({
           role: "tool",
           toolCallId: completion.toolCall.id,
@@ -262,9 +262,15 @@ export class StreamingAgentRuntime {
           finishReason = event.finishReason;
           break;
         case "failure":
+          if (
+            event.safeMessage.length === 0 ||
+            event.safeMessage.length > 512
+          ) {
+            throw invalidEvent("Streaming LLM failure message is invalid");
+          }
           throw new StreamingAgentError(
             "PROVIDER_FAILED",
-            `Streaming LLM failed: ${event.code}`
+            `Streaming LLM failed: ${event.code}: ${event.safeMessage}`
           );
       }
     }

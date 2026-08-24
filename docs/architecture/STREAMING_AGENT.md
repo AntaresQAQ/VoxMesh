@@ -115,7 +115,8 @@ Each provider stream must emit exactly one `completed` event.
 - `stop` requires no tool fragments
 - `tool_call` requires one complete valid tool call
 - `length`, `content_filter`, and `other` do not produce a success result
-- provider `failure` events become bounded `PROVIDER_FAILED` Agent errors
+- provider `failure` events carry a provider-normalized `safeMessage`; Agent
+  Core validates its bound and includes it in `PROVIDER_FAILED`
 - duplicate usage events are invalid
 - event count is bounded to prevent empty-delta or metadata floods
 
@@ -144,6 +145,10 @@ unserializable results also emit the failed lifecycle before a bounded
 `MCP_RESULT_INVALID` error. Unknown tools, malformed tool arguments, limit
 violations, missing completion events, and unsupported finish reasons fail
 explicitly.
+
+The assistant tool-call and tool-result transcript messages are appended only
+after MCP succeeds and its result is serializable. Cancellation or failure
+while paused at `tool_started` cannot leave a partial tool-call transcript.
 
 Fragmented argument byte counting is incremental and surrogate-aware. A UTF-8
 code point split between provider deltas is counted once rather than as two

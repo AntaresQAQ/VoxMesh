@@ -48,7 +48,8 @@ export type StreamingLlmEvent =
   | {
       type: "failure";
       code: StreamingLlmFailureCode;
-      message: string;
+      /** Provider-normalized safe text; never a raw response body or payload. */
+      safeMessage: string;
     };
 
 /**

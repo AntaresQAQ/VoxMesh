@@ -193,7 +193,7 @@ describe("StreamingAgentRuntime", () => {
         {
           type: "failure",
           code: "provider_failed",
-          message: "Provider unavailable"
+          safeMessage: "Provider unavailable"
         }
       ] satisfies StreamingLlmEvent[],
       code: "PROVIDER_FAILED"
@@ -215,6 +215,33 @@ describe("StreamingAgentRuntime", () => {
       )
     ).rejects.toMatchObject({ code: fixture.code });
     expect(callTool).not.toHaveBeenCalled();
+  });
+
+  it("includes only validated safe provider failure text", async () => {
+    const runtime = new StreamingAgentRuntime(
+      new ScriptedStreamingLlmProvider([
+        [
+          {
+            type: "failure",
+            code: "timeout",
+            safeMessage: "Provider response timed out"
+          }
+        ]
+      ]),
+      new MockMcpServer()
+    );
+
+    await expect(
+      collectRun(
+        runtime.run("Failure", {
+          toolMode: "disabled",
+          signal: new AbortController().signal
+        })
+      )
+    ).rejects.toMatchObject({
+      code: "PROVIDER_FAILED",
+      message: "Streaming LLM failed: timeout: Provider response timed out"
+    });
   });
 
   it("rejects oversized text and fragmented arguments", async () => {
