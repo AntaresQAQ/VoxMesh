@@ -1373,6 +1373,26 @@ export class VoxMeshStore {
            WHERE mode = 'native-multimodal'`
         )
         .run(new Date().toISOString());
+      this.database
+        .prepare(
+          `UPDATE runtime_routes
+           SET stt_streaming_enabled = 0,
+               chat_streaming_enabled = 0,
+               tts_streaming_enabled = 0,
+               updated_at = ?
+           WHERE mode = 'composed'
+             AND id IN (
+               SELECT active_route_id FROM active_runtime_route
+               UNION
+               SELECT active.fallback_route_id
+               FROM active_runtime_route selected
+               JOIN runtime_routes active
+                 ON active.id = selected.active_route_id
+               WHERE active.mode = 'native-multimodal'
+                 AND active.fallback_route_id IS NOT NULL
+             )`
+        )
+        .run(new Date().toISOString());
       const models = this.database
         .prepare(
           `SELECT id, declared_capabilities, verified_capabilities

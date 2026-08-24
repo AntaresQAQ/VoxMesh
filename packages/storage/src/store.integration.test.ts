@@ -1596,6 +1596,11 @@ describe("VoxMeshStore", () => {
           created_at TEXT NOT NULL,
           updated_at TEXT NOT NULL
         );
+        CREATE TABLE active_runtime_route (
+          id INTEGER PRIMARY KEY,
+          active_route_id TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
         CREATE TABLE schema_migrations (
           id TEXT PRIMARY KEY,
           applied_at TEXT NOT NULL
@@ -1678,6 +1683,22 @@ describe("VoxMeshStore", () => {
           readiness_error_category, readiness_error_message,
           readiness_generation, created_at, updated_at
         ) VALUES (
+          'legacy-inactive-streaming-intent',
+          'Legacy Inactive Streaming Intent', 'composed',
+          'legacy-streaming-model', 'legacy-streaming-model',
+          'legacy-streaming-model', NULL, NULL, 1, 1, 1,
+          'unknown', NULL, NULL, NULL, 0,
+          '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z'
+        );
+        INSERT INTO runtime_routes (
+          id, display_name, mode, stt_model_deployment_id,
+          chat_model_deployment_id, tts_model_deployment_id,
+          native_model_deployment_id, fallback_route_id,
+          stt_streaming_enabled, tts_streaming_enabled, enabled,
+          readiness_state, readiness_last_tested_at,
+          readiness_error_category, readiness_error_message,
+          readiness_generation, created_at, updated_at
+        ) VALUES (
           'legacy-composed-streaming-intent',
           'Legacy Composed Streaming Intent', 'composed',
           'legacy-streaming-model', 'legacy-streaming-model',
@@ -1695,9 +1716,14 @@ describe("VoxMeshStore", () => {
           readiness_generation, created_at, updated_at
         ) VALUES (
           'legacy-native-route', 'Legacy Native Route', 'native-multimodal',
-          NULL, NULL, NULL, 'legacy-native-model', NULL, 1, 1, 1,
+          NULL, NULL, NULL, 'legacy-native-model',
+          'legacy-composed-streaming-intent', 1, 1, 1,
           'ready', '2026-01-01T00:00:00.000Z', NULL, NULL, 0,
           '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z'
+        );
+        INSERT INTO active_runtime_route (id, active_route_id, updated_at)
+        VALUES (
+          1, 'legacy-native-route', '2026-01-01T00:00:00.000Z'
         );
       `);
       database.close();
@@ -1732,6 +1758,15 @@ describe("VoxMeshStore", () => {
       expect(
         migratedSummary.routes.find(
           (route) => route.id === "legacy-composed-streaming-intent"
+        )
+      ).toMatchObject({
+        sttStreamingEnabled: false,
+        chatStreamingEnabled: false,
+        ttsStreamingEnabled: false
+      });
+      expect(
+        migratedSummary.routes.find(
+          (route) => route.id === "legacy-inactive-streaming-intent"
         )
       ).toMatchObject({
         sttStreamingEnabled: true,
