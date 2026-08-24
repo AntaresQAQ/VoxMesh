@@ -202,6 +202,9 @@ implementation authorization.
 Phase 5 PR 1 implementation is documented in
 [Voice Stream Protocol and Provider Contracts](./architecture/VOICE_STREAM_PROTOCOL.md).
 
+Phase 5 PR 2 implementation is documented in
+[Bounded Streaming Primitives and Mock Speech](./architecture/STREAMING_PRIMITIVES.md).
+
 ### Later confirmed phases
 
 - [ ] Phase 6 browser and host audio discovery, selection, testing, capture,

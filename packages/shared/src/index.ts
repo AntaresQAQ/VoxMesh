@@ -1,3 +1,4 @@
+export * from "./bounded-async-queue.js";
 export * from "./event-stream.js";
 export * from "./provider-readiness.js";
 export * from "./provider-registry.js";

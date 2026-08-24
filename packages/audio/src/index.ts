@@ -2,6 +2,7 @@ export * from "./alibaba-model-studio-speech.js";
 export * from "./alibaba-model-studio-config.js";
 export * from "./azure-openai-speech.js";
 export * from "./mock-speech.js";
+export * from "./mock-streaming-speech.js";
 export * from "./openai-compatible-speech.js";
 export * from "./pcm-wav.js";
 export * from "./types.js";
