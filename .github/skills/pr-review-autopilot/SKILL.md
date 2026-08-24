@@ -207,12 +207,15 @@ Example:
 ```bash
 gh pr checks PR --repo OWNER/REPO --watch --interval 10
 
+HEAD_SHA=$(gh pr view PR --repo OWNER/REPO \
+  --json headRefOid --jq .headRefOid)
+
 gh run list --repo OWNER/REPO \
   --branch HEAD_BRANCH \
+  --commit "$HEAD_SHA" \
   --limit 20 \
   --json databaseId,name,workflowName,status,conclusion,headSha \
   --jq '[.[] |
-    select(.headSha == "HEAD_SHA") |
     select(
       ((.name // "") | ascii_downcase | contains("copilot")) or
       ((.workflowName // "") | ascii_downcase | contains("copilot"))
