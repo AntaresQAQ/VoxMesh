@@ -6,8 +6,8 @@
 
 ## 1. Status
 
-Phase 4 is ready for user acceptance after this closeout change is reviewed,
-passes required CI, and is merged.
+Phase 4 was explicitly accepted by the user on 2026-08-24 after the closeout
+change was reviewed, passed required CI, and merged.
 
 The approved Phase 4 scope is complete with two explicitly unqualified,
 permission- or provider-limited Audio combinations tracked as follow-up work.
@@ -100,6 +100,7 @@ axe checks, localization, themes, keyboard behavior, and responsive layouts.
 
 ## 7. Phase 5 Entry Decision
 
-Phase 5 must not start automatically. After this closeout pull request merges,
-the user must explicitly accept this report and authorize the Phase 5
-full-chain streaming voice scope.
+The user accepted this report and authorized Phase 5 planning on 2026-08-24.
+Behavior-changing Phase 5 implementation remains gated by review and explicit
+acceptance of the
+[Phase 5 Streaming Voice Plan](../development/PHASE_5_STREAMING_VOICE.md).

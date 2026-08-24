@@ -9,10 +9,10 @@ This document is the project-visible implementation roadmap. It does not authori
 
 ## Implementation Progress
 
-Last updated: 2026-08-23 (UTC+08:00)
+Last updated: 2026-08-24 (UTC+08:00)
 
-Implementation baseline: merged `main` through PR #22
-(`test: add Alibaba live qualification`).
+Implementation baseline: merged `main` through PR #24
+(`fix: stabilize keyboard focus e2e`).
 
 Recent merged milestones:
 
@@ -27,6 +27,8 @@ Recent merged milestones:
 - PR #19: Azure live qualification
 - PR #21: OpenAI-compatible live qualification
 - PR #22: Alibaba live qualification
+- PR #23: Phase 4 acceptance closeout
+- PR #24: keyboard focus E2E stabilization
 
 ### Phase Status
 
@@ -35,8 +37,8 @@ Recent merged milestones:
 | 1     | Project skeleton and secure base | Complete                             |
 | 2     | Agent Core and Mock pipeline     | Complete                             |
 | 3     | Web Console                      | Complete                             |
-| 4     | Buffered real AI providers       | Ready for acceptance; gaps tracked   |
-| 5     | Full-chain streaming voice       | Planned; requires user acceptance    |
+| 4     | Buffered real AI providers       | Accepted; deferred gaps tracked      |
+| 5     | Full-chain streaming voice       | Plan accepted; PR 1 ready            |
 | 6     | Cross-platform audio devices     | Planned; requires Phase 5 acceptance |
 | 7     | Offline wake word                | Planned; requires Phase 6 acceptance |
 | 8     | Generic third-party MCP          | Planned; requires Phase 7 acceptance |
@@ -170,9 +172,8 @@ the provider-internal WebSocket speech protocols and does not claim standard
 OpenAI-compatible Audio or application-level streaming support.
 
 The consolidated evidence and limitations are recorded in the
-[Phase 4 Acceptance Report](./qualification/PHASE_4_ACCEPTANCE.md). Phase 4 is
-ready for explicit user acceptance after the closeout change is reviewed,
-passes required CI, and is merged.
+[Phase 4 Acceptance Report](./qualification/PHASE_4_ACCEPTANCE.md). The user
+accepted the report and authorized Phase 5 planning on 2026-08-24.
 
 ### Planned streaming voice work
 
@@ -191,6 +192,12 @@ passes required CI, and is merged.
       their existing incremental WebSocket protocols
 - [ ] deterministic Mock streaming adapters and complete unit, integration,
       Playwright, accessibility, and live-provider qualification
+
+The accepted protocol, limits, provider scope, 12-PR sequence, dependency
+graph, risks, and operation gates are defined in
+[Phase 5 Streaming Voice Plan](./development/PHASE_5_STREAMING_VOICE.md). The
+user accepted the plan on 2026-08-24; PR 1 still requires separate
+implementation authorization.
 
 ### Later confirmed phases
 
@@ -221,32 +228,31 @@ verified, activation must continue to reject routes that request streaming.
 
 ### Next execution order
 
-1. Complete the Phase 4 opt-in live-provider acceptance gate.
-2. Implement Phase 5 capability-gated full-chain Streaming STT/Chat LLM/TTS.
-3. Implement Phase 6 cross-platform audio devices.
-4. Implement Phase 7 offline wake-word detection.
-5. Implement Phase 8 generic third-party MCP and the full MCP Console.
-6. Implement Phase 9 scripted deployment, backup, rollback, and NanoPi
+1. Implement Phase 5 capability-gated full-chain Streaming STT/Chat LLM/TTS,
+   beginning with the separately authorized contracts PR.
+2. Implement Phase 6 cross-platform audio devices.
+3. Implement Phase 7 offline wake-word detection.
+4. Implement Phase 8 generic third-party MCP and the full MCP Console.
+5. Implement Phase 9 scripted deployment, backup, rollback, and NanoPi
    qualification.
-7. Complete the Final MVP Acceptance Gate.
+6. Complete the Final MVP Acceptance Gate.
 
 ## 1. Current State and Approach
 
 The repository contains validated Mock buffered voice vertical slices,
-implemented buffered real-provider adapters, protected Runtime Routing,
-real-time observability, durable Chat lifecycle and continuity,
-platform-independent device-status foundations, and a bilingual Web Console
-with representative accessibility automation. The implementation is
-intentionally incomplete: live-provider qualification, application-level voice
-streaming, physical audio, Wake Word, third-party MCP, scripted deployment, and
-final hardware qualification remain.
+accepted buffered real-provider qualification with explicit deferred Audio
+gaps, protected Runtime Routing, real-time observability, durable Chat
+lifecycle and continuity, platform-independent device-status foundations, and
+a bilingual Web Console with representative accessibility automation. The
+implementation is intentionally incomplete: application-level voice streaming,
+physical audio, Wake Word, third-party MCP, scripted deployment, and final
+hardware qualification remain.
 
 The implementation follows the nine phases defined in the MVP specification
 while preserving a platform-independent Agent Core. Some provider work was
-delivered before all Phase 3 acceptance items. Phase 3 is now closed through
-deterministic failure/recovery fixtures, the expanded browser matrix, and
-documented remaining release-only manual checks. The next work is the
-separately gated Phase 4 live-provider acceptance.
+delivered before all Phase 3 acceptance items. Phase 3 is closed, and the user
+accepted the Phase 4 report on 2026-08-24. The current gate is review and
+acceptance of the Phase 5 PR-by-PR streaming plan.
 Every behavior-changing work package remains gated by explicit user
 confirmation.
 
@@ -910,11 +916,13 @@ Phase 5 requires explicit confirmation after buffered Phase 4 acceptance.
   llm-tool-call-delta, tool-started, tool-finished, llm-finished,
   output-segment-started, output-frame, output-segment-finished,
   output-finished, cancelled, and failed states.
-- Use JSON control envelopes and bounded binary audio frames with session ID,
-  direction, format, and monotonically increasing sequence information.
+- Use JSON control envelopes and bounded binary audio frames. The connection
+  establishes the session ID; the fixed binary header carries protocol
+  version, direction, format, and monotonically increasing sequence
+  information without repeating the session UUID in every frame.
 - Reject unknown versions, invalid ordering, duplicate terminal messages,
-  oversized frames, excessive frame rates, unsupported formats, and route
-  changes during a session.
+  oversized frames, more than 75 input frames or 20 control messages in a
+  rolling second, unsupported formats, and route changes during a session.
 - Authenticate during the WebSocket upgrade with the established administrator
   session. Never place credentials or sensitive configuration in message
   payloads, URLs, logs, or close reasons.
@@ -964,6 +972,12 @@ Phase 5 requires explicit confirmation after buffered Phase 4 acceptance.
   synthesize segments sequentially to guarantee playback order.
 - Do not send pre-tool explanatory text to TTS when a turn resolves to a tool
   call. Speech begins from the final post-tool assistant stream.
+- Early TTS before LLM completion is enabled only when no tools are exposed to
+  the Agent request. Tool-enabled turns wait until the completion proves that
+  it contains no tool call before releasing speech.
+- The streaming start contract includes a session-local tool mode. The browser
+  defaults to tools enabled; explicitly disabling tools permits safe early TTS
+  and does not alter persisted MCP configuration.
 - Streaming TTS exposes ordered audio chunks as an async iterable with one
   terminal metadata result.
 - Implement deterministic Mock streaming adapters first.
@@ -983,6 +997,8 @@ Phase 5 requires explicit confirmation after buffered Phase 4 acceptance.
 
 - Bound browser, server, provider, and playback queues by bytes, frames, and
   duration.
+- Use separate bounded accumulators for buffered STT capture and buffered TTS
+  output when those roles run through `/api/voice-stream`.
 - Bound accumulated LLM text, fragmented tool-call arguments, pending speech
   segments, synthesized audio, and playback duration.
 - Define high-water and low-water marks. Pause production where supported or
@@ -1009,7 +1025,8 @@ Phase 5 requires explicit confirmation after buffered Phase 4 acceptance.
   disconnect, provider failure, and resource release.
 - Playwright-test permission denial, unsupported browsers, independent
   STT/Chat/TTS switches, partial transcript and LLM text rendering, streamed
-  tool-assisted output, first-audio-before-final-text, cancellation,
+  tool-assisted output, direct zero-tools first-audio-before-final-text,
+  tool-safe delayed speech, cancellation,
   reconnect-as-new-session, failure recovery, keyboard access, status
   announcements, localization, themes, responsive zoom, and axe scans.
 - Add opt-in credentialed Alibaba live streaming smoke tests with strict
