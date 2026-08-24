@@ -634,9 +634,9 @@ export type ProviderConnectionInput = Static<
   typeof ProviderConnectionInputSchema
 >;
 export type ModelDeploymentInput = Static<typeof ModelDeploymentInputSchema>;
-export type RuntimeRouteRequest = Static<typeof RuntimeRouteInputSchema>;
-export type RuntimeRouteInput = Omit<
-  RuntimeRouteRequest,
+export type RuntimeRouteInput = Static<typeof RuntimeRouteInputSchema>;
+export type NormalizedRuntimeRouteInput = Omit<
+  RuntimeRouteInput,
   "chatStreamingEnabled"
 > & {
   chatStreamingEnabled: boolean;

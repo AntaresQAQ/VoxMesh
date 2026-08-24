@@ -11,7 +11,7 @@ import type {
   ProviderConnectionSummary,
   ProviderReadiness,
   ProviderReadinessErrorCategory,
-  RuntimeRouteInput,
+  NormalizedRuntimeRouteInput,
   RuntimeRouteSummary,
   RuntimeRoutingSummary,
   SpeechProviderMode,
@@ -602,7 +602,9 @@ export class RuntimeRoutingStore {
     return this.getSummary();
   }
 
-  public createRoute(input: RuntimeRouteInput): RuntimeRoutingSummary {
+  public createRoute(
+    input: NormalizedRuntimeRouteInput
+  ): RuntimeRoutingSummary {
     const id = randomUUID();
     const normalized = normalizeRouteInput(input);
     this.validateRoute(id, normalized, false);
@@ -612,7 +614,7 @@ export class RuntimeRoutingStore {
 
   public updateRoute(
     id: string,
-    input: RuntimeRouteInput
+    input: NormalizedRuntimeRouteInput
   ): RuntimeRoutingSummary {
     const current = this.getRoute(id);
     const normalized = normalizeRouteInput(input);
@@ -1170,7 +1172,7 @@ export class RuntimeRoutingStore {
 
   private validateRoute(
     id: string,
-    input: RuntimeRouteInput,
+    input: NormalizedRuntimeRouteInput,
     requireVerified: boolean
   ): void {
     if (input.mode === "composed") {
@@ -1258,7 +1260,7 @@ export class RuntimeRoutingStore {
   }
 
   private requireStreamingRuntimeAvailability(
-    input: RuntimeRouteInput,
+    input: NormalizedRuntimeRouteInput,
     models: {
       stt: ModelDeploymentRow;
       chat: ModelDeploymentRow;
@@ -1632,7 +1634,9 @@ export class RuntimeRoutingStore {
       );
   }
 
-  private upsertRoute(input: RuntimeRouteInput & { id: string }): void {
+  private upsertRoute(
+    input: NormalizedRuntimeRouteInput & { id: string }
+  ): void {
     const now = new Date().toISOString();
     this.database
       .prepare(
@@ -1868,7 +1872,7 @@ function isReadinessErrorCategory(
   );
 }
 
-function routeInputFromRow(row: RuntimeRouteRow): RuntimeRouteInput {
+function routeInputFromRow(row: RuntimeRouteRow): NormalizedRuntimeRouteInput {
   return {
     displayName: row.display_name,
     mode: row.mode,
@@ -1884,7 +1888,9 @@ function routeInputFromRow(row: RuntimeRouteRow): RuntimeRouteInput {
   };
 }
 
-function normalizeRouteInput(input: RuntimeRouteInput): RuntimeRouteInput {
+function normalizeRouteInput(
+  input: NormalizedRuntimeRouteInput
+): NormalizedRuntimeRouteInput {
   return {
     ...input,
     sttModelDeploymentId: input.sttModelDeploymentId || null,
@@ -1960,7 +1966,7 @@ function routeVerificationSignature(route: RuntimeRouteRow): string {
 
 function routeVerificationSignatureFromInput(
   id: string,
-  input: RuntimeRouteInput
+  input: NormalizedRuntimeRouteInput
 ): string {
   return configurationFingerprint([
     id,

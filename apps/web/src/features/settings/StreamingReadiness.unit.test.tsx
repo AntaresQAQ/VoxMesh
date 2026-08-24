@@ -89,6 +89,24 @@ describe("StreamingReadiness", () => {
     );
   });
 
+  it("reports the adapter unavailable for disabled assignments", () => {
+    renderReadiness({
+      modelId: model.id,
+      models: [{ ...model, enabled: false }],
+      connections: [connection],
+      availability: availableRuntime()
+    });
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "adapter: unavailable"
+    );
+    expect(
+      screen.getByRole("status", {
+        name: /Chat streaming readiness.*adapter: unavailable/
+      })
+    ).toBeVisible();
+  });
+
   it("localizes the readiness contract", () => {
     localStorage.setItem("voxmesh.locale", "zh-CN");
     renderReadiness({

@@ -28,6 +28,19 @@ export function StreamingReadiness(props: {
         : props.availability?.ttsProviderIds;
   const state = (value: boolean) =>
     value ? t("settings.available") : t("settings.unavailable");
+  const readinessText = t("settings.streamingReadiness", {
+    declared: state(model?.declaredCapabilities.includes("streaming") ?? false),
+    verified: state(model?.verifiedCapabilities.includes("streaming") ?? false),
+    adapter: state(
+      Boolean(model?.enabled) &&
+        Boolean(connection?.enabled) &&
+        Boolean(
+          connection && (providerIds?.includes(connection.providerId) ?? false)
+        )
+    ),
+    transport: state(props.availability?.transportAvailable ?? false),
+    browser: state(props.availability?.browserClientAvailable ?? false)
+  });
 
   return (
     <p
@@ -38,26 +51,13 @@ export function StreamingReadiness(props: {
       aria-label={
         props.roleLabel
           ? t("settings.streamingReadinessLabel", {
-              role: props.roleLabel
+              role: props.roleLabel,
+              readiness: readinessText
             })
           : undefined
       }
     >
-      {t("settings.streamingReadiness", {
-        declared: state(
-          model?.declaredCapabilities.includes("streaming") ?? false
-        ),
-        verified: state(
-          model?.verifiedCapabilities.includes("streaming") ?? false
-        ),
-        adapter: state(
-          connection
-            ? (providerIds?.includes(connection.providerId) ?? false)
-            : false
-        ),
-        transport: state(props.availability?.transportAvailable ?? false),
-        browser: state(props.availability?.browserClientAvailable ?? false)
-      })}
+      {readinessText}
     </p>
   );
 }

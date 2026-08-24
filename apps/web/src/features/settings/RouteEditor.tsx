@@ -3,8 +3,8 @@ import { useForm } from "@tanstack/react-form";
 
 import type {
   ModelDeploymentSummary,
+  NormalizedRuntimeRouteInput,
   ProviderConnectionSummary,
-  RuntimeRouteInput,
   RuntimeRouteSummary,
   StreamingRuntimeAvailability
 } from "@voxmesh/shared";
@@ -21,7 +21,7 @@ export function RouteEditor(props: {
   routes: RuntimeRouteSummary[];
   streamingAvailability: StreamingRuntimeAvailability | undefined;
   pending: boolean;
-  onSave: (input: RuntimeRouteInput) => Promise<void>;
+  onSave: (input: NormalizedRuntimeRouteInput) => Promise<void>;
   onCancel: () => void;
 }) {
   const { t } = useI18n();

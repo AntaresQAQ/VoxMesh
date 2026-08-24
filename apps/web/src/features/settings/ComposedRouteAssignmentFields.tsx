@@ -2,8 +2,8 @@ import { useId } from "react";
 
 import type {
   ModelDeploymentSummary,
+  NormalizedRuntimeRouteInput,
   ProviderConnectionSummary,
-  RuntimeRouteInput,
   StreamingRuntimeAvailability
 } from "@voxmesh/shared";
 
@@ -16,7 +16,7 @@ import {
 import { StreamingReadiness } from "./StreamingReadiness.js";
 
 export function ComposedRouteAssignmentFields(props: {
-  values: RuntimeRouteInput;
+  values: NormalizedRuntimeRouteInput;
   models: ModelDeploymentSummary[];
   connections: ProviderConnectionSummary[];
   streamingAvailability: StreamingRuntimeAvailability | undefined;

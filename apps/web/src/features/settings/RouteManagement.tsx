@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 import type {
-  RuntimeRouteInput,
+  NormalizedRuntimeRouteInput,
   RuntimeRouteSummary,
   RuntimeRoutingSummary
 } from "@voxmesh/shared";
@@ -21,7 +21,7 @@ export function RouteManagement(props: {
   const { t } = useI18n();
   const [editing, setEditing] = useState<RuntimeRouteSummary | null>(null);
   const [creating, setCreating] = useState(false);
-  const save = async (input: RuntimeRouteInput) => {
+  const save = async (input: NormalizedRuntimeRouteInput) => {
     await props.execute(
       editing
         ? { type: "update-route", id: editing.id, input }

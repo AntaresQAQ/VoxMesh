@@ -22,6 +22,7 @@ import type {
   PipelineStage,
   PipelineStatus,
   ProviderConnectionInput,
+  NormalizedRuntimeRouteInput,
   RuntimeRouteSummary,
   RuntimeRouteInput,
   RuntimeRoutingSummary,
@@ -369,14 +370,17 @@ export class VoxMeshStore {
   }
 
   public createRuntimeRoute(input: RuntimeRouteInput): RuntimeRoutingSummary {
-    return this.runtimeRouting.createRoute(input);
+    return this.runtimeRouting.createRoute(normalizeRuntimeRouteInput(input));
   }
 
   public updateRuntimeRoute(
     id: string,
     input: RuntimeRouteInput
   ): RuntimeRoutingSummary {
-    return this.runtimeRouting.updateRoute(id, input);
+    return this.runtimeRouting.updateRoute(
+      id,
+      normalizeRuntimeRouteInput(input)
+    );
   }
 
   public deleteRuntimeRoute(id: string): RuntimeRoutingSummary {
@@ -1817,6 +1821,15 @@ function hasVerifiedBufferedRole(capabilities: readonly string[]): boolean {
   ].some((required) =>
     required.every((capability) => capabilities.includes(capability))
   );
+}
+
+function normalizeRuntimeRouteInput(
+  input: RuntimeRouteInput
+): NormalizedRuntimeRouteInput {
+  return {
+    ...input,
+    chatStreamingEnabled: input.chatStreamingEnabled ?? false
+  };
 }
 
 function selectChatHistory(newestFirst: AgentMessage[]): AgentMessage[] {

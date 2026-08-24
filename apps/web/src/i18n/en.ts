@@ -286,7 +286,7 @@ export const en = {
   "settings.streamingProfile": "STT: {stt} · Chat: {chat} · TTS: {tts}",
   "settings.streamingReadiness":
     "Streaming readiness — declared: {declared}; verified: {verified}; adapter: {adapter}; server transport: {transport}; browser client: {browser}.",
-  "settings.streamingReadinessLabel": "{role} streaming readiness",
+  "settings.streamingReadinessLabel": "{role} streaming readiness. {readiness}",
   "settings.streamingRoleStt": "STT",
   "settings.streamingRoleChat": "Chat",
   "settings.streamingRoleTts": "TTS",

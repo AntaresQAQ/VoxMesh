@@ -1,7 +1,7 @@
 import type {
   ModelDeploymentSummary,
+  NormalizedRuntimeRouteInput,
   ProviderConnectionSummary,
-  RuntimeRouteInput,
   RuntimeRouteSummary,
   StreamingRuntimeAvailability
 } from "@voxmesh/shared";
@@ -11,7 +11,7 @@ import { ComposedRouteAssignmentFields } from "./ComposedRouteAssignmentFields.j
 import { ModelSelect } from "./RouteFieldControls.js";
 
 export function RouteAssignmentFields(props: {
-  values: RuntimeRouteInput;
+  values: NormalizedRuntimeRouteInput;
   models: ModelDeploymentSummary[];
   connections: ProviderConnectionSummary[];
   routes: RuntimeRouteSummary[];

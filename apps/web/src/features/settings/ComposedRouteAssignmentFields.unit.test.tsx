@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type {
   ModelDeploymentSummary,
-  RuntimeRouteInput
+  NormalizedRuntimeRouteInput
 } from "@voxmesh/shared";
 
 import { renderWithProviders } from "../../test/render.js";
@@ -37,7 +37,7 @@ describe("ComposedRouteAssignmentFields", () => {
       "Applies streaming independently to STT, Chat, and TTS"
     );
     const chatReadiness = screen.getByRole("status", {
-      name: "Chat streaming readiness"
+      name: /Chat streaming readiness/
     });
     expect(screen.getByLabelText("Enable Chat streaming")).toHaveAttribute(
       "aria-describedby",
@@ -96,7 +96,7 @@ function createCallbacks() {
   };
 }
 
-function routeValues(): RuntimeRouteInput {
+function routeValues(): NormalizedRuntimeRouteInput {
   return {
     displayName: "Route",
     mode: "composed",

@@ -1,6 +1,9 @@
-import type { RuntimeRouteInput, RuntimeRouteSummary } from "@voxmesh/shared";
+import type {
+  NormalizedRuntimeRouteInput,
+  RuntimeRouteSummary
+} from "@voxmesh/shared";
 
-export const routeEditorDefaults: RuntimeRouteInput = {
+export const routeEditorDefaults: NormalizedRuntimeRouteInput = {
   displayName: "",
   mode: "composed",
   sttModelDeploymentId: null,
@@ -14,7 +17,9 @@ export const routeEditorDefaults: RuntimeRouteInput = {
   enabled: true
 };
 
-export function routeToInput(route: RuntimeRouteSummary): RuntimeRouteInput {
+export function routeToInput(
+  route: RuntimeRouteSummary
+): NormalizedRuntimeRouteInput {
   return {
     displayName: route.displayName,
     mode: route.mode,

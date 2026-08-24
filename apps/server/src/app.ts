@@ -40,8 +40,8 @@ import {
 } from "@voxmesh/shared";
 import type {
   ConversationRun,
-  RuntimeRouteInput,
-  RuntimeRouteRequest
+  NormalizedRuntimeRouteInput,
+  RuntimeRouteInput
 } from "@voxmesh/shared";
 import { VoxMeshStore } from "@voxmesh/storage";
 
@@ -935,8 +935,8 @@ export async function buildServer(
 }
 
 function normalizeRuntimeRouteRequest(
-  input: RuntimeRouteRequest
-): RuntimeRouteInput {
+  input: RuntimeRouteInput
+): NormalizedRuntimeRouteInput {
   return {
     ...input,
     chatStreamingEnabled: input.chatStreamingEnabled ?? false

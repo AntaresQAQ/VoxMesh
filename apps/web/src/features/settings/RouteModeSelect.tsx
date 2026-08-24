@@ -1,10 +1,10 @@
-import type { RuntimeRouteInput } from "@voxmesh/shared";
+import type { NormalizedRuntimeRouteInput } from "@voxmesh/shared";
 
 import { useI18n } from "../../i18n/i18n.js";
 
 export function RouteModeSelect(props: {
-  value: RuntimeRouteInput["mode"];
-  onChange: (mode: RuntimeRouteInput["mode"]) => void;
+  value: NormalizedRuntimeRouteInput["mode"];
+  onChange: (mode: NormalizedRuntimeRouteInput["mode"]) => void;
 }) {
   const { t } = useI18n();
   return (
@@ -13,7 +13,9 @@ export function RouteModeSelect(props: {
       <select
         value={props.value}
         onChange={(event) =>
-          props.onChange(event.target.value as RuntimeRouteInput["mode"])
+          props.onChange(
+            event.target.value as NormalizedRuntimeRouteInput["mode"]
+          )
         }
       >
         <option value="composed">{t("settings.voiceModeComposed")}</option>

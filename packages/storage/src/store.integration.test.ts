@@ -698,6 +698,28 @@ describe("VoxMeshStore", () => {
     );
   });
 
+  it("defaults omitted Chat streaming input to false at the storage boundary", () => {
+    store = new VoxMeshStore(":memory:");
+    const routing = store.createRuntimeRoute({
+      displayName: "Legacy Storage Client Route",
+      mode: "composed",
+      sttModelDeploymentId: "system-model-stt",
+      chatModelDeploymentId: "system-model-chat",
+      ttsModelDeploymentId: "system-model-tts",
+      nativeModelDeploymentId: null,
+      fallbackRouteId: null,
+      sttStreamingEnabled: false,
+      ttsStreamingEnabled: false,
+      enabled: true
+    });
+
+    expect(
+      routing.routes.find(
+        (route) => route.displayName === "Legacy Storage Client Route"
+      )?.chatStreamingEnabled
+    ).toBe(false);
+  });
+
   it("rejects streaming routes until the assigned model is verified", () => {
     store = new VoxMeshStore(":memory:");
     const activeStore = store;
