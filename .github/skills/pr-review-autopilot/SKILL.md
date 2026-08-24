@@ -75,8 +75,13 @@ tokens may return `403 Unauthorized`; on that exact failure, immediately fall
 back to authenticated `gh` commands:
 
 ```bash
-gh api --method POST \
-  repos/OWNER/REPO/pulls/PR/comments/COMMENT_ID/replies \
+gh api graphql \
+  -f query='mutation($thread:ID!,$body:String!){
+    addPullRequestReviewThreadReply(
+      input:{pullRequestReviewThreadId:$thread,body:$body}
+    ){comment{id}}
+  }' \
+  -f thread='PRRT_...' \
   -f body='Reply text'
 
 gh api graphql \
@@ -209,9 +214,11 @@ gh pr checks PR --repo OWNER/REPO --watch --interval 10
 
 HEAD_SHA=$(gh pr view PR --repo OWNER/REPO \
   --json headRefOid --jq .headRefOid)
+HEAD_BRANCH=$(gh pr view PR --repo OWNER/REPO \
+  --json headRefName --jq .headRefName)
 
 gh run list --repo OWNER/REPO \
-  --branch HEAD_BRANCH \
+  --branch "$HEAD_BRANCH" \
   --commit "$HEAD_SHA" \
   --limit 20 \
   --json databaseId,name,workflowName,status,conclusion,headSha \
