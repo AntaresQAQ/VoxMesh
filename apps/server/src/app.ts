@@ -38,7 +38,11 @@ import {
   SetupStatusSchema,
   VoiceResponseSchema
 } from "@voxmesh/shared";
-import type { ConversationRun } from "@voxmesh/shared";
+import type {
+  ConversationRun,
+  RuntimeRouteInput,
+  RuntimeRouteRequest
+} from "@voxmesh/shared";
 import { VoxMeshStore } from "@voxmesh/storage";
 
 import type { ServerConfig } from "./config.js";
@@ -556,7 +560,9 @@ export async function buildServer(
       }
     },
     async (request, reply) => {
-      const result = store.createRuntimeRoute(request.body);
+      const result = store.createRuntimeRoute(
+        normalizeRuntimeRouteRequest(request.body)
+      );
       return reply.code(201).send(result);
     }
   );
@@ -576,7 +582,11 @@ export async function buildServer(
         }
       }
     },
-    async (request) => store.updateRuntimeRoute(request.params.id, request.body)
+    async (request) =>
+      store.updateRuntimeRoute(
+        request.params.id,
+        normalizeRuntimeRouteRequest(request.body)
+      )
   );
 
   app.delete(
@@ -922,4 +932,13 @@ export async function buildServer(
   }
 
   return app;
+}
+
+function normalizeRuntimeRouteRequest(
+  input: RuntimeRouteRequest
+): RuntimeRouteInput {
+  return {
+    ...input,
+    chatStreamingEnabled: input.chatStreamingEnabled ?? false
+  };
 }

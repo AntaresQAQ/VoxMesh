@@ -28,7 +28,11 @@ export function StreamingReadiness(props: {
     value ? t("settings.available") : t("settings.unavailable");
 
   return (
-    <p className="muted routing-streaming-readiness">
+    <p
+      className="muted routing-streaming-readiness"
+      role="status"
+      aria-live="polite"
+    >
       {t("settings.streamingReadiness", {
         declared: state(
           model?.declaredCapabilities.includes("streaming") ?? false

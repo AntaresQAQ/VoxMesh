@@ -6,7 +6,7 @@ import type {
 } from "@voxmesh/shared";
 
 import { useI18n } from "../../i18n/i18n.js";
-import { Checkbox, ModelSelect } from "./RouteFieldControls.js";
+import { Checkbox, StreamingModelSelect } from "./RouteFieldControls.js";
 import { StreamingReadiness } from "./StreamingReadiness.js";
 
 export function ComposedRouteAssignmentFields(props: {
@@ -50,23 +50,29 @@ export function ComposedRouteAssignmentFields(props: {
         onChange={props.onFullChainStreamingChange}
       />
       <p className="muted">{t("settings.fullChainStreamingHint")}</p>
-      <ModelSelect
+      <StreamingModelSelect
         label={t("settings.sttTitle")}
         value={props.values.sttModelDeploymentId}
+        capability="transcription"
+        models={props.models}
         onChange={props.onSttModelChange}
-        models={withCapability(props.models, "transcription")}
+        onStreamingChange={props.onSttStreamingChange}
       />
-      <ModelSelect
+      <StreamingModelSelect
         label={t("dashboard.llm")}
         value={props.values.chatModelDeploymentId}
+        capability="tool-calling"
+        models={props.models}
         onChange={props.onChatModelChange}
-        models={withCapability(props.models, "tool-calling")}
+        onStreamingChange={props.onChatStreamingChange}
       />
-      <ModelSelect
+      <StreamingModelSelect
         label={t("settings.ttsTitle")}
         value={props.values.ttsModelDeploymentId}
+        capability="speech-synthesis"
+        models={props.models}
         onChange={props.onTtsModelChange}
-        models={withCapability(props.models, "speech-synthesis")}
+        onStreamingChange={props.onTtsStreamingChange}
       />
       <RoleStreamingControl
         label={t("settings.enableSttStreaming")}
@@ -118,17 +124,6 @@ function RoleStreamingControl(props: {
       />
       <StreamingReadiness {...props} />
     </>
-  );
-}
-
-function withCapability(
-  models: ModelDeploymentSummary[],
-  capability: "transcription" | "tool-calling" | "speech-synthesis"
-) {
-  return models.filter(
-    (model) =>
-      model.declaredCapabilities.includes(capability) &&
-      model.declaredCapabilities.includes("non-streaming")
   );
 }
 

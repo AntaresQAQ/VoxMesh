@@ -1463,6 +1463,11 @@ describe("VoxMeshStore", () => {
           endpoint TEXT NOT NULL,
           api_key TEXT,
           enabled INTEGER NOT NULL DEFAULT 1,
+          readiness_state TEXT NOT NULL DEFAULT 'unknown',
+          readiness_last_tested_at TEXT,
+          readiness_error_category TEXT,
+          readiness_error_message TEXT,
+          readiness_generation INTEGER NOT NULL DEFAULT 0,
           created_at TEXT NOT NULL,
           updated_at TEXT NOT NULL
         );
@@ -1492,9 +1497,28 @@ describe("VoxMeshStore", () => {
           stt_streaming_enabled INTEGER NOT NULL DEFAULT 0,
           tts_streaming_enabled INTEGER NOT NULL DEFAULT 0,
           enabled INTEGER NOT NULL DEFAULT 1,
+          readiness_state TEXT NOT NULL DEFAULT 'unknown',
+          readiness_last_tested_at TEXT,
+          readiness_error_category TEXT,
+          readiness_error_message TEXT,
+          readiness_generation INTEGER NOT NULL DEFAULT 0,
           created_at TEXT NOT NULL,
           updated_at TEXT NOT NULL
         );
+        CREATE TABLE schema_migrations (
+          id TEXT PRIMARY KEY,
+          applied_at TEXT NOT NULL
+        );
+        CREATE TABLE runtime_readiness_sequence (
+          id INTEGER PRIMARY KEY,
+          generation INTEGER NOT NULL
+        );
+        INSERT INTO schema_migrations (id, applied_at) VALUES (
+          '2026-08-22-provider-readiness-v1',
+          '2026-01-01T00:00:00.000Z'
+        );
+        INSERT INTO runtime_readiness_sequence (id, generation)
+        VALUES (1, 0);
         INSERT INTO provider_connections (
           id, provider_id, display_name, endpoint, api_key, enabled,
           created_at, updated_at
@@ -1510,8 +1534,21 @@ describe("VoxMeshStore", () => {
         ) VALUES (
           'legacy-streaming-model', 'legacy-streaming-connection',
           'Legacy Streaming Model', 'legacy', '',
-          '["text-input","text-output","tool-calling"]', '[]', '{}',
+          '["audio-input","audio-output","text-input","text-output","transcription","speech-synthesis","tool-calling"]',
+          '["audio-input","audio-output","text-input","text-output","transcription","speech-synthesis","tool-calling"]',
+          '{}',
           'legacy-fingerprint', 1, '2026-01-01T00:00:00.000Z',
+          '2026-01-01T00:00:00.000Z'
+        );
+        INSERT INTO model_deployments (
+          id, connection_id, display_name, model_name, api_version,
+          declared_capabilities, verified_capabilities, provider_options,
+          configuration_fingerprint, enabled, created_at, updated_at
+        ) VALUES (
+          'legacy-unreferenced-model', 'legacy-streaming-connection',
+          'Legacy Unreferenced Model', 'legacy-unused', '',
+          '["text-input","text-output","tool-calling"]', '[]', '{}',
+          'legacy-unused-fingerprint', 1, '2026-01-01T00:00:00.000Z',
           '2026-01-01T00:00:00.000Z'
         );
         INSERT INTO runtime_routes (
@@ -1519,11 +1556,14 @@ describe("VoxMeshStore", () => {
           chat_model_deployment_id, tts_model_deployment_id,
           native_model_deployment_id, fallback_route_id,
           stt_streaming_enabled, tts_streaming_enabled, enabled,
-          created_at, updated_at
+          readiness_state, readiness_last_tested_at,
+          readiness_error_category, readiness_error_message,
+          readiness_generation, created_at, updated_at
         ) VALUES (
           'legacy-streaming-route', 'Legacy Streaming Route', 'composed',
           'legacy-streaming-model', 'legacy-streaming-model',
           'legacy-streaming-model', NULL, NULL, 0, 0, 1,
+          'ready', '2026-01-01T00:00:00.000Z', NULL, NULL, 0,
           '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z'
         );
       `);
@@ -1535,12 +1575,29 @@ describe("VoxMeshStore", () => {
           .getRuntimeRoutingSummary()
           .routes.every((route) => route.chatStreamingEnabled === false)
       ).toBe(true);
+      const migratedSummary = store.getRuntimeRoutingSummary();
+      const legacyModel = migratedSummary.models.find(
+        (model) => model.id === "legacy-streaming-model"
+      );
+      expect(legacyModel?.declaredCapabilities).toContain("non-streaming");
+      expect(legacyModel?.verifiedCapabilities).toContain("non-streaming");
+      const unreferencedModel = migratedSummary.models.find(
+        (model) => model.id === "legacy-unreferenced-model"
+      );
+      expect(unreferencedModel?.declaredCapabilities).toContain(
+        "non-streaming"
+      );
+      expect(unreferencedModel?.verifiedCapabilities).not.toContain(
+        "non-streaming"
+      );
       expect(
-        store
-          .getRuntimeRoutingSummary()
-          .models.find((model) => model.id === "legacy-streaming-model")
-          ?.declaredCapabilities
-      ).toContain("non-streaming");
+        migratedSummary.routes.find(
+          (route) => route.id === "legacy-streaming-route"
+        )?.readiness.state
+      ).toBe("ready");
+      expect(
+        store.activateRuntimeRoute("legacy-streaming-route").activeRouteId
+      ).toBe("legacy-streaming-route");
       store.close();
       store = undefined;
 

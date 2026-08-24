@@ -80,9 +80,12 @@ STT, Chat, and TTS streaming switches are independent and default to disabled.
 The full-chain profile changes all three switches together but does not replace
 the independent controls, so all eight transport combinations remain
 representable. Native routes normalize all three switches to disabled.
+For rolling upgrades, route API requests that omit the newer Chat switch are
+normalized to `false`.
 
 A Composed route always requires declared `non-streaming` capability for every
-role because `/api/voice` remains buffered. A streaming role additionally
+role because `/api/voice` remains buffered. Activation requires that buffered
+capability to be verified for every role. A streaming role additionally
 requires declared `streaming` capability when saved and verified `streaming`
 capability when activated.
 
@@ -92,6 +95,13 @@ each enabled role must be registered. The current production composition
 registers none of those Phase 5 runtime surfaces, so streaming configurations
 can be saved but cannot be activated. VoxMesh reports the missing gate instead
 of silently downgrading the route to buffered execution.
+
+The full-chain migration marks every pre-Phase-5 deployment as declaring
+`non-streaming`, because those deployments could only run through buffered
+adapters. It carries that capability into verification only when the stored
+verified capabilities prove that at least one complete buffered role was
+previously exercised. Existing ready routes therefore remain activatable
+without inventing verification for untested deployments.
 
 ## Initialization
 
@@ -121,9 +131,11 @@ Model capabilities include:
 - non-streaming
 - streaming
 
-Mock model capabilities are verified immediately. Real-provider capabilities
-are declared at migration time and become verified only after the relevant
-connection test succeeds.
+Mock buffered capabilities are verified immediately. `streaming` is never
+verified by that default or by the buffered route test; it requires a separate
+streaming qualification step. Real-provider capabilities are declared at
+migration time and become verified only after the relevant qualification
+succeeds.
 
 Changing relevant provider configuration resets verified capabilities. This
 prevents a successful test for one endpoint, credential, or model from being
@@ -219,7 +231,7 @@ The AI Providers section provides routing management for:
 - model deployments and provider options
 - declared and verified capabilities
 - route assignments and activation
-- one-step route testing and activation for inactive routes
+- route testing followed by a separate activation check for inactive routes
 - inline editing directly beneath the selected connection, model, or route
 - explicit fallback
 - independent STT/Chat/TTS streaming switches and a full-chain profile
@@ -230,11 +242,13 @@ The AI Providers section provides routing management for:
 
 Destructive actions require an explicit second confirmation in the UI.
 
-An inactive route uses **Test & activate**. VoxMesh first verifies every
-assigned provider and updates model capabilities, then activates the route
-only when the test succeeds. A provider or configuration failure is shown
-directly and activation is not attempted. The active route retains a separate
-**Test route** action for health revalidation.
+An inactive route uses **Test & activate**. VoxMesh first runs the buffered
+provider test and updates the capabilities it exercised, then performs the
+separate activation checks. A streaming route can therefore pass its buffered
+test but still fail activation when streaming qualification or a runtime
+surface is unavailable. A provider or configuration failure is shown directly.
+The active route retains a separate **Test route** action for health
+revalidation.
 
 ## Failure Behavior
 

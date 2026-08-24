@@ -1361,34 +1361,41 @@ export class VoxMeshStore {
       );
       const models = this.database
         .prepare(
-          `SELECT DISTINCT m.id, m.declared_capabilities
-           FROM model_deployments m
-           JOIN runtime_routes r
-             ON m.id = r.stt_model_deployment_id
-             OR m.id = r.chat_model_deployment_id
-             OR m.id = r.tts_model_deployment_id
-             OR m.id = r.native_model_deployment_id`
+          `SELECT id, declared_capabilities, verified_capabilities
+           FROM model_deployments`
         )
-        .all() as Array<{ id: string; declared_capabilities: string }>;
+        .all() as Array<{
+        id: string;
+        declared_capabilities: string;
+        verified_capabilities: string;
+      }>;
       const update = this.database.prepare(
-        "UPDATE model_deployments SET declared_capabilities = ?, updated_at = ? WHERE id = ?"
+        `UPDATE model_deployments
+         SET declared_capabilities = ?, verified_capabilities = ?, updated_at = ?
+         WHERE id = ?`
       );
       const now = new Date().toISOString();
       for (const model of models) {
-        const capabilities = JSON.parse(model.declared_capabilities) as unknown;
-        if (
-          !Array.isArray(capabilities) ||
-          !capabilities.every((capability) => typeof capability === "string")
-        ) {
-          throw new Error("Stored model capabilities are invalid");
-        }
-        if (!capabilities.includes("non-streaming")) {
-          update.run(
-            JSON.stringify([...capabilities, "non-streaming"]),
-            now,
-            model.id
-          );
-        }
+        const declared = parseStoredCapabilityStrings(
+          model.declared_capabilities
+        );
+        const verified = parseStoredCapabilityStrings(
+          model.verified_capabilities
+        );
+        const nextDeclared = declared.includes("non-streaming")
+          ? declared
+          : [...declared, "non-streaming"];
+        const nextVerified =
+          hasVerifiedBufferedRole(verified) &&
+          !verified.includes("non-streaming")
+            ? [...verified, "non-streaming"]
+            : verified;
+        update.run(
+          JSON.stringify(nextDeclared),
+          JSON.stringify(nextVerified),
+          now,
+          model.id
+        );
       }
     });
     this.ensureColumn(
@@ -1769,6 +1776,34 @@ function isProcessAlive(processId: number): boolean {
       error.code === "EPERM"
     );
   }
+}
+
+function parseStoredCapabilityStrings(value: string): string[] {
+  const capabilities = JSON.parse(value) as unknown;
+  if (
+    !Array.isArray(capabilities) ||
+    !capabilities.every((capability) => typeof capability === "string")
+  ) {
+    throw new Error("Stored model capabilities are invalid");
+  }
+  return capabilities;
+}
+
+function hasVerifiedBufferedRole(capabilities: readonly string[]): boolean {
+  return [
+    ["audio-input", "text-output", "transcription"],
+    ["text-input", "text-output", "tool-calling"],
+    ["text-input", "audio-output", "speech-synthesis"],
+    [
+      "audio-input",
+      "audio-output",
+      "text-output",
+      "tool-calling",
+      "native-multimodal"
+    ]
+  ].some((required) =>
+    required.every((capability) => capabilities.includes(capability))
+  );
 }
 
 function selectChatHistory(newestFirst: AgentMessage[]): AgentMessage[] {

@@ -385,6 +385,68 @@ describe("runtime routing management", () => {
     });
   });
 
+  it("clears a role switch when selecting a buffered-only model", async () => {
+    const user = userEvent.setup();
+    const execute = vi.fn(
+      async (_operation: RuntimeRoutingOperation): Promise<unknown> => undefined
+    );
+    const streamingChat = {
+      ...routingWithRoute,
+      models: [
+        ...routingWithRoute.models.map((entry) =>
+          entry.id === "model-chat"
+            ? {
+                ...entry,
+                declaredCapabilities: [
+                  ...entry.declaredCapabilities,
+                  "streaming" as const
+                ]
+              }
+            : entry
+        ),
+        model("model-chat-buffered", "Buffered Chat", [
+          "text-input",
+          "text-output",
+          "tool-calling",
+          "non-streaming"
+        ])
+      ],
+      routes: routingWithRoute.routes.map((route) => ({
+        ...route,
+        chatStreamingEnabled: true
+      }))
+    };
+    renderWithProviders(
+      <RouteManagement
+        routing={streamingChat}
+        pending={false}
+        execute={execute}
+      />
+    );
+    const item = screen.getByText("Route A").closest("li");
+    if (!item) throw new Error("Expected the route list item");
+
+    await user.click(within(item).getByRole("button", { name: "Edit" }));
+    expect(within(item).getByLabelText("Enable Chat streaming")).toBeChecked();
+    await user.selectOptions(
+      within(item).getByLabelText("LLM"),
+      "model-chat-buffered"
+    );
+    expect(
+      within(item).getByLabelText("Enable Chat streaming")
+    ).not.toBeChecked();
+    await user.click(
+      within(item).getByRole("button", { name: "Save changes" })
+    );
+
+    const operation = execute.mock.calls[0]?.[0];
+    expect(operation?.type).toBe("update-route");
+    if (operation?.type !== "update-route") {
+      throw new Error("Expected an update-route operation");
+    }
+    expect(operation.input.chatStreamingEnabled).toBe(false);
+  });
+
   it("requires confirmation before deleting a custom connection", async () => {
     const user = userEvent.setup();
     const execute = vi.fn(

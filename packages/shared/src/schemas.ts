@@ -570,7 +570,7 @@ export const RuntimeRouteInputSchema = Type.Object({
   nativeModelDeploymentId: Type.Union([Type.String(), Type.Null()]),
   fallbackRouteId: Type.Union([Type.String(), Type.Null()]),
   sttStreamingEnabled: Type.Boolean(),
-  chatStreamingEnabled: Type.Boolean(),
+  chatStreamingEnabled: Type.Optional(Type.Boolean({ default: false })),
   ttsStreamingEnabled: Type.Boolean(),
   enabled: Type.Boolean()
 });
@@ -634,7 +634,13 @@ export type ProviderConnectionInput = Static<
   typeof ProviderConnectionInputSchema
 >;
 export type ModelDeploymentInput = Static<typeof ModelDeploymentInputSchema>;
-export type RuntimeRouteInput = Static<typeof RuntimeRouteInputSchema>;
+export type RuntimeRouteRequest = Static<typeof RuntimeRouteInputSchema>;
+export type RuntimeRouteInput = Omit<
+  RuntimeRouteRequest,
+  "chatStreamingEnabled"
+> & {
+  chatStreamingEnabled: boolean;
+};
 export type ActiveRuntimeRouteUpdate = Static<
   typeof ActiveRuntimeRouteUpdateSchema
 >;

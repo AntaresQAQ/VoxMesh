@@ -27,6 +27,37 @@ export function ModelSelect(props: {
   );
 }
 
+export function StreamingModelSelect(props: {
+  label: string;
+  value: string | null;
+  capability: "transcription" | "tool-calling" | "speech-synthesis";
+  models: ModelDeploymentSummary[];
+  onChange: (value: string | null) => void;
+  onStreamingChange: (value: boolean) => void;
+}) {
+  return (
+    <ModelSelect
+      label={props.label}
+      value={props.value}
+      models={props.models.filter(
+        (model) =>
+          model.declaredCapabilities.includes(props.capability) &&
+          model.declaredCapabilities.includes("non-streaming")
+      )}
+      onChange={(modelId) => {
+        props.onChange(modelId);
+        if (
+          !props.models
+            .find((model) => model.id === modelId)
+            ?.declaredCapabilities.includes("streaming")
+        ) {
+          props.onStreamingChange(false);
+        }
+      }}
+    />
+  );
+}
+
 export function Checkbox(props: {
   label: string;
   checked: boolean;

@@ -126,7 +126,6 @@ describe("server API", () => {
         nativeModelDeploymentId: null,
         fallbackRouteId: null,
         sttStreamingEnabled: false,
-        chatStreamingEnabled: false,
         ttsStreamingEnabled: false,
         enabled: true
       }
@@ -145,6 +144,29 @@ describe("server API", () => {
       ttsProviderIds: []
     });
     const routeId = createdRouteSummary?.id;
+    const updatedRoute = await app.inject({
+      method: "PUT",
+      url: `/api/runtime-routing/routes/${routeId}`,
+      headers: { cookie },
+      payload: {
+        displayName: "Custom Streaming Composed",
+        mode: "composed",
+        sttModelDeploymentId: modelId,
+        chatModelDeploymentId: "system-model-chat",
+        ttsModelDeploymentId: "system-model-tts",
+        nativeModelDeploymentId: null,
+        fallbackRouteId: null,
+        sttStreamingEnabled: false,
+        ttsStreamingEnabled: false,
+        enabled: true
+      }
+    });
+    expect(updatedRoute.statusCode).toBe(200);
+    expect(
+      updatedRoute
+        .json<RuntimeRoutingSummary>()
+        .routes.find((entry) => entry.id === routeId)?.chatStreamingEnabled
+    ).toBe(false);
     const routeTest = await app.inject({
       method: "POST",
       url: `/api/runtime-routing/routes/${routeId}/test`,

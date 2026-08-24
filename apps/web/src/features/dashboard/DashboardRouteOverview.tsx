@@ -83,8 +83,7 @@ export function DashboardRouteOverview({
               "audio-output",
               "text-output",
               "tool-calling",
-              "native-multimodal",
-              "non-streaming"
+              "native-multimodal"
             ]
           }
         ];
