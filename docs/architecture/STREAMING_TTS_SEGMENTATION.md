@@ -43,12 +43,13 @@ Default limits come from `VOICE_STREAM_LIMITS`:
 - minimum preferred segment: 24 Unicode code points
 - maximum segment: 240 Unicode code points
 - maximum wait: 400 ms
-- maximum total assistant text: 32,000 Unicode code points
+- maximum total assistant text: 32,000 UTF-16 code units
 
-The implementation counts Unicode code points rather than UTF-16 code units,
-so emoji and supplementary characters are never split. A trailing high
-surrogate is retained across provider deltas until its low surrogate arrives;
-an incomplete or invalid pair fails explicitly.
+Segment boundaries count Unicode code points so emoji and supplementary
+characters are never split. The total assistant limit uses UTF-16 code units,
+matching TypeBox `maxLength` and Streaming Agent `string.length` enforcement.
+A trailing high surrogate is retained across provider deltas until its low
+surrogate arrives; an incomplete or invalid pair fails explicitly.
 
 Strong punctuation includes:
 

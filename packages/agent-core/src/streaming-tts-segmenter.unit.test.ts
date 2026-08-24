@@ -208,6 +208,13 @@ describe("StreamingTtsSegmenter", () => {
     await expect(
       segmenter.accept(textDelta("x".repeat(32_001)))
     ).rejects.toMatchObject({ code: "LIMIT_EXCEEDED" });
+    const utf16Limit = createSegmenter({
+      minCharacters: 240,
+      maxCharacters: 240
+    });
+    await expect(
+      utf16Limit.accept(textDelta("😀".repeat(16_001)))
+    ).rejects.toMatchObject({ code: "LIMIT_EXCEEDED" });
     const invalidUnicode = createSegmenter();
     await invalidUnicode.accept(textDelta("\ud83d"));
     await expect(invalidUnicode.finish("\ud83d")).rejects.toMatchObject({

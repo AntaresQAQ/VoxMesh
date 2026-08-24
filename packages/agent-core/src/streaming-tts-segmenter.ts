@@ -61,7 +61,7 @@ export class StreamingTtsSegmenter implements AsyncIterable<StreamingTtsSegment>
   private operation: Promise<void> = Promise.resolve();
   private pending = "";
   private readonly acceptedParts: string[] = [];
-  private acceptedCodePoints = 0;
+  private acceptedUtf16Units = 0;
   private deferredHighSurrogate = "";
   private nextIndex = 0;
   private timer: { handle: unknown } | null = null;
@@ -147,7 +147,7 @@ export class StreamingTtsSegmenter implements AsyncIterable<StreamingTtsSegment>
     this.pending = "";
     this.deferredHighSurrogate = "";
     this.acceptedParts.length = 0;
-    this.acceptedCodePoints = 0;
+    this.acceptedUtf16Units = 0;
     this.detachAbort();
     this.segments.fail(
       new BoundedQueueError("CANCELLED", "Streaming TTS segmentation cancelled")
@@ -162,8 +162,8 @@ export class StreamingTtsSegmenter implements AsyncIterable<StreamingTtsSegment>
     if (text.length === 0) return;
     const normalized = normalizeDelta(text, this.deferredHighSurrogate);
     this.deferredHighSurrogate = normalized.deferredHighSurrogate;
-    this.acceptedCodePoints += normalized.codePoints;
-    if (this.acceptedCodePoints > VOICE_STREAM_LIMITS.maxAssistantCharacters) {
+    this.acceptedUtf16Units += text.length;
+    if (this.acceptedUtf16Units > VOICE_STREAM_LIMITS.maxAssistantCharacters) {
       throw new StreamingTtsSegmenterError(
         "LIMIT_EXCEEDED",
         "Speakable streaming text exceeded its limit"
@@ -283,7 +283,7 @@ export class StreamingTtsSegmenter implements AsyncIterable<StreamingTtsSegment>
     this.pending = "";
     this.deferredHighSurrogate = "";
     this.acceptedParts.length = 0;
-    this.acceptedCodePoints = 0;
+    this.acceptedUtf16Units = 0;
     this.detachAbort();
     this.segments.fail(error);
   }
@@ -357,10 +357,8 @@ function normalizeDelta(
 ): {
   stableText: string;
   deferredHighSurrogate: string;
-  codePoints: number;
 } {
   const stable: string[] = [];
-  let codePoints = 0;
   let index = 0;
   if (deferredHighSurrogate.length > 0) {
     const first = text.charCodeAt(0);
@@ -371,7 +369,6 @@ function normalizeDelta(
       );
     }
     stable.push(deferredHighSurrogate, text[0] ?? "");
-    codePoints += 1;
     index = 1;
     deferredHighSurrogate = "";
   }
@@ -391,7 +388,6 @@ function normalizeDelta(
         );
       }
       stable.push(text.slice(index, index + 2));
-      codePoints += 1;
       index += 2;
       continue;
     }
@@ -402,13 +398,11 @@ function normalizeDelta(
       );
     }
     stable.push(text[index] ?? "");
-    codePoints += 1;
     index += 1;
   }
   return {
     stableText: stable.join(""),
-    deferredHighSurrogate,
-    codePoints
+    deferredHighSurrogate
   };
 }
 

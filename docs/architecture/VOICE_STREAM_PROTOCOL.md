@@ -141,7 +141,7 @@ Important initial limits include:
 - 60 second capture
 - 120 second total session
 - 8,000 character final transcript
-- 32,000 character final assistant response
+- 32,000 UTF-16-code-unit final assistant response
 - 32 KiB fragmented tool arguments per call
 - three tool calls
 
