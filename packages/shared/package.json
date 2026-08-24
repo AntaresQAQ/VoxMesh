@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./bounded-async-queue": "./src/bounded-async-queue.ts",
     "./event-stream": "./src/event-stream.ts",
     "./voice-stream": "./src/voice-stream.ts"
   },
