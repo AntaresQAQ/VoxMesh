@@ -279,6 +279,10 @@ export const zhCN = {
   "settings.streamingProfile": "STT：{stt} · Chat：{chat} · TTS：{tts}",
   "settings.streamingReadiness":
     "流式就绪状态 — 已声明：{declared}；已验证：{verified}；适配器：{adapter}；服务端传输：{transport}；浏览器客户端：{browser}。",
+  "settings.streamingReadinessLabel": "{role} 流式就绪状态",
+  "settings.streamingRoleStt": "STT",
+  "settings.streamingRoleChat": "Chat",
+  "settings.streamingRoleTts": "TTS",
   "settings.available": "可用",
   "settings.unavailable": "不可用",
   "settings.languageTitle": "显示语言",

@@ -117,6 +117,7 @@ function renderReadiness(input: {
       models={input.models}
       connections={input.connections}
       availability={input.availability}
+      roleLabel="Chat"
     />
   );
 }

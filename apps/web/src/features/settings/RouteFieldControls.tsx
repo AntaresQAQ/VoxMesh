@@ -62,6 +62,7 @@ export function Checkbox(props: {
   label: string;
   checked: boolean;
   disabled?: boolean;
+  describedBy?: string;
   onChange: (value: boolean) => void;
 }) {
   return (
@@ -70,9 +71,21 @@ export function Checkbox(props: {
         type="checkbox"
         checked={props.checked}
         disabled={props.disabled}
+        aria-describedby={props.describedBy}
         onChange={(event) => props.onChange(event.target.checked)}
       />
       {props.label}
     </label>
+  );
+}
+
+export function supportsStreaming(
+  models: ModelDeploymentSummary[],
+  modelId: string | null
+): boolean {
+  return (
+    models
+      .find((model) => model.id === modelId)
+      ?.declaredCapabilities.includes("streaming") ?? false
   );
 }

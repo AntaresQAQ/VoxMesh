@@ -757,6 +757,75 @@ describe("VoxMeshStore", () => {
     );
   });
 
+  it("rejects buffered provider resolution after compatibility is removed", () => {
+    store = new VoxMeshStore(":memory:");
+    let routing = store.createRuntimeConnection({
+      providerId: "mock",
+      displayName: "Buffered Compatibility",
+      endpoint: "",
+      enabled: true
+    });
+    const connection = routing.connections.find(
+      (entry) => entry.displayName === "Buffered Compatibility"
+    );
+    routing = store.createRuntimeModel({
+      connectionId: connection?.id ?? "",
+      displayName: "Buffered Multi-role",
+      modelName: "buffered-multi-role",
+      apiVersion: "",
+      providerOptions: {},
+      declaredCapabilities: [
+        "audio-input",
+        "audio-output",
+        "text-input",
+        "text-output",
+        "transcription",
+        "speech-synthesis",
+        "tool-calling",
+        "non-streaming"
+      ],
+      enabled: true
+    });
+    const model = routing.models.find(
+      (entry) => entry.displayName === "Buffered Multi-role"
+    );
+    routing = store.createRuntimeRoute({
+      displayName: "Buffered Compatibility Route",
+      mode: "composed",
+      sttModelDeploymentId: model?.id ?? null,
+      chatModelDeploymentId: model?.id ?? null,
+      ttsModelDeploymentId: model?.id ?? null,
+      nativeModelDeploymentId: null,
+      fallbackRouteId: null,
+      sttStreamingEnabled: false,
+      chatStreamingEnabled: false,
+      ttsStreamingEnabled: false,
+      enabled: true
+    });
+    const route = routing.routes.find(
+      (entry) => entry.displayName === "Buffered Compatibility Route"
+    );
+    store.updateRuntimeModel(model?.id ?? "", {
+      connectionId: connection?.id ?? "",
+      displayName: "Buffered Multi-role",
+      modelName: "buffered-multi-role",
+      apiVersion: "",
+      providerOptions: {},
+      declaredCapabilities:
+        model?.declaredCapabilities.filter(
+          (capability) => capability !== "non-streaming"
+        ) ?? [],
+      enabled: true
+    });
+
+    expect(() => store?.getRuntimeLlmConfiguration(route?.id)).toThrow(
+      "missing declared capabilities: non-streaming"
+    );
+    expect(() => store?.getRuntimeSpeechConfiguration(route?.id)).toThrow(
+      "missing declared capabilities: non-streaming"
+    );
+  });
+
   it("gates Chat streaming activation on transport, browser, and adapter availability", () => {
     const directory = mkdtempSync(join(tmpdir(), "voxmesh-streaming-route-"));
     const databasePath = join(directory, "voxmesh.sqlite");
@@ -1534,7 +1603,7 @@ describe("VoxMeshStore", () => {
         ) VALUES (
           'legacy-streaming-model', 'legacy-streaming-connection',
           'Legacy Streaming Model', 'legacy', '',
-          '["audio-input","audio-output","text-input","text-output","transcription","speech-synthesis","tool-calling"]',
+          '["audio-input","audio-output","text-input","text-output","transcription","speech-synthesis","tool-calling","streaming"]',
           '["audio-input","audio-output","text-input","text-output","transcription","speech-synthesis","tool-calling","streaming"]',
           '{}',
           'legacy-fingerprint', 1, '2026-01-01T00:00:00.000Z',
@@ -1587,6 +1656,22 @@ describe("VoxMeshStore", () => {
           readiness_error_category, readiness_error_message,
           readiness_generation, created_at, updated_at
         ) VALUES (
+          'legacy-composed-streaming-intent',
+          'Legacy Composed Streaming Intent', 'composed',
+          'legacy-streaming-model', 'legacy-streaming-model',
+          'legacy-streaming-model', NULL, NULL, 1, 1, 1,
+          'unknown', NULL, NULL, NULL, 0,
+          '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z'
+        );
+        INSERT INTO runtime_routes (
+          id, display_name, mode, stt_model_deployment_id,
+          chat_model_deployment_id, tts_model_deployment_id,
+          native_model_deployment_id, fallback_route_id,
+          stt_streaming_enabled, tts_streaming_enabled, enabled,
+          readiness_state, readiness_last_tested_at,
+          readiness_error_category, readiness_error_message,
+          readiness_generation, created_at, updated_at
+        ) VALUES (
           'legacy-native-route', 'Legacy Native Route', 'native-multimodal',
           NULL, NULL, NULL, 'legacy-native-model', NULL, 1, 1, 1,
           'ready', '2026-01-01T00:00:00.000Z', NULL, NULL, 0,
@@ -1622,6 +1707,15 @@ describe("VoxMeshStore", () => {
           (route) => route.id === "legacy-streaming-route"
         )?.readiness.state
       ).toBe("ready");
+      expect(
+        migratedSummary.routes.find(
+          (route) => route.id === "legacy-composed-streaming-intent"
+        )
+      ).toMatchObject({
+        sttStreamingEnabled: true,
+        chatStreamingEnabled: false,
+        ttsStreamingEnabled: true
+      });
       expect(
         store.activateRuntimeRoute("legacy-streaming-route").activeRouteId
       ).toBe("legacy-streaming-route");

@@ -12,6 +12,8 @@ export function StreamingReadiness(props: {
   models: ModelDeploymentSummary[];
   connections: ProviderConnectionSummary[];
   availability: StreamingRuntimeAvailability | undefined;
+  id?: string;
+  roleLabel?: string;
 }) {
   const { t } = useI18n();
   const model = props.models.find((entry) => entry.id === props.modelId);
@@ -30,8 +32,16 @@ export function StreamingReadiness(props: {
   return (
     <p
       className="muted routing-streaming-readiness"
+      id={props.id}
       role="status"
       aria-live="polite"
+      aria-label={
+        props.roleLabel
+          ? t("settings.streamingReadinessLabel", {
+              role: props.roleLabel
+            })
+          : undefined
+      }
     >
       {t("settings.streamingReadiness", {
         declared: state(

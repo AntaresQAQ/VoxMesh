@@ -702,7 +702,7 @@ export class RuntimeRoutingStore {
     if (!modelId) throw badRequest("Composed route requires a Chat model");
     const model = this.requireModelCapabilities(
       modelId,
-      ["text-input", "text-output", "tool-calling"],
+      ["text-input", "text-output", "tool-calling", "non-streaming"],
       false
     );
     const connection = this.getConnection(model.connection_id);
@@ -756,12 +756,12 @@ export class RuntimeRoutingStore {
     }
     const stt = this.requireModelCapabilities(
       route.stt_model_deployment_id,
-      ["audio-input", "text-output", "transcription"],
+      ["audio-input", "text-output", "transcription", "non-streaming"],
       false
     );
     const tts = this.requireModelCapabilities(
       route.tts_model_deployment_id,
-      ["text-input", "audio-output", "speech-synthesis"],
+      ["text-input", "audio-output", "speech-synthesis", "non-streaming"],
       false
     );
     const sttConnection = this.getConnection(stt.connection_id);

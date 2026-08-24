@@ -62,9 +62,18 @@ describe("RouteFieldControls", () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     const view = renderWithProviders(
-      <Checkbox label="Enable streaming" checked={false} onChange={onChange} />
+      <Checkbox
+        label="Enable streaming"
+        checked={false}
+        describedBy="streaming-help"
+        onChange={onChange}
+      />
     );
 
+    expect(screen.getByLabelText("Enable streaming")).toHaveAttribute(
+      "aria-describedby",
+      "streaming-help"
+    );
     await user.click(screen.getByLabelText("Enable streaming"));
     expect(onChange).toHaveBeenCalledWith(true);
 

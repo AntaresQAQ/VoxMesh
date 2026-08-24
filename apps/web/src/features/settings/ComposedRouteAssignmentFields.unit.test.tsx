@@ -30,6 +30,19 @@ describe("ComposedRouteAssignmentFields", () => {
     expect(screen.getByLabelText("Enable STT streaming")).toBeEnabled();
     expect(screen.getByLabelText("Enable Chat streaming")).toBeDisabled();
     expect(screen.getByLabelText("Enable TTS streaming")).toBeEnabled();
+    const profile = screen.getByLabelText("Enable full-chain streaming");
+    const hintId = profile.getAttribute("aria-describedby");
+    expect(hintId).not.toBeNull();
+    expect(document.getElementById(hintId ?? "")).toHaveTextContent(
+      "Applies streaming independently to STT, Chat, and TTS"
+    );
+    const chatReadiness = screen.getByRole("status", {
+      name: "Chat streaming readiness"
+    });
+    expect(screen.getByLabelText("Enable Chat streaming")).toHaveAttribute(
+      "aria-describedby",
+      chatReadiness.id
+    );
   });
 
   it("applies the profile and independent role callbacks", async () => {

@@ -235,14 +235,15 @@ Phase 5 PR 4 implementation is documented in
 - multi-agent, multi-device, and complex approval workflows
 - local/offline AI and mobile applications
 
-Streaming intent is already represented independently for STT and TTS in
-Runtime Routing. Until the transport and assigned adapters are implemented and
-verified, activation must continue to reject routes that request streaming.
+Streaming intent is represented independently for STT, Chat, and TTS in
+Runtime Routing, with a full-chain profile for all three. Until the transport,
+browser client, and assigned adapters are implemented and verified, activation
+must continue to reject routes that request streaming.
 
 ### Next execution order
 
-1. Implement Phase 5 capability-gated full-chain Streaming STT/Chat LLM/TTS,
-   beginning with the separately authorized contracts PR.
+1. Continue Phase 5 with the streaming coordinator, WebSocket transport,
+   browser AudioWorklet, provider adapters, qualification, and acceptance.
 2. Implement Phase 6 cross-platform audio devices.
 3. Implement Phase 7 offline wake-word detection.
 4. Implement Phase 8 generic third-party MCP and the full MCP Console.
