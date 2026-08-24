@@ -651,6 +651,7 @@ describe("VoxMeshStore", () => {
         "audio-input",
         "text-output",
         "transcription",
+        "non-streaming",
         "streaming"
       ],
       enabled: true
@@ -670,6 +671,7 @@ describe("VoxMeshStore", () => {
       nativeModelDeploymentId: null,
       fallbackRouteId: null,
       sttStreamingEnabled: false,
+      chatStreamingEnabled: false,
       ttsStreamingEnabled: false,
       enabled: true
     });
@@ -677,6 +679,7 @@ describe("VoxMeshStore", () => {
       (entry) => entry.displayName === "Streaming Composed"
     );
     expect(route?.sttStreamingEnabled).toBe(false);
+    expect(route?.chatStreamingEnabled).toBe(false);
     expect(route?.ttsStreamingEnabled).toBe(false);
 
     activeStore.activateRuntimeRoute(route?.id ?? "");
@@ -718,6 +721,7 @@ describe("VoxMeshStore", () => {
         "audio-input",
         "text-output",
         "transcription",
+        "non-streaming",
         "streaming"
       ],
       enabled: true
@@ -735,6 +739,7 @@ describe("VoxMeshStore", () => {
       nativeModelDeploymentId: null,
       fallbackRouteId: null,
       sttStreamingEnabled: true,
+      chatStreamingEnabled: false,
       ttsStreamingEnabled: false,
       enabled: true
     });
@@ -742,14 +747,114 @@ describe("VoxMeshStore", () => {
       (entry) => entry.displayName === "Unverified Streaming Route"
     );
     expect(() => activeStore.activateRuntimeRoute(route?.id ?? "")).toThrow(
-      "Streaming routes cannot be activated"
+      "missing verified capabilities: audio-input"
     );
     activeStore.markRuntimeRouteVerified(
       activeStore.captureRuntimeRouteVerification(route?.id ?? "")
     );
     expect(() => activeStore.activateRuntimeRoute(route?.id ?? "")).toThrow(
-      "Streaming routes cannot be activated"
+      "requires verified streaming capability"
     );
+  });
+
+  it("gates Chat streaming activation on transport, browser, and adapter availability", () => {
+    const directory = mkdtempSync(join(tmpdir(), "voxmesh-streaming-route-"));
+    const databasePath = join(directory, "voxmesh.sqlite");
+    try {
+      store = new VoxMeshStore(databasePath);
+      let routing = store.createRuntimeModel({
+        connectionId: "system-connection-chat",
+        displayName: "Streaming Mock Chat",
+        modelName: "mock-streaming-chat",
+        apiVersion: "",
+        providerOptions: {},
+        declaredCapabilities: [
+          "text-input",
+          "text-output",
+          "tool-calling",
+          "non-streaming",
+          "streaming"
+        ],
+        enabled: true
+      });
+      const model = routing.models.find(
+        (entry) => entry.displayName === "Streaming Mock Chat"
+      );
+      routing = store.createRuntimeRoute({
+        displayName: "Chat Streaming Route",
+        mode: "composed",
+        sttModelDeploymentId: "system-model-stt",
+        chatModelDeploymentId: model?.id ?? null,
+        ttsModelDeploymentId: "system-model-tts",
+        nativeModelDeploymentId: null,
+        fallbackRouteId: null,
+        sttStreamingEnabled: false,
+        chatStreamingEnabled: true,
+        ttsStreamingEnabled: false,
+        enabled: true
+      });
+      const routeId =
+        routing.routes.find(
+          (entry) => entry.displayName === "Chat Streaming Route"
+        )?.id ?? "";
+      const snapshot = store.captureRuntimeRouteVerification(routeId);
+      store.updateRuntimeRoute(routeId, {
+        ...routeInput(store.getRuntimeRoute(routeId)),
+        chatStreamingEnabled: false
+      });
+      expect(() => store?.markRuntimeRouteVerified(snapshot)).toThrow(
+        "configuration changed during testing"
+      );
+      store.updateRuntimeRoute(routeId, {
+        ...routeInput(store.getRuntimeRoute(routeId)),
+        chatStreamingEnabled: true
+      });
+      store.close();
+      store = undefined;
+
+      const database = new Database(databasePath);
+      database
+        .prepare(
+          "UPDATE model_deployments SET verified_capabilities = declared_capabilities WHERE id = ?"
+        )
+        .run(model?.id ?? "");
+      database.close();
+
+      store = new VoxMeshStore(databasePath);
+      expect(() => store?.activateRuntimeRoute(routeId)).toThrow(
+        "Streaming voice transport is unavailable"
+      );
+      store.close();
+      store = new VoxMeshStore(databasePath, {
+        transportAvailable: true,
+        browserClientAvailable: true,
+        sttProviderIds: [],
+        chatProviderIds: [],
+        ttsProviderIds: []
+      });
+      expect(() => store?.activateRuntimeRoute(routeId)).toThrow(
+        "Chat streaming adapter is unavailable for provider mock"
+      );
+      store.close();
+      store = new VoxMeshStore(databasePath, {
+        transportAvailable: true,
+        browserClientAvailable: true,
+        sttProviderIds: [],
+        chatProviderIds: ["mock"],
+        ttsProviderIds: []
+      });
+      expect(store.activateRuntimeRoute(routeId).activeRouteId).toBe(routeId);
+      expect(() =>
+        store?.updateRuntimeRoute(routeId, {
+          ...routeInput(store.getRuntimeRoute(routeId)),
+          chatStreamingEnabled: false
+        })
+      ).toThrow("Active runtime route cannot be changed");
+    } finally {
+      store?.close();
+      store = undefined;
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it("protects active routing dependencies from runtime changes", () => {
@@ -828,13 +933,19 @@ describe("VoxMeshStore", () => {
       ttsModelDeploymentId: null,
       nativeModelDeploymentId: "system-model-native",
       fallbackRouteId: "system-route-composed",
-      sttStreamingEnabled: false,
-      ttsStreamingEnabled: false,
+      sttStreamingEnabled: true,
+      chatStreamingEnabled: true,
+      ttsStreamingEnabled: true,
       enabled: true
     });
     const native = routing.routes.find(
       (route) => route.displayName === "Native With Fallback"
     );
+    expect(native).toMatchObject({
+      sttStreamingEnabled: false,
+      chatStreamingEnabled: false,
+      ttsStreamingEnabled: false
+    });
     store.activateRuntimeRoute(native?.id ?? "");
     routing = store.getRuntimeRoutingSummary();
     const fallback = routing.routes.find(
@@ -885,6 +996,7 @@ describe("VoxMeshStore", () => {
       nativeModelDeploymentId: null,
       fallbackRouteId: null,
       sttStreamingEnabled: false,
+      chatStreamingEnabled: false,
       ttsStreamingEnabled: false,
       enabled: true
     });
@@ -900,6 +1012,7 @@ describe("VoxMeshStore", () => {
       nativeModelDeploymentId: "system-model-native",
       fallbackRouteId: fallback?.id ?? null,
       sttStreamingEnabled: false,
+      chatStreamingEnabled: false,
       ttsStreamingEnabled: false,
       enabled: true
     });
@@ -962,6 +1075,7 @@ describe("VoxMeshStore", () => {
       nativeModelDeploymentId: null,
       fallbackRouteId: null,
       sttStreamingEnabled: false,
+      chatStreamingEnabled: false,
       ttsStreamingEnabled: false,
       enabled: true
     });
@@ -1002,6 +1116,7 @@ describe("VoxMeshStore", () => {
       nativeModelDeploymentId: null,
       fallbackRouteId: null,
       sttStreamingEnabled: false,
+      chatStreamingEnabled: false,
       ttsStreamingEnabled: false,
       enabled: true
     });
@@ -1036,6 +1151,7 @@ describe("VoxMeshStore", () => {
       nativeModelDeploymentId: null,
       fallbackRouteId: null,
       sttStreamingEnabled: false,
+      chatStreamingEnabled: false,
       ttsStreamingEnabled: false,
       enabled: true
     });
@@ -1189,6 +1305,7 @@ describe("VoxMeshStore", () => {
       nativeModelDeploymentId: null,
       fallbackRouteId: null,
       sttStreamingEnabled: false,
+      chatStreamingEnabled: false,
       ttsStreamingEnabled: false,
       enabled: true
     });
@@ -1314,6 +1431,7 @@ describe("VoxMeshStore", () => {
         lastTestedAt: null,
         lastError: null
       });
+
       store.close();
       store = undefined;
 
@@ -1325,6 +1443,121 @@ describe("VoxMeshStore", () => {
         .get() as { id: string } | undefined;
       migrated.close();
       expect(migration?.id).toBe("2026-08-22-provider-readiness-v1");
+    } finally {
+      store?.close();
+      store = undefined;
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("migrates full-chain streaming route controls with safe defaults", () => {
+    const directory = mkdtempSync(join(tmpdir(), "voxmesh-streaming-migrate-"));
+    const databasePath = join(directory, "voxmesh.sqlite");
+    try {
+      const database = new Database(databasePath);
+      database.exec(`
+        CREATE TABLE provider_connections (
+          id TEXT PRIMARY KEY,
+          provider_id TEXT NOT NULL,
+          display_name TEXT NOT NULL,
+          endpoint TEXT NOT NULL,
+          api_key TEXT,
+          enabled INTEGER NOT NULL DEFAULT 1,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE TABLE model_deployments (
+          id TEXT PRIMARY KEY,
+          connection_id TEXT NOT NULL,
+          display_name TEXT NOT NULL,
+          model_name TEXT NOT NULL,
+          api_version TEXT NOT NULL,
+          declared_capabilities TEXT NOT NULL,
+          verified_capabilities TEXT NOT NULL,
+          provider_options TEXT NOT NULL,
+          configuration_fingerprint TEXT NOT NULL,
+          enabled INTEGER NOT NULL DEFAULT 1,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE TABLE runtime_routes (
+          id TEXT PRIMARY KEY,
+          display_name TEXT NOT NULL,
+          mode TEXT NOT NULL,
+          stt_model_deployment_id TEXT,
+          chat_model_deployment_id TEXT,
+          tts_model_deployment_id TEXT,
+          native_model_deployment_id TEXT,
+          fallback_route_id TEXT,
+          stt_streaming_enabled INTEGER NOT NULL DEFAULT 0,
+          tts_streaming_enabled INTEGER NOT NULL DEFAULT 0,
+          enabled INTEGER NOT NULL DEFAULT 1,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        INSERT INTO provider_connections (
+          id, provider_id, display_name, endpoint, api_key, enabled,
+          created_at, updated_at
+        ) VALUES (
+          'legacy-streaming-connection', 'mock', 'Legacy Streaming', '',
+          NULL, 1, '2026-01-01T00:00:00.000Z',
+          '2026-01-01T00:00:00.000Z'
+        );
+        INSERT INTO model_deployments (
+          id, connection_id, display_name, model_name, api_version,
+          declared_capabilities, verified_capabilities, provider_options,
+          configuration_fingerprint, enabled, created_at, updated_at
+        ) VALUES (
+          'legacy-streaming-model', 'legacy-streaming-connection',
+          'Legacy Streaming Model', 'legacy', '',
+          '["text-input","text-output","tool-calling"]', '[]', '{}',
+          'legacy-fingerprint', 1, '2026-01-01T00:00:00.000Z',
+          '2026-01-01T00:00:00.000Z'
+        );
+        INSERT INTO runtime_routes (
+          id, display_name, mode, stt_model_deployment_id,
+          chat_model_deployment_id, tts_model_deployment_id,
+          native_model_deployment_id, fallback_route_id,
+          stt_streaming_enabled, tts_streaming_enabled, enabled,
+          created_at, updated_at
+        ) VALUES (
+          'legacy-streaming-route', 'Legacy Streaming Route', 'composed',
+          'legacy-streaming-model', 'legacy-streaming-model',
+          'legacy-streaming-model', NULL, NULL, 0, 0, 1,
+          '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z'
+        );
+      `);
+      database.close();
+
+      store = new VoxMeshStore(databasePath);
+      expect(
+        store
+          .getRuntimeRoutingSummary()
+          .routes.every((route) => route.chatStreamingEnabled === false)
+      ).toBe(true);
+      expect(
+        store
+          .getRuntimeRoutingSummary()
+          .models.find((model) => model.id === "legacy-streaming-model")
+          ?.declaredCapabilities
+      ).toContain("non-streaming");
+      store.close();
+      store = undefined;
+
+      const migrated = new Database(databasePath);
+      const columns = migrated
+        .prepare("PRAGMA table_info(runtime_routes)")
+        .all() as Array<{ name: string }>;
+      const migration = migrated
+        .prepare(
+          "SELECT id FROM schema_migrations WHERE id = '2026-08-24-full-chain-streaming-routing-v1'"
+        )
+        .get() as { id: string } | undefined;
+      migrated.close();
+      expect(columns.map((column) => column.name)).toContain(
+        "chat_streaming_enabled"
+      );
+      expect(migration?.id).toBe("2026-08-24-full-chain-streaming-routing-v1");
     } finally {
       store?.close();
       store = undefined;
@@ -1346,6 +1579,7 @@ function routeInput(
     nativeModelDeploymentId: route.nativeModelDeploymentId,
     fallbackRouteId: route.fallbackRouteId,
     sttStreamingEnabled: route.sttStreamingEnabled,
+    chatStreamingEnabled: route.chatStreamingEnabled,
     ttsStreamingEnabled: route.ttsStreamingEnabled,
     enabled: route.enabled
   };

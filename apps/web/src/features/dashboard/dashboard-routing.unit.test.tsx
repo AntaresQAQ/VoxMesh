@@ -53,7 +53,8 @@ describe("DashboardRouteOverview", () => {
             "audio-output",
             "text-output",
             "tool-calling",
-            "native-multimodal"
+            "native-multimodal",
+            "non-streaming"
           ],
           verifiedCapabilities: [
             "audio-input",
@@ -75,6 +76,7 @@ describe("DashboardRouteOverview", () => {
           nativeModelDeploymentId: "model-native",
           fallbackRouteId: null,
           sttStreamingEnabled: false,
+          chatStreamingEnabled: false,
           ttsStreamingEnabled: false,
           enabled: true,
           readiness: {
@@ -95,7 +97,7 @@ describe("DashboardRouteOverview", () => {
     expect(screen.getByText("Native Route")).toBeVisible();
     expect(screen.getByText("Native Model")).toBeVisible();
     expect(screen.getByText(/Mock Native Multimodal/)).toBeVisible();
-    expect(screen.getByText("4/5 required capabilities verified")).toHaveClass(
+    expect(screen.getByText("4/6 required capabilities verified")).toHaveClass(
       "error"
     );
     expect(screen.getByText("Readiness: Failed")).toBeVisible();

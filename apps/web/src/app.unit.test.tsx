@@ -76,6 +76,7 @@ describe("authenticated routing", () => {
             nativeModelDeploymentId: null,
             fallbackRouteId: null,
             sttStreamingEnabled: false,
+            chatStreamingEnabled: false,
             ttsStreamingEnabled: false,
             enabled: true,
             readiness: unknownReadiness
@@ -98,6 +99,7 @@ describe("authenticated routing", () => {
           nativeModelDeploymentId: null,
           fallbackRouteId: null,
           sttStreamingEnabled: false,
+          chatStreamingEnabled: false,
           ttsStreamingEnabled: false,
           enabled: true,
           readiness: unknownReadiness

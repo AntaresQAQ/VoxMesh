@@ -270,8 +270,17 @@ export const zhCN = {
   "settings.routeTestAndActivateSucceeded": "路由测试成功，且已启用该路由。",
   "settings.routeTestFailed": "路由测试失败。",
   "settings.fallbackRoute": "组合模式回退路由",
+  "settings.enableFullChainStreaming": "启用全链路流式模式",
+  "settings.fullChainStreamingHint":
+    "分别对 STT、Chat 和 TTS 应用流式模式；/api/voice 仍要求缓冲模式能力。",
   "settings.enableSttStreaming": "启用 STT 流式模式",
+  "settings.enableChatStreaming": "启用 Chat 流式模式",
   "settings.enableTtsStreaming": "启用 TTS 流式模式",
+  "settings.streamingProfile": "STT：{stt} · Chat：{chat} · TTS：{tts}",
+  "settings.streamingReadiness":
+    "流式就绪状态 — 已声明：{declared}；已验证：{verified}；适配器：{adapter}；服务端传输：{transport}；浏览器客户端：{browser}。",
+  "settings.available": "可用",
+  "settings.unavailable": "不可用",
   "settings.languageTitle": "显示语言",
   "settings.languageDescription": "语言会立即切换，并保存在当前浏览器中。",
   "settings.appearanceTitle": "外观",

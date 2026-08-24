@@ -15,6 +15,7 @@ import type {
   RuntimeRouteSummary,
   RuntimeRoutingSummary,
   SpeechProviderMode,
+  StreamingRuntimeAvailability,
   VoicePipelineMode
 } from "@voxmesh/shared";
 import { providerReadinessErrorMessage } from "@voxmesh/shared";
@@ -91,6 +92,7 @@ interface RuntimeRouteRow {
   native_model_deployment_id: string | null;
   fallback_route_id: string | null;
   stt_streaming_enabled: number;
+  chat_streaming_enabled: number;
   tts_streaming_enabled: number;
   enabled: number;
   readiness_state: string;
@@ -127,9 +129,29 @@ export interface RuntimeReadinessError {
   category: ProviderReadinessErrorCategory;
 }
 
+const unavailableStreamingRuntime: StreamingRuntimeAvailability = {
+  transportAvailable: false,
+  browserClientAvailable: false,
+  sttProviderIds: [],
+  chatProviderIds: [],
+  ttsProviderIds: []
+};
+
 /** Owns system-managed provider, model, and route persistence. */
 export class RuntimeRoutingStore {
-  public constructor(private readonly database: Database.Database) {}
+  private readonly streamingAvailability: StreamingRuntimeAvailability;
+
+  public constructor(
+    private readonly database: Database.Database,
+    streamingAvailability: StreamingRuntimeAvailability = unavailableStreamingRuntime
+  ) {
+    this.streamingAvailability = {
+      ...streamingAvailability,
+      sttProviderIds: [...new Set(streamingAvailability.sttProviderIds)],
+      chatProviderIds: [...new Set(streamingAvailability.chatProviderIds)],
+      ttsProviderIds: [...new Set(streamingAvailability.ttsProviderIds)]
+    };
+  }
 
   public initializeDefaults(): void {
     if (this.isInitialized()) return;
@@ -332,6 +354,7 @@ export class RuntimeRoutingStore {
         nativeModelDeploymentId: null,
         fallbackRouteId: null,
         sttStreamingEnabled: false,
+        chatStreamingEnabled: false,
         ttsStreamingEnabled: false,
         enabled: true
       });
@@ -345,6 +368,7 @@ export class RuntimeRoutingStore {
         nativeModelDeploymentId: NATIVE_MODEL_ID,
         fallbackRouteId: null,
         sttStreamingEnabled: false,
+        chatStreamingEnabled: false,
         ttsStreamingEnabled: false,
         enabled: true
       });
@@ -407,7 +431,8 @@ export class RuntimeRoutingStore {
         `SELECT id, display_name, mode, stt_model_deployment_id,
                 chat_model_deployment_id, tts_model_deployment_id,
                 native_model_deployment_id, fallback_route_id,
-                stt_streaming_enabled, tts_streaming_enabled, enabled,
+                stt_streaming_enabled, chat_streaming_enabled,
+                tts_streaming_enabled, enabled,
                 readiness_state, readiness_last_tested_at,
                 readiness_error_category, readiness_error_message,
                 readiness_generation
@@ -425,7 +450,13 @@ export class RuntimeRoutingStore {
       connections: connections.map(mapProviderConnection),
       models: models.map(mapModelDeployment),
       routes: routes.map(mapRuntimeRoute),
-      activeRouteId: active.active_route_id
+      activeRouteId: active.active_route_id,
+      streamingAvailability: {
+        ...this.streamingAvailability,
+        sttProviderIds: [...this.streamingAvailability.sttProviderIds],
+        chatProviderIds: [...this.streamingAvailability.chatProviderIds],
+        ttsProviderIds: [...this.streamingAvailability.ttsProviderIds]
+      }
     };
   }
 
@@ -1125,7 +1156,8 @@ export class RuntimeRoutingStore {
         `SELECT id, display_name, mode, stt_model_deployment_id,
                 chat_model_deployment_id, tts_model_deployment_id,
                 native_model_deployment_id, fallback_route_id,
-                stt_streaming_enabled, tts_streaming_enabled, enabled,
+                stt_streaming_enabled, chat_streaming_enabled,
+                tts_streaming_enabled, enabled,
                 readiness_state, readiness_last_tested_at,
                 readiness_error_category, readiness_error_message,
                 readiness_generation
@@ -1153,34 +1185,32 @@ export class RuntimeRoutingStore {
           "Composed routes require STT, Chat, and TTS models without Native or fallback assignments"
         );
       }
-      if (
-        requireVerified &&
-        (input.sttStreamingEnabled || input.ttsStreamingEnabled)
-      ) {
-        throw badRequest(
-          "Streaming routes cannot be activated until runtime streaming transport is enabled"
-        );
-      }
       const stt = this.requireModelCapabilities(
         input.sttModelDeploymentId,
-        ["audio-input", "text-output", "transcription"],
+        ["audio-input", "text-output", "transcription", "non-streaming"],
         requireVerified
       );
-      this.requireModelCapabilities(
+      const chat = this.requireModelCapabilities(
         input.chatModelDeploymentId,
-        ["text-input", "text-output", "tool-calling"],
+        ["text-input", "text-output", "tool-calling", "non-streaming"],
         requireVerified
       );
       const tts = this.requireModelCapabilities(
         input.ttsModelDeploymentId,
-        ["text-input", "audio-output", "speech-synthesis"],
+        ["text-input", "audio-output", "speech-synthesis", "non-streaming"],
         requireVerified
       );
       if (input.sttStreamingEnabled) {
         this.requireStreamingCapability(stt, requireVerified);
       }
+      if (input.chatStreamingEnabled) {
+        this.requireStreamingCapability(chat, requireVerified);
+      }
       if (input.ttsStreamingEnabled) {
         this.requireStreamingCapability(tts, requireVerified);
+      }
+      if (requireVerified) {
+        this.requireStreamingRuntimeAvailability(input, { stt, chat, tts });
       }
       return;
     }
@@ -1191,6 +1221,7 @@ export class RuntimeRoutingStore {
       input.chatModelDeploymentId ||
       input.ttsModelDeploymentId ||
       input.sttStreamingEnabled ||
+      input.chatStreamingEnabled ||
       input.ttsStreamingEnabled
     ) {
       throw badRequest(
@@ -1222,6 +1253,62 @@ export class RuntimeRoutingStore {
         fallback.id,
         routeInputFromRow(fallback),
         requireVerified
+      );
+    }
+  }
+
+  private requireStreamingRuntimeAvailability(
+    input: RuntimeRouteInput,
+    models: {
+      stt: ModelDeploymentRow;
+      chat: ModelDeploymentRow;
+      tts: ModelDeploymentRow;
+    }
+  ): void {
+    if (
+      !input.sttStreamingEnabled &&
+      !input.chatStreamingEnabled &&
+      !input.ttsStreamingEnabled
+    ) {
+      return;
+    }
+    if (!this.streamingAvailability.transportAvailable) {
+      throw badRequest("Streaming voice transport is unavailable");
+    }
+    if (!this.streamingAvailability.browserClientAvailable) {
+      throw badRequest("Streaming browser client is unavailable");
+    }
+    this.requireStreamingAdapter(
+      "STT",
+      input.sttStreamingEnabled,
+      models.stt,
+      this.streamingAvailability.sttProviderIds
+    );
+    this.requireStreamingAdapter(
+      "Chat",
+      input.chatStreamingEnabled,
+      models.chat,
+      this.streamingAvailability.chatProviderIds
+    );
+    this.requireStreamingAdapter(
+      "TTS",
+      input.ttsStreamingEnabled,
+      models.tts,
+      this.streamingAvailability.ttsProviderIds
+    );
+  }
+
+  private requireStreamingAdapter(
+    role: "STT" | "Chat" | "TTS",
+    enabled: boolean,
+    model: ModelDeploymentRow,
+    providerIds: readonly string[]
+  ): void {
+    if (!enabled) return;
+    const providerId = this.getConnection(model.connection_id).provider_id;
+    if (!providerIds.includes(providerId)) {
+      throw badRequest(
+        `${role} streaming adapter is unavailable for provider ${providerId}`
       );
     }
   }
@@ -1553,9 +1640,9 @@ export class RuntimeRoutingStore {
            id, display_name, mode, stt_model_deployment_id,
            chat_model_deployment_id, tts_model_deployment_id,
            native_model_deployment_id, fallback_route_id,
-           stt_streaming_enabled, tts_streaming_enabled, enabled,
-           created_at, updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           stt_streaming_enabled, chat_streaming_enabled,
+           tts_streaming_enabled, enabled, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            display_name = excluded.display_name,
            mode = excluded.mode,
@@ -1565,6 +1652,7 @@ export class RuntimeRoutingStore {
            native_model_deployment_id = excluded.native_model_deployment_id,
            fallback_route_id = excluded.fallback_route_id,
            stt_streaming_enabled = excluded.stt_streaming_enabled,
+           chat_streaming_enabled = excluded.chat_streaming_enabled,
            tts_streaming_enabled = excluded.tts_streaming_enabled,
            enabled = excluded.enabled,
            updated_at = excluded.updated_at`
@@ -1579,6 +1667,7 @@ export class RuntimeRoutingStore {
         input.nativeModelDeploymentId,
         input.fallbackRouteId,
         input.sttStreamingEnabled ? 1 : 0,
+        input.chatStreamingEnabled ? 1 : 0,
         input.ttsStreamingEnabled ? 1 : 0,
         input.enabled ? 1 : 0,
         now,
@@ -1673,6 +1762,7 @@ function mapRuntimeRoute(row: RuntimeRouteRow): RuntimeRouteSummary {
     nativeModelDeploymentId: row.native_model_deployment_id,
     fallbackRouteId: row.fallback_route_id,
     sttStreamingEnabled: row.stt_streaming_enabled === 1,
+    chatStreamingEnabled: row.chat_streaming_enabled === 1,
     ttsStreamingEnabled: row.tts_streaming_enabled === 1,
     enabled: row.enabled === 1,
     readiness: mapReadiness(row)
@@ -1788,6 +1878,7 @@ function routeInputFromRow(row: RuntimeRouteRow): RuntimeRouteInput {
     nativeModelDeploymentId: row.native_model_deployment_id,
     fallbackRouteId: row.fallback_route_id,
     sttStreamingEnabled: row.stt_streaming_enabled === 1,
+    chatStreamingEnabled: row.chat_streaming_enabled === 1,
     ttsStreamingEnabled: row.tts_streaming_enabled === 1,
     enabled: row.enabled === 1
   };
@@ -1800,7 +1891,11 @@ function normalizeRouteInput(input: RuntimeRouteInput): RuntimeRouteInput {
     chatModelDeploymentId: input.chatModelDeploymentId || null,
     ttsModelDeploymentId: input.ttsModelDeploymentId || null,
     nativeModelDeploymentId: input.nativeModelDeploymentId || null,
-    fallbackRouteId: input.fallbackRouteId || null
+    fallbackRouteId: input.fallbackRouteId || null,
+    sttStreamingEnabled: input.mode === "composed" && input.sttStreamingEnabled,
+    chatStreamingEnabled:
+      input.mode === "composed" && input.chatStreamingEnabled,
+    ttsStreamingEnabled: input.mode === "composed" && input.ttsStreamingEnabled
   };
 }
 
@@ -1876,6 +1971,7 @@ function routeVerificationSignatureFromInput(
     input.nativeModelDeploymentId,
     input.fallbackRouteId,
     input.sttStreamingEnabled,
+    input.chatStreamingEnabled,
     input.ttsStreamingEnabled,
     input.enabled
   ]);

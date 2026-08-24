@@ -102,6 +102,7 @@ describe("server API", () => {
           "audio-input",
           "text-output",
           "transcription",
+          "non-streaming",
           "streaming"
         ],
         enabled: true
@@ -125,16 +126,25 @@ describe("server API", () => {
         nativeModelDeploymentId: null,
         fallbackRouteId: null,
         sttStreamingEnabled: false,
+        chatStreamingEnabled: false,
         ttsStreamingEnabled: false,
         enabled: true
       }
     });
     expect(createdRoute.statusCode).toBe(201);
-    const routeId = createdRoute
-      .json<RuntimeRoutingSummary>()
-      .routes.find(
-        (entry) => entry.displayName === "Custom Streaming Composed"
-      )?.id;
+    const createdRouting = createdRoute.json<RuntimeRoutingSummary>();
+    const createdRouteSummary = createdRouting.routes.find(
+      (entry) => entry.displayName === "Custom Streaming Composed"
+    );
+    expect(createdRouteSummary?.chatStreamingEnabled).toBe(false);
+    expect(createdRouting.streamingAvailability).toEqual({
+      transportAvailable: false,
+      browserClientAvailable: false,
+      sttProviderIds: [],
+      chatProviderIds: [],
+      ttsProviderIds: []
+    });
+    const routeId = createdRouteSummary?.id;
     const routeTest = await app.inject({
       method: "POST",
       url: `/api/runtime-routing/routes/${routeId}/test`,

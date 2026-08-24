@@ -94,8 +94,9 @@ Recent merged milestones:
       downgrade
 - [x] buffered route testing, Test & activate, actionable result states, and
       provider configuration error reporting
-- [x] independent STT/TTS streaming intent switches with explicit activation
-      rejection while runtime transport remains buffered
+- [x] independent STT/Chat/TTS streaming intent switches and a full-chain
+      profile, with explicit activation rejection while runtime surfaces remain
+      unavailable
 - [x] route-aware Dashboard status, inline Settings editors, accessible
       capability selection, responsive layouts, and bilingual copy
 
@@ -998,12 +999,12 @@ Phase 5 requires explicit confirmation after buffered Phase 4 acceptance.
 - Azure and generic OpenAI-compatible models remain buffered unless a specific
   endpoint and model declare streaming, pass contract tests, and complete
   capability verification.
-- Add an independent Chat streaming switch to Runtime Routes alongside the
-  existing STT and TTS switches.
+- Runtime Routes provide independent STT, Chat, and TTS streaming switches.
 - Preserve all independent combinations across the three roles. The
   full-chain profile enables STT, Chat, and TTS streaming together.
-- Route activation requires the runtime transport plus declared and verified
-  `streaming` capability for every enabled role.
+- Route activation requires the server transport, browser client,
+  role-specific provider adapter, and declared and verified `streaming`
+  capability for every enabled role.
 
 ### 9.4 Backpressure, Cancellation, and Lifecycle
 

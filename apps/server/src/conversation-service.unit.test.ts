@@ -74,6 +74,7 @@ describe("ConversationService", () => {
       nativeModelDeploymentId: "system-model-native",
       fallbackRouteId: "system-route-composed",
       sttStreamingEnabled: false,
+      chatStreamingEnabled: false,
       ttsStreamingEnabled: false,
       enabled: true
     });

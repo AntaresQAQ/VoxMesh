@@ -440,9 +440,9 @@ the configuration fingerprint changes. See
 
 Routing CRUD uses runtime-validated shared schemas and SQLite foreign keys.
 Activation requires enabled records and verified role capabilities. Native
-fallback is explicit, and STT/TTS streaming switches are independent,
+fallback is explicit, and STT/Chat/TTS streaming switches are independent,
 default-off, and require model-level declared and verified streaming
-capability.
+capability plus registered runtime surfaces.
 
 ## 11. Adding a Feature
 

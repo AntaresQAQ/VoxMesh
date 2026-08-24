@@ -38,6 +38,7 @@ export function DashboardRouteOverview({
               "audio-input",
               "text-output",
               "transcription",
+              "non-streaming",
               ...(route.sttStreamingEnabled
                 ? (["streaming"] as ModelCapability[])
                 : [])
@@ -47,7 +48,16 @@ export function DashboardRouteOverview({
           {
             label: t("dashboard.llm"),
             modelId: route.chatModelDeploymentId,
-            required: ["text-input", "text-output", "tool-calling"]
+            required: [
+              "text-input",
+              "text-output",
+              "tool-calling",
+              "non-streaming",
+              ...(route.chatStreamingEnabled
+                ? (["streaming"] as ModelCapability[])
+                : [])
+            ],
+            transport: route.chatStreamingEnabled ? "streaming" : "buffered"
           },
           {
             label: t("dashboard.tts"),
@@ -56,6 +66,7 @@ export function DashboardRouteOverview({
               "text-input",
               "audio-output",
               "speech-synthesis",
+              "non-streaming",
               ...(route.ttsStreamingEnabled
                 ? (["streaming"] as ModelCapability[])
                 : [])
@@ -72,7 +83,8 @@ export function DashboardRouteOverview({
               "audio-output",
               "text-output",
               "tool-calling",
-              "native-multimodal"
+              "native-multimodal",
+              "non-streaming"
             ]
           }
         ];

@@ -29,7 +29,8 @@ Phase 5 builds on:
 
 - buffered `/api/voice`
 - authenticated administrator sessions and same-origin WebSocket policy
-- Runtime Routing with independent STT/TTS streaming intent
+- Runtime Routing with independent STT/Chat/TTS streaming intent and a
+  full-chain profile
 - provider/model declared and verified capabilities
 - provider and route readiness diagnostics
 - Conversation Run identity, cancellation, terminal CAS, continuity, and
@@ -331,6 +332,19 @@ Acceptance:
 - saving is allowed only for declared capabilities
 - activation remains rejected until its runtime transport/adapter is registered
 - buffered routes remain unchanged
+
+Implementation status:
+
+- implemented as the Phase 5 Runtime Routing controls work package
+- `chatStreamingEnabled` is persisted with a safe `false` migration default
+- route signatures and readiness invalidation include all three switches
+- Runtime Routing exposes explicit server transport, browser client, and
+  per-role provider-adapter availability
+- Settings provides independent role switches, a full-chain profile, and
+  localized readiness explanations
+- Dashboard reports Chat transport alongside STT and TTS
+- production availability remains unregistered until the dependent transport,
+  browser, and provider PRs are complete
 
 ### PR 6 - Streaming Voice Run Persistence and Coordinator
 

@@ -26,6 +26,7 @@ import type {
   RuntimeRouteInput,
   RuntimeRoutingSummary,
   SpeechProviderMode,
+  StreamingRuntimeAvailability,
   VoicePipelineMode
 } from "@voxmesh/shared";
 
@@ -208,7 +209,10 @@ export class VoxMeshStore {
     (event: StorageObservabilityEvent) => void
   >();
 
-  public constructor(path: string) {
+  public constructor(
+    path: string,
+    streamingAvailability?: StreamingRuntimeAvailability
+  ) {
     if (path !== ":memory:") {
       mkdirSync(dirname(path), { recursive: true });
     }
@@ -227,7 +231,10 @@ export class VoxMeshStore {
       if (ownershipClaimed) {
         this.reconcileInterruptedRuns();
       }
-      this.runtimeRouting = new RuntimeRoutingStore(this.database);
+      this.runtimeRouting = new RuntimeRoutingStore(
+        this.database,
+        streamingAvailability
+      );
       this.runtimeRouting.initializeDefaults();
       if (ownershipClaimed) {
         this.runtimeRouting.reconcileInterruptedReadinessTests();
@@ -1274,6 +1281,7 @@ export class VoxMeshStore {
         native_model_deployment_id TEXT REFERENCES model_deployments(id) ON DELETE RESTRICT,
         fallback_route_id TEXT REFERENCES runtime_routes(id) ON DELETE RESTRICT,
         stt_streaming_enabled INTEGER NOT NULL DEFAULT 0 CHECK (stt_streaming_enabled IN (0, 1)),
+        chat_streaming_enabled INTEGER NOT NULL DEFAULT 0 CHECK (chat_streaming_enabled IN (0, 1)),
         tts_streaming_enabled INTEGER NOT NULL DEFAULT 0 CHECK (tts_streaming_enabled IN (0, 1)),
         enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
         created_at TEXT NOT NULL,
@@ -1335,16 +1343,54 @@ export class VoxMeshStore {
       "enabled",
       "INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1))"
     );
-    this.ensureColumn(
-      "runtime_routes",
-      "stt_streaming_enabled",
-      "INTEGER NOT NULL DEFAULT 0 CHECK (stt_streaming_enabled IN (0, 1))"
-    );
-    this.ensureColumn(
-      "runtime_routes",
-      "tts_streaming_enabled",
-      "INTEGER NOT NULL DEFAULT 0 CHECK (tts_streaming_enabled IN (0, 1))"
-    );
+    this.applyMigration("2026-08-24-full-chain-streaming-routing-v1", () => {
+      this.ensureColumn(
+        "runtime_routes",
+        "stt_streaming_enabled",
+        "INTEGER NOT NULL DEFAULT 0 CHECK (stt_streaming_enabled IN (0, 1))"
+      );
+      this.ensureColumn(
+        "runtime_routes",
+        "chat_streaming_enabled",
+        "INTEGER NOT NULL DEFAULT 0 CHECK (chat_streaming_enabled IN (0, 1))"
+      );
+      this.ensureColumn(
+        "runtime_routes",
+        "tts_streaming_enabled",
+        "INTEGER NOT NULL DEFAULT 0 CHECK (tts_streaming_enabled IN (0, 1))"
+      );
+      const models = this.database
+        .prepare(
+          `SELECT DISTINCT m.id, m.declared_capabilities
+           FROM model_deployments m
+           JOIN runtime_routes r
+             ON m.id = r.stt_model_deployment_id
+             OR m.id = r.chat_model_deployment_id
+             OR m.id = r.tts_model_deployment_id
+             OR m.id = r.native_model_deployment_id`
+        )
+        .all() as Array<{ id: string; declared_capabilities: string }>;
+      const update = this.database.prepare(
+        "UPDATE model_deployments SET declared_capabilities = ?, updated_at = ? WHERE id = ?"
+      );
+      const now = new Date().toISOString();
+      for (const model of models) {
+        const capabilities = JSON.parse(model.declared_capabilities) as unknown;
+        if (
+          !Array.isArray(capabilities) ||
+          !capabilities.every((capability) => typeof capability === "string")
+        ) {
+          throw new Error("Stored model capabilities are invalid");
+        }
+        if (!capabilities.includes("non-streaming")) {
+          update.run(
+            JSON.stringify([...capabilities, "non-streaming"]),
+            now,
+            model.id
+          );
+        }
+      }
+    });
     this.ensureColumn(
       "runtime_routes",
       "enabled",

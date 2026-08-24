@@ -116,17 +116,20 @@ describe("feature pages", () => {
           dashboardModel("model-chat", "connection-chat", "Qwen Chat", [
             "text-input",
             "text-output",
-            "tool-calling"
+            "tool-calling",
+            "non-streaming"
           ]),
           dashboardModel("model-stt", "connection-speech", "Fun-ASR", [
             "audio-input",
             "text-output",
-            "transcription"
+            "transcription",
+            "non-streaming"
           ]),
           dashboardModel("model-tts", "connection-speech", "Qwen TTS", [
             "text-input",
             "audio-output",
-            "speech-synthesis"
+            "speech-synthesis",
+            "non-streaming"
           ])
         ],
         routes: [
@@ -140,6 +143,7 @@ describe("feature pages", () => {
             nativeModelDeploymentId: null,
             fallbackRouteId: null,
             sttStreamingEnabled: false,
+            chatStreamingEnabled: false,
             ttsStreamingEnabled: false,
             enabled: true,
             readiness: unknownReadiness
@@ -156,6 +160,14 @@ describe("feature pages", () => {
     expect(screen.getByText("Qwen Chat")).toBeVisible();
     expect(screen.getByText("Fun-ASR")).toBeVisible();
     expect(screen.getByText("Qwen TTS")).toBeVisible();
+    expect(
+      screen.getAllByText(
+        (_, element) =>
+          element?.tagName === "P" &&
+          element.textContent?.includes("Transport") === true &&
+          element.textContent.includes("Buffered")
+      )
+    ).toHaveLength(3);
     expect(
       screen.getByRole("heading", { name: "Device and physical audio" })
     ).toBeVisible();

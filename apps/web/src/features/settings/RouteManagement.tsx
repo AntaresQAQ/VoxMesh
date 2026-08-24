@@ -52,7 +52,9 @@ export function RouteManagement(props: {
             <RouteEditor
               route={editing}
               models={props.routing.models}
+              connections={props.routing.connections}
               routes={props.routing.routes}
+              streamingAvailability={props.routing.streamingAvailability}
               pending={props.pending}
               onSave={save}
               onCancel={() => setEditing(null)}
@@ -77,7 +79,9 @@ export function RouteManagement(props: {
         <RouteEditor
           route={null}
           models={props.routing.models}
+          connections={props.routing.connections}
           routes={props.routing.routes}
+          streamingAvailability={props.routing.streamingAvailability}
           pending={props.pending}
           onSave={save}
           onCancel={() => {

@@ -3,44 +3,37 @@ import { useForm } from "@tanstack/react-form";
 
 import type {
   ModelDeploymentSummary,
+  ProviderConnectionSummary,
   RuntimeRouteInput,
-  RuntimeRouteSummary
+  RuntimeRouteSummary,
+  StreamingRuntimeAvailability
 } from "@voxmesh/shared";
 
 import { useI18n } from "../../i18n/i18n.js";
 import { RouteAssignmentFields } from "./RouteAssignmentFields.js";
-
-const defaults: RuntimeRouteInput = {
-  displayName: "",
-  mode: "composed",
-  sttModelDeploymentId: null,
-  chatModelDeploymentId: null,
-  ttsModelDeploymentId: null,
-  nativeModelDeploymentId: null,
-  fallbackRouteId: null,
-  sttStreamingEnabled: false,
-  ttsStreamingEnabled: false,
-  enabled: true
-};
+import { RouteEditorActions, RouteModeSelect } from "./RouteModeSelect.js";
+import { routeEditorDefaults, routeToInput } from "./route-editor-state.js";
 
 export function RouteEditor(props: {
   route: RuntimeRouteSummary | null;
   models: ModelDeploymentSummary[];
+  connections: ProviderConnectionSummary[];
   routes: RuntimeRouteSummary[];
+  streamingAvailability: StreamingRuntimeAvailability | undefined;
   pending: boolean;
   onSave: (input: RuntimeRouteInput) => Promise<void>;
   onCancel: () => void;
 }) {
   const { t } = useI18n();
   const form = useForm({
-    defaultValues: defaults,
+    defaultValues: routeEditorDefaults,
     onSubmit: async ({ value }) => {
       await props.onSave(value);
-      form.reset(defaults);
+      form.reset(routeEditorDefaults);
     }
   });
   useEffect(() => {
-    form.reset(props.route ? routeToInput(props.route) : defaults);
+    form.reset(props.route ? routeToInput(props.route) : routeEditorDefaults);
   }, [form, props.route]);
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -62,33 +55,23 @@ export function RouteEditor(props: {
       </form.Field>
       <form.Field name="mode">
         {(field) => (
-          <label>
-            {t("settings.voicePipelineMode")}
-            <select
-              value={field.state.value}
-              onChange={(event) => {
-                const mode = event.target.value as RuntimeRouteInput["mode"];
-                field.handleChange(mode);
-                if (mode === "composed") {
-                  form.setFieldValue("nativeModelDeploymentId", null);
-                  form.setFieldValue("fallbackRouteId", null);
-                } else {
-                  form.setFieldValue("sttModelDeploymentId", null);
-                  form.setFieldValue("chatModelDeploymentId", null);
-                  form.setFieldValue("ttsModelDeploymentId", null);
-                  form.setFieldValue("sttStreamingEnabled", false);
-                  form.setFieldValue("ttsStreamingEnabled", false);
-                }
-              }}
-            >
-              <option value="composed">
-                {t("settings.voiceModeComposed")}
-              </option>
-              <option value="native-multimodal">
-                {t("settings.voiceModeNative")}
-              </option>
-            </select>
-          </label>
+          <RouteModeSelect
+            value={field.state.value}
+            onChange={(mode) => {
+              field.handleChange(mode);
+              if (mode === "composed") {
+                form.setFieldValue("nativeModelDeploymentId", null);
+                form.setFieldValue("fallbackRouteId", null);
+              } else {
+                form.setFieldValue("sttModelDeploymentId", null);
+                form.setFieldValue("chatModelDeploymentId", null);
+                form.setFieldValue("ttsModelDeploymentId", null);
+                form.setFieldValue("sttStreamingEnabled", false);
+                form.setFieldValue("chatStreamingEnabled", false);
+                form.setFieldValue("ttsStreamingEnabled", false);
+              }
+            }}
+          />
         )}
       </form.Field>
       <form.Subscribe selector={(state) => state.values}>
@@ -96,7 +79,9 @@ export function RouteEditor(props: {
           <RouteAssignmentFields
             values={values}
             models={props.models}
+            connections={props.connections}
             routes={props.routes}
+            streamingAvailability={props.streamingAvailability}
             onSttModelChange={(value) =>
               form.setFieldValue("sttModelDeploymentId", value)
             }
@@ -115,9 +100,17 @@ export function RouteEditor(props: {
             onSttStreamingChange={(value) =>
               form.setFieldValue("sttStreamingEnabled", value)
             }
+            onChatStreamingChange={(value) =>
+              form.setFieldValue("chatStreamingEnabled", value)
+            }
             onTtsStreamingChange={(value) =>
               form.setFieldValue("ttsStreamingEnabled", value)
             }
+            onFullChainStreamingChange={(value) => {
+              form.setFieldValue("sttStreamingEnabled", value);
+              form.setFieldValue("chatStreamingEnabled", value);
+              form.setFieldValue("ttsStreamingEnabled", value);
+            }}
           />
         )}
       </form.Subscribe>
@@ -133,29 +126,11 @@ export function RouteEditor(props: {
           </label>
         )}
       </form.Field>
-      <div className="button-row">
-        <button disabled={props.pending}>
-          {props.route ? t("settings.saveChanges") : t("settings.create")}
-        </button>
-        <button type="button" className="secondary" onClick={props.onCancel}>
-          {t("settings.cancel")}
-        </button>
-      </div>
+      <RouteEditorActions
+        editing={props.route !== null}
+        pending={props.pending}
+        onCancel={props.onCancel}
+      />
     </form>
   );
-}
-
-function routeToInput(route: RuntimeRouteSummary): RuntimeRouteInput {
-  return {
-    displayName: route.displayName,
-    mode: route.mode,
-    sttModelDeploymentId: route.sttModelDeploymentId,
-    chatModelDeploymentId: route.chatModelDeploymentId,
-    ttsModelDeploymentId: route.ttsModelDeploymentId,
-    nativeModelDeploymentId: route.nativeModelDeploymentId,
-    fallbackRouteId: route.fallbackRouteId,
-    sttStreamingEnabled: route.sttStreamingEnabled,
-    ttsStreamingEnabled: route.ttsStreamingEnabled,
-    enabled: route.enabled
-  };
 }
