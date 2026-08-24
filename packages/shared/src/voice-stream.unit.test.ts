@@ -65,6 +65,9 @@ describe("voice stream control parsing", () => {
         `"${"x".repeat(VOICE_STREAM_LIMITS.maxControlMessageBytes)}"`
       )
     ).toBeNull();
+    expect(
+      parseVoiceStreamControlMessage(`"${"界".repeat(6_000)}"`)
+    ).toBeNull();
   });
 });
 

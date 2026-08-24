@@ -39,11 +39,12 @@ export const VOICE_STREAM_LIMITS = Object.freeze({
 const UUID_PATTERN =
   "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$";
 const strict = { additionalProperties: false } as const;
-const SessionIdSchema = Type.String({
+const UuidSchema = Type.String({
   minLength: 36,
   maxLength: 36,
   pattern: UUID_PATTERN
 });
+const utf8Encoder = new TextEncoder();
 const PositiveSequenceSchema = Type.Integer({
   minimum: 1,
   maximum: 0xffff_ffff
@@ -113,7 +114,7 @@ export const VoiceStreamFailureStageSchema = Type.Union([
 
 const StartSchema = control("voice.start", {
   sequence: Type.Literal(0),
-  runId: SessionIdSchema,
+  runId: UuidSchema,
   toolMode: VoiceStreamToolModeSchema,
   inputFormat: InputFormatSchema
 });
@@ -137,14 +138,14 @@ export const VoiceStreamClientMessageSchema = Type.Union([
 
 const ReadySchema = control("voice.ready", {
   sequence: Type.Literal(0),
-  runId: SessionIdSchema,
+  runId: UuidSchema,
   toolMode: VoiceStreamToolModeSchema,
   inputFormat: InputFormatSchema,
   profile: VoiceStreamTransportProfileSchema
 });
 const RejectedSchema = control("voice.rejected", {
   sequence: Type.Literal(0),
-  runId: SessionIdSchema,
+  runId: UuidSchema,
   stage: Type.Union([Type.Literal("session"), Type.Literal("transport")]),
   code: VoiceStreamFailureCodeSchema,
   message: Type.String({ minLength: 1, maxLength: 512 })
@@ -260,7 +261,7 @@ const OutputFinishedSchema = control("voice.output_finished", {
 const CompletedSchema = control("voice.completed", {
   sequence: PositiveSequenceSchema,
   conversationId: Type.String({ minLength: 1, maxLength: 256 }),
-  runId: SessionIdSchema
+  runId: UuidSchema
 });
 const CancelledSchema = control("voice.cancelled", {
   sequence: PositiveSequenceSchema,
@@ -347,8 +348,11 @@ export class VoiceStreamProtocolError extends Error {
 export function parseVoiceStreamControlMessage(
   input: string
 ): VoiceStreamControlMessage | null {
+  if (input.length > VOICE_STREAM_LIMITS.maxControlMessageBytes) {
+    return null;
+  }
   if (
-    new TextEncoder().encode(input).byteLength >
+    utf8Encoder.encode(input).byteLength >
     VOICE_STREAM_LIMITS.maxControlMessageBytes
   ) {
     return null;
@@ -916,7 +920,7 @@ function control<T extends string, P extends Record<string, TSchema>>(
     {
       version: Type.Literal(VOICE_STREAM_PROTOCOL_VERSION),
       type: Type.Literal(type),
-      sessionId: SessionIdSchema,
+      sessionId: UuidSchema,
       ...properties
     },
     strict
