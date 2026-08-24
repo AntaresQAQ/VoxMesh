@@ -22,10 +22,12 @@ import type {
   PipelineStage,
   PipelineStatus,
   ProviderConnectionInput,
+  NormalizedRuntimeRouteInput,
   RuntimeRouteSummary,
   RuntimeRouteInput,
   RuntimeRoutingSummary,
   SpeechProviderMode,
+  StreamingRuntimeAvailability,
   VoicePipelineMode
 } from "@voxmesh/shared";
 
@@ -208,7 +210,10 @@ export class VoxMeshStore {
     (event: StorageObservabilityEvent) => void
   >();
 
-  public constructor(path: string) {
+  public constructor(
+    path: string,
+    streamingAvailability?: StreamingRuntimeAvailability
+  ) {
     if (path !== ":memory:") {
       mkdirSync(dirname(path), { recursive: true });
     }
@@ -227,7 +232,10 @@ export class VoxMeshStore {
       if (ownershipClaimed) {
         this.reconcileInterruptedRuns();
       }
-      this.runtimeRouting = new RuntimeRoutingStore(this.database);
+      this.runtimeRouting = new RuntimeRoutingStore(
+        this.database,
+        streamingAvailability
+      );
       this.runtimeRouting.initializeDefaults();
       if (ownershipClaimed) {
         this.runtimeRouting.reconcileInterruptedReadinessTests();
@@ -362,14 +370,17 @@ export class VoxMeshStore {
   }
 
   public createRuntimeRoute(input: RuntimeRouteInput): RuntimeRoutingSummary {
-    return this.runtimeRouting.createRoute(input);
+    return this.runtimeRouting.createRoute(normalizeRuntimeRouteInput(input));
   }
 
   public updateRuntimeRoute(
     id: string,
     input: RuntimeRouteInput
   ): RuntimeRoutingSummary {
-    return this.runtimeRouting.updateRoute(id, input);
+    return this.runtimeRouting.updateRoute(
+      id,
+      normalizeRuntimeRouteInput(input)
+    );
   }
 
   public deleteRuntimeRoute(id: string): RuntimeRoutingSummary {
@@ -1274,6 +1285,7 @@ export class VoxMeshStore {
         native_model_deployment_id TEXT REFERENCES model_deployments(id) ON DELETE RESTRICT,
         fallback_route_id TEXT REFERENCES runtime_routes(id) ON DELETE RESTRICT,
         stt_streaming_enabled INTEGER NOT NULL DEFAULT 0 CHECK (stt_streaming_enabled IN (0, 1)),
+        chat_streaming_enabled INTEGER NOT NULL DEFAULT 0 CHECK (chat_streaming_enabled IN (0, 1)),
         tts_streaming_enabled INTEGER NOT NULL DEFAULT 0 CHECK (tts_streaming_enabled IN (0, 1)),
         enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
         created_at TEXT NOT NULL,
@@ -1335,16 +1347,94 @@ export class VoxMeshStore {
       "enabled",
       "INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1))"
     );
-    this.ensureColumn(
-      "runtime_routes",
-      "stt_streaming_enabled",
-      "INTEGER NOT NULL DEFAULT 0 CHECK (stt_streaming_enabled IN (0, 1))"
-    );
-    this.ensureColumn(
-      "runtime_routes",
-      "tts_streaming_enabled",
-      "INTEGER NOT NULL DEFAULT 0 CHECK (tts_streaming_enabled IN (0, 1))"
-    );
+    this.applyMigration("2026-08-24-full-chain-streaming-routing-v1", () => {
+      this.ensureColumn(
+        "runtime_routes",
+        "stt_streaming_enabled",
+        "INTEGER NOT NULL DEFAULT 0 CHECK (stt_streaming_enabled IN (0, 1))"
+      );
+      this.ensureColumn(
+        "runtime_routes",
+        "chat_streaming_enabled",
+        "INTEGER NOT NULL DEFAULT 0 CHECK (chat_streaming_enabled IN (0, 1))"
+      );
+      this.ensureColumn(
+        "runtime_routes",
+        "tts_streaming_enabled",
+        "INTEGER NOT NULL DEFAULT 0 CHECK (tts_streaming_enabled IN (0, 1))"
+      );
+      this.database
+        .prepare(
+          `UPDATE runtime_routes
+           SET stt_streaming_enabled = 0,
+               chat_streaming_enabled = 0,
+               tts_streaming_enabled = 0,
+               updated_at = ?
+           WHERE mode = 'native-multimodal'`
+        )
+        .run(new Date().toISOString());
+      this.database
+        .prepare(
+          `UPDATE runtime_routes
+           SET stt_streaming_enabled = 0,
+               chat_streaming_enabled = 0,
+               tts_streaming_enabled = 0,
+               updated_at = ?
+           WHERE mode = 'composed'
+             AND id IN (
+               SELECT active_route_id FROM active_runtime_route
+               UNION
+               SELECT active.fallback_route_id
+               FROM active_runtime_route selected
+               JOIN runtime_routes active
+                 ON active.id = selected.active_route_id
+               WHERE active.mode = 'native-multimodal'
+                 AND active.fallback_route_id IS NOT NULL
+             )`
+        )
+        .run(new Date().toISOString());
+      const models = this.database
+        .prepare(
+          `SELECT id, declared_capabilities, verified_capabilities
+           FROM model_deployments`
+        )
+        .all() as Array<{
+        id: string;
+        declared_capabilities: string;
+        verified_capabilities: string;
+      }>;
+      const update = this.database.prepare(
+        `UPDATE model_deployments
+         SET declared_capabilities = ?, verified_capabilities = ?, updated_at = ?
+         WHERE id = ?`
+      );
+      const now = new Date().toISOString();
+      for (const model of models) {
+        const declared = parseStoredCapabilityStrings(
+          model.declared_capabilities
+        );
+        const verified = parseStoredCapabilityStrings(
+          model.verified_capabilities
+        );
+        const nextDeclared = declared.includes("non-streaming")
+          ? declared
+          : [...declared, "non-streaming"];
+        const qualifiedVerified = verified.filter(
+          (capability) => capability !== "streaming"
+        );
+        const nextVerified =
+          hasVerifiedBufferedRole(qualifiedVerified) &&
+          !qualifiedVerified.includes("non-streaming")
+            ? [...qualifiedVerified, "non-streaming"]
+            : qualifiedVerified;
+        update.run(
+          JSON.stringify(nextDeclared),
+          JSON.stringify(nextVerified),
+          now,
+          model.id
+        );
+      }
+    });
     this.ensureColumn(
       "runtime_routes",
       "enabled",
@@ -1723,6 +1813,43 @@ function isProcessAlive(processId: number): boolean {
       error.code === "EPERM"
     );
   }
+}
+
+function parseStoredCapabilityStrings(value: string): string[] {
+  const capabilities = JSON.parse(value) as unknown;
+  if (
+    !Array.isArray(capabilities) ||
+    !capabilities.every((capability) => typeof capability === "string")
+  ) {
+    throw new Error("Stored model capabilities are invalid");
+  }
+  return capabilities;
+}
+
+function hasVerifiedBufferedRole(capabilities: readonly string[]): boolean {
+  return [
+    ["audio-input", "text-output", "transcription"],
+    ["text-input", "text-output", "tool-calling"],
+    ["text-input", "audio-output", "speech-synthesis"],
+    [
+      "audio-input",
+      "audio-output",
+      "text-output",
+      "tool-calling",
+      "native-multimodal"
+    ]
+  ].some((required) =>
+    required.every((capability) => capabilities.includes(capability))
+  );
+}
+
+function normalizeRuntimeRouteInput(
+  input: RuntimeRouteInput
+): NormalizedRuntimeRouteInput {
+  return {
+    ...input,
+    chatStreamingEnabled: input.chatStreamingEnabled ?? false
+  };
 }
 
 function selectChatHistory(newestFirst: AgentMessage[]): AgentMessage[] {

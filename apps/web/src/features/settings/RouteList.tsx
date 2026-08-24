@@ -41,6 +41,15 @@ export function RouteList(props: {
                 ? t("settings.voiceModeComposed")
                 : t("settings.voiceModeNative")}
             </span>
+            {route.mode === "composed" ? (
+              <span>
+                {t("settings.streamingProfile", {
+                  stt: transport(route.sttStreamingEnabled, t),
+                  chat: transport(route.chatStreamingEnabled, t),
+                  tts: transport(route.ttsStreamingEnabled, t)
+                })}
+              </span>
+            ) : null}
             <ProviderReadinessStatus readiness={route.readiness} />
             {isActive ? (
               <>
@@ -123,4 +132,11 @@ export function RouteList(props: {
       })}
     </ul>
   );
+}
+
+function transport(
+  streaming: boolean,
+  t: ReturnType<typeof useI18n>["t"]
+): string {
+  return streaming ? t("dashboard.streaming") : t("dashboard.buffered");
 }

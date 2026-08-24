@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type {
   ModelDeploymentInput,
   ProviderConnectionInput,
-  RuntimeRouteInput,
+  NormalizedRuntimeRouteInput,
   RuntimeRoutingSummary
 } from "@voxmesh/shared";
 
@@ -17,8 +17,8 @@ export type RuntimeRoutingOperation =
   | { type: "create-model"; input: ModelDeploymentInput }
   | { type: "update-model"; id: string; input: ModelDeploymentInput }
   | { type: "delete-model"; id: string }
-  | { type: "create-route"; input: RuntimeRouteInput }
-  | { type: "update-route"; id: string; input: RuntimeRouteInput }
+  | { type: "create-route"; input: NormalizedRuntimeRouteInput }
+  | { type: "update-route"; id: string; input: NormalizedRuntimeRouteInput }
   | { type: "delete-route"; id: string }
   | { type: "test-route"; id: string }
   | { type: "test-and-activate-route"; id: string };

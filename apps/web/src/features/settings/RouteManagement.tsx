@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 import type {
-  RuntimeRouteInput,
+  NormalizedRuntimeRouteInput,
   RuntimeRouteSummary,
   RuntimeRoutingSummary
 } from "@voxmesh/shared";
@@ -21,7 +21,7 @@ export function RouteManagement(props: {
   const { t } = useI18n();
   const [editing, setEditing] = useState<RuntimeRouteSummary | null>(null);
   const [creating, setCreating] = useState(false);
-  const save = async (input: RuntimeRouteInput) => {
+  const save = async (input: NormalizedRuntimeRouteInput) => {
     await props.execute(
       editing
         ? { type: "update-route", id: editing.id, input }
@@ -52,7 +52,9 @@ export function RouteManagement(props: {
             <RouteEditor
               route={editing}
               models={props.routing.models}
+              connections={props.routing.connections}
               routes={props.routing.routes}
+              streamingAvailability={props.routing.streamingAvailability}
               pending={props.pending}
               onSave={save}
               onCancel={() => setEditing(null)}
@@ -77,7 +79,9 @@ export function RouteManagement(props: {
         <RouteEditor
           route={null}
           models={props.routing.models}
+          connections={props.routing.connections}
           routes={props.routing.routes}
+          streamingAvailability={props.routing.streamingAvailability}
           pending={props.pending}
           onSave={save}
           onCancel={() => {

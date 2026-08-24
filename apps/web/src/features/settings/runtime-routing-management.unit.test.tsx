@@ -36,17 +36,20 @@ const routing: RuntimeRoutingSummary = {
       "audio-input",
       "text-output",
       "transcription",
+      "non-streaming",
       "streaming"
     ]),
     model("model-chat", "Mock Chat", [
       "text-input",
       "text-output",
-      "tool-calling"
+      "tool-calling",
+      "non-streaming"
     ]),
     model("model-tts", "Mock TTS", [
       "text-input",
       "audio-output",
-      "speech-synthesis"
+      "speech-synthesis",
+      "non-streaming"
     ])
   ],
   routes: [],
@@ -61,7 +64,8 @@ const routingWithRoute: RuntimeRoutingSummary = {
       "audio-output",
       "text-output",
       "tool-calling",
-      "native-multimodal"
+      "native-multimodal",
+      "non-streaming"
     ])
   ],
   routes: [
@@ -75,6 +79,7 @@ const routingWithRoute: RuntimeRoutingSummary = {
       nativeModelDeploymentId: null,
       fallbackRouteId: null,
       sttStreamingEnabled: false,
+      chatStreamingEnabled: false,
       ttsStreamingEnabled: false,
       enabled: true,
       readiness: unknownReadiness
@@ -111,6 +116,7 @@ const routingWithFallback: RuntimeRoutingSummary = {
       nativeModelDeploymentId: "model-chat",
       fallbackRouteId: "route-a",
       sttStreamingEnabled: false,
+      chatStreamingEnabled: false,
       ttsStreamingEnabled: false,
       enabled: true,
       readiness: unknownReadiness
@@ -272,7 +278,7 @@ describe("runtime routing management", () => {
     );
   });
 
-  it("keeps STT and TTS streaming switches independent", async () => {
+  it("keeps STT, Chat, and TTS streaming switches independent", async () => {
     const user = userEvent.setup();
     const execute = vi.fn(
       async (_operation: RuntimeRoutingOperation): Promise<unknown> => undefined
@@ -296,6 +302,7 @@ describe("runtime routing management", () => {
     expect(
       within(form).getByLabelText("Enable STT streaming")
     ).not.toBeChecked();
+    expect(within(form).getByLabelText("Enable Chat streaming")).toBeDisabled();
     expect(
       within(form).getByLabelText("Enable TTS streaming")
     ).not.toBeChecked();
@@ -308,7 +315,136 @@ describe("runtime routing management", () => {
       throw new Error("Expected a create-route operation");
     }
     expect(operation.input.sttStreamingEnabled).toBe(true);
+    expect(operation.input.chatStreamingEnabled).toBe(false);
     expect(operation.input.ttsStreamingEnabled).toBe(false);
+  });
+
+  it("applies the full-chain profile and explains every readiness gate", async () => {
+    const user = userEvent.setup();
+    const execute = vi.fn(
+      async (_operation: RuntimeRoutingOperation): Promise<unknown> => undefined
+    );
+    const streamingRouting: RuntimeRoutingSummary = {
+      ...routing,
+      models: routing.models.map((entry) => ({
+        ...entry,
+        declaredCapabilities: [
+          ...new Set([...entry.declaredCapabilities, "streaming" as const])
+        ],
+        verifiedCapabilities: entry.verifiedCapabilities.filter(
+          (capability) => capability !== "streaming"
+        )
+      })),
+      streamingAvailability: {
+        transportAvailable: false,
+        browserClientAvailable: false,
+        sttProviderIds: [],
+        chatProviderIds: [],
+        ttsProviderIds: []
+      }
+    };
+    const view = renderWithProviders(
+      <RouteManagement
+        routing={streamingRouting}
+        pending={false}
+        execute={execute}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Add route" }));
+    await user.type(screen.getByLabelText("Display name"), "Full chain");
+    await user.selectOptions(
+      screen.getByLabelText("Speech to text"),
+      "model-stt"
+    );
+    await user.selectOptions(screen.getByLabelText("LLM"), "model-chat");
+    await user.selectOptions(
+      screen.getByLabelText("Text to speech"),
+      "model-tts"
+    );
+    await user.click(screen.getByLabelText("Enable full-chain streaming"));
+
+    expect(
+      screen.getAllByText(
+        /declared: available; verified: unavailable; adapter: unavailable; server transport: unavailable; browser client: unavailable/
+      )
+    ).toHaveLength(3);
+    await user.click(
+      within(view.container).getByRole("button", { name: "Create" })
+    );
+
+    const operation = execute.mock.calls[0]?.[0];
+    expect(operation?.type).toBe("create-route");
+    if (operation?.type !== "create-route") {
+      throw new Error("Expected a create-route operation");
+    }
+    expect(operation.input).toMatchObject({
+      sttStreamingEnabled: true,
+      chatStreamingEnabled: true,
+      ttsStreamingEnabled: true
+    });
+  });
+
+  it("clears a role switch when selecting a buffered-only model", async () => {
+    const user = userEvent.setup();
+    const execute = vi.fn(
+      async (_operation: RuntimeRoutingOperation): Promise<unknown> => undefined
+    );
+    const streamingChat = {
+      ...routingWithRoute,
+      models: [
+        ...routingWithRoute.models.map((entry) =>
+          entry.id === "model-chat"
+            ? {
+                ...entry,
+                declaredCapabilities: [
+                  ...entry.declaredCapabilities,
+                  "streaming" as const
+                ]
+              }
+            : entry
+        ),
+        model("model-chat-buffered", "Buffered Chat", [
+          "text-input",
+          "text-output",
+          "tool-calling",
+          "non-streaming"
+        ])
+      ],
+      routes: routingWithRoute.routes.map((route) => ({
+        ...route,
+        chatStreamingEnabled: true
+      }))
+    };
+    renderWithProviders(
+      <RouteManagement
+        routing={streamingChat}
+        pending={false}
+        execute={execute}
+      />
+    );
+    const item = screen.getByText("Route A").closest("li");
+    if (!item) throw new Error("Expected the route list item");
+
+    await user.click(within(item).getByRole("button", { name: "Edit" }));
+    expect(within(item).getByLabelText("Enable Chat streaming")).toBeChecked();
+    await user.selectOptions(
+      within(item).getByLabelText("LLM"),
+      "model-chat-buffered"
+    );
+    expect(
+      within(item).getByLabelText("Enable Chat streaming")
+    ).not.toBeChecked();
+    await user.click(
+      within(item).getByRole("button", { name: "Save changes" })
+    );
+
+    const operation = execute.mock.calls[0]?.[0];
+    expect(operation?.type).toBe("update-route");
+    if (operation?.type !== "update-route") {
+      throw new Error("Expected an update-route operation");
+    }
+    expect(operation.input.chatStreamingEnabled).toBe(false);
   });
 
   it("requires confirmation before deleting a custom connection", async () => {
@@ -506,6 +642,7 @@ describe("runtime routing management", () => {
       ttsModelDeploymentId: null,
       nativeModelDeploymentId: "model-native",
       sttStreamingEnabled: false,
+      chatStreamingEnabled: false,
       ttsStreamingEnabled: false
     });
   });

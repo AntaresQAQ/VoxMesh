@@ -132,6 +132,7 @@ function routingSummary(): RuntimeRoutingSummary {
         nativeModelDeploymentId: null,
         fallbackRouteId: null,
         sttStreamingEnabled: false,
+        chatStreamingEnabled: false,
         ttsStreamingEnabled: false,
         enabled: true,
         readiness: {

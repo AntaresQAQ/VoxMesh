@@ -394,16 +394,35 @@ export const RuntimeRouteSummarySchema = Type.Object({
   nativeModelDeploymentId: Type.Union([Type.String(), Type.Null()]),
   fallbackRouteId: Type.Union([Type.String(), Type.Null()]),
   sttStreamingEnabled: Type.Boolean(),
+  chatStreamingEnabled: Type.Boolean(),
   ttsStreamingEnabled: Type.Boolean(),
   enabled: Type.Boolean(),
   readiness: ProviderReadinessSchema
+});
+
+export const StreamingRuntimeAvailabilitySchema = Type.Object({
+  transportAvailable: Type.Boolean(),
+  browserClientAvailable: Type.Boolean(),
+  sttProviderIds: Type.Array(Type.String({ minLength: 1 }), {
+    maxItems: 100,
+    uniqueItems: true
+  }),
+  chatProviderIds: Type.Array(Type.String({ minLength: 1 }), {
+    maxItems: 100,
+    uniqueItems: true
+  }),
+  ttsProviderIds: Type.Array(Type.String({ minLength: 1 }), {
+    maxItems: 100,
+    uniqueItems: true
+  })
 });
 
 export const RuntimeRoutingSummarySchema = Type.Object({
   connections: Type.Array(ProviderConnectionSummarySchema),
   models: Type.Array(ModelDeploymentSummarySchema),
   routes: Type.Array(RuntimeRouteSummarySchema),
-  activeRouteId: Type.String()
+  activeRouteId: Type.String(),
+  streamingAvailability: Type.Optional(StreamingRuntimeAvailabilitySchema)
 });
 
 export const DashboardSchema = Type.Object({
@@ -551,6 +570,7 @@ export const RuntimeRouteInputSchema = Type.Object({
   nativeModelDeploymentId: Type.Union([Type.String(), Type.Null()]),
   fallbackRouteId: Type.Union([Type.String(), Type.Null()]),
   sttStreamingEnabled: Type.Boolean(),
+  chatStreamingEnabled: Type.Optional(Type.Boolean({ default: false })),
   ttsStreamingEnabled: Type.Boolean(),
   enabled: Type.Boolean()
 });
@@ -606,12 +626,21 @@ export type ModelDeploymentSummary = Static<
   typeof ModelDeploymentSummarySchema
 >;
 export type RuntimeRouteSummary = Static<typeof RuntimeRouteSummarySchema>;
+export type StreamingRuntimeAvailability = Static<
+  typeof StreamingRuntimeAvailabilitySchema
+>;
 export type RuntimeRoutingSummary = Static<typeof RuntimeRoutingSummarySchema>;
 export type ProviderConnectionInput = Static<
   typeof ProviderConnectionInputSchema
 >;
 export type ModelDeploymentInput = Static<typeof ModelDeploymentInputSchema>;
 export type RuntimeRouteInput = Static<typeof RuntimeRouteInputSchema>;
+export type NormalizedRuntimeRouteInput = Omit<
+  RuntimeRouteInput,
+  "chatStreamingEnabled"
+> & {
+  chatStreamingEnabled: boolean;
+};
 export type ActiveRuntimeRouteUpdate = Static<
   typeof ActiveRuntimeRouteUpdateSchema
 >;

@@ -399,8 +399,9 @@ Current implementation status:
 - [x] Resolve current providers through stable system runtime routes.
 - [x] Add editable provider connection, model deployment, and route CRUD.
 - [x] Add explicit Composed fallback configuration.
-- [x] Add independent capability-gated STT and TTS streaming intent switches
-      with activation blocked until runtime transport exists.
+- [x] Add independent capability-gated STT, Chat, and TTS streaming intent
+      switches plus a full-chain profile, with activation blocked until the
+      required transport, browser client, and adapters exist.
 - [ ] Add versioned streaming voice-session contracts and deterministic Mock
       streaming providers.
 - [ ] Extend Agent Core and Chat providers with typed Streaming LLM text and

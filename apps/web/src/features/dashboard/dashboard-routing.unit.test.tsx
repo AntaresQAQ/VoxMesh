@@ -53,7 +53,8 @@ describe("DashboardRouteOverview", () => {
             "audio-output",
             "text-output",
             "tool-calling",
-            "native-multimodal"
+            "native-multimodal",
+            "non-streaming"
           ],
           verifiedCapabilities: [
             "audio-input",
@@ -75,6 +76,7 @@ describe("DashboardRouteOverview", () => {
           nativeModelDeploymentId: "model-native",
           fallbackRouteId: null,
           sttStreamingEnabled: false,
+          chatStreamingEnabled: false,
           ttsStreamingEnabled: false,
           enabled: true,
           readiness: {
@@ -102,4 +104,105 @@ describe("DashboardRouteOverview", () => {
     expect(screen.getByText("Readiness: Not tested")).toBeVisible();
     expect(screen.getByText("Last error: Authentication failed")).toBeVisible();
   });
+
+  it("reports mixed Composed transport and Chat streaming verification", () => {
+    const routing: RuntimeRoutingSummary = {
+      connections: [
+        connection("connection-stt"),
+        connection("connection-chat"),
+        connection("connection-tts")
+      ],
+      models: [
+        model("model-stt", "connection-stt", [
+          "audio-input",
+          "text-output",
+          "transcription",
+          "non-streaming"
+        ]),
+        model("model-chat", "connection-chat", [
+          "text-input",
+          "text-output",
+          "tool-calling",
+          "non-streaming",
+          "streaming"
+        ]),
+        model("model-tts", "connection-tts", [
+          "text-input",
+          "audio-output",
+          "speech-synthesis",
+          "non-streaming"
+        ])
+      ],
+      routes: [
+        {
+          id: "route-composed",
+          displayName: "Mixed Route",
+          mode: "composed",
+          sttModelDeploymentId: "model-stt",
+          chatModelDeploymentId: "model-chat",
+          ttsModelDeploymentId: "model-tts",
+          nativeModelDeploymentId: null,
+          fallbackRouteId: null,
+          sttStreamingEnabled: false,
+          chatStreamingEnabled: true,
+          ttsStreamingEnabled: false,
+          enabled: true,
+          readiness: unknownReadiness
+        }
+      ],
+      activeRouteId: "route-composed"
+    };
+
+    renderWithProviders(<DashboardRouteOverview routing={routing} />);
+
+    expect(
+      screen.getAllByText(
+        (_, element) =>
+          element?.tagName === "P" &&
+          element.textContent?.includes("Transport") === true &&
+          element.textContent.includes("Buffered")
+      )
+    ).toHaveLength(2);
+    expect(
+      screen.getByText(
+        (_, element) =>
+          element?.tagName === "P" &&
+          element.textContent?.includes("Transport") === true &&
+          element.textContent.includes("Streaming")
+      )
+    ).toBeVisible();
+    expect(screen.getAllByText("Required capabilities verified")).toHaveLength(
+      3
+    );
+  });
 });
+
+function connection(id: string): RuntimeRoutingSummary["connections"][number] {
+  return {
+    id,
+    providerId: "mock",
+    displayName: id,
+    endpoint: "",
+    apiKeyConfigured: false,
+    enabled: true,
+    readiness: unknownReadiness
+  };
+}
+
+function model(
+  id: string,
+  connectionId: string,
+  capabilities: RuntimeRoutingSummary["models"][number]["declaredCapabilities"]
+): RuntimeRoutingSummary["models"][number] {
+  return {
+    id,
+    connectionId,
+    displayName: id,
+    modelName: id,
+    apiVersion: "",
+    providerOptions: {},
+    declaredCapabilities: capabilities,
+    verifiedCapabilities: capabilities,
+    enabled: true
+  };
+}

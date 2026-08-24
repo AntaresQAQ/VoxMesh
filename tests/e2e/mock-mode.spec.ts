@@ -756,28 +756,35 @@ test("completes setup, tool-assisted chat, inspection, and logout", async ({
   await modelManager.getByLabel("Connection").selectOption({
     label: "E2E Mock"
   });
-  await modelManager.getByLabel("Display name").fill("E2E Streaming STT");
-  await modelManager.getByLabel("Model name").fill("mock-streaming-stt");
+  await modelManager.getByLabel("Display name").fill("E2E Full Chain Model");
+  await modelManager.getByLabel("Model name").fill("mock-full-chain");
   await modelManager.getByLabel("Declared").click();
   await modelManager.getByRole("checkbox", { name: "Audio input" }).check();
+  await modelManager.getByRole("checkbox", { name: "Audio output" }).check();
+  await modelManager.getByRole("checkbox", { name: "Text input" }).check();
   await modelManager.getByRole("checkbox", { name: "Text output" }).check();
   await modelManager.getByRole("checkbox", { name: "Transcription" }).check();
+  await modelManager
+    .getByRole("checkbox", { name: "Speech synthesis" })
+    .check();
+  await modelManager.getByRole("checkbox", { name: "Tool calling" }).check();
+  await modelManager.getByRole("checkbox", { name: "Non-streaming" }).check();
   await modelManager
     .getByRole("checkbox", { name: "Streaming", exact: true })
     .check();
   await expect(modelManager.getByLabel("Declared")).toContainText(
-    "4 capabilities selected"
+    "9 capabilities selected"
   );
   await expectAccessible(page, "capability picker");
   await modelManager.getByRole("button", { name: "Done" }).click();
   await modelManager.getByRole("button", { name: "Create" }).click();
   const streamingModelItem = modelManager
-    .getByText("E2E Streaming STT")
+    .getByText("E2E Full Chain Model")
     .locator("..");
   await expect(streamingModelItem).toBeVisible();
   await streamingModelItem.getByRole("button", { name: "Edit" }).click();
   await expect(streamingModelItem.getByLabel("Display name")).toHaveValue(
-    "E2E Streaming STT"
+    "E2E Full Chain Model"
   );
   await expect(streamingModelItem.locator("form")).toBeVisible();
   await streamingModelItem.getByRole("button", { name: "Cancel" }).click();
@@ -787,23 +794,26 @@ test("completes setup, tool-assisted chat, inspection, and logout", async ({
   await routeManager.getByRole("button", { name: "Add route" }).click();
   await routeManager.getByLabel("Display name").fill("E2E Streaming Route");
   await routeManager.getByLabel("Speech to text").selectOption({
-    label: "E2E Streaming STT"
+    label: "E2E Full Chain Model"
   });
   await routeManager.getByLabel("LLM").selectOption({
-    label: "Chat · Mock Chat"
+    label: "E2E Full Chain Model"
   });
   await routeManager.getByLabel("Text to speech").selectOption({
-    label: "TTS · Mock TTS"
+    label: "E2E Full Chain Model"
   });
-  await routeManager.getByLabel("Enable STT streaming").check();
-  await expect(
-    routeManager.getByLabel("Enable TTS streaming")
-  ).not.toBeChecked();
+  await routeManager.getByLabel("Enable full-chain streaming").check();
+  await expect(routeManager.getByLabel("Enable STT streaming")).toBeChecked();
+  await expect(routeManager.getByLabel("Enable Chat streaming")).toBeChecked();
+  await expect(routeManager.getByLabel("Enable TTS streaming")).toBeChecked();
   await routeManager.getByRole("button", { name: "Create" }).click();
   const customRoute = routeManager
     .getByText("E2E Streaming Route")
     .locator("..");
   await expect(customRoute).toBeVisible();
+  await expect(customRoute).toContainText(
+    "STT: Streaming · Chat: Streaming · TTS: Streaming"
+  );
   const routeTestResponse = page.waitForResponse(
     (response) =>
       response.request().method() === "POST" &&
@@ -812,7 +822,7 @@ test("completes setup, tool-assisted chat, inspection, and logout", async ({
   await customRoute.getByRole("button", { name: "Test & activate" }).click();
   expect((await routeTestResponse).status()).toBe(200);
   await expect(page.getByRole("alert")).toContainText(
-    "Streaming routes cannot be activated"
+    "requires verified streaming capability"
   );
   await expect(customRoute.getByText("Readiness: Ready")).toBeVisible();
   await expectAccessible(page, "English dark provider settings");

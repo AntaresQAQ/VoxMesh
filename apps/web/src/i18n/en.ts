@@ -277,8 +277,21 @@ export const en = {
     "Route test succeeded and the route is active.",
   "settings.routeTestFailed": "Route test failed.",
   "settings.fallbackRoute": "Composed fallback route",
+  "settings.enableFullChainStreaming": "Enable full-chain streaming",
+  "settings.fullChainStreamingHint":
+    "Applies streaming independently to STT, Chat, and TTS. Buffered capability remains required for /api/voice.",
   "settings.enableSttStreaming": "Enable STT streaming",
+  "settings.enableChatStreaming": "Enable Chat streaming",
   "settings.enableTtsStreaming": "Enable TTS streaming",
+  "settings.streamingProfile": "STT: {stt} · Chat: {chat} · TTS: {tts}",
+  "settings.streamingReadiness":
+    "Streaming readiness — declared: {declared}; verified: {verified}; adapter: {adapter}; server transport: {transport}; browser client: {browser}.",
+  "settings.streamingReadinessLabel": "{role} streaming readiness. {readiness}",
+  "settings.streamingRoleStt": "STT",
+  "settings.streamingRoleChat": "Chat",
+  "settings.streamingRoleTts": "TTS",
+  "settings.available": "available",
+  "settings.unavailable": "unavailable",
   "settings.languageTitle": "Display language",
   "settings.languageDescription":
     "Language changes apply immediately and are saved in this browser.",

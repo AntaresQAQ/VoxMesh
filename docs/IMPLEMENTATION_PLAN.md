@@ -94,8 +94,9 @@ Recent merged milestones:
       downgrade
 - [x] buffered route testing, Test & activate, actionable result states, and
       provider configuration error reporting
-- [x] independent STT/TTS streaming intent switches with explicit activation
-      rejection while runtime transport remains buffered
+- [x] independent STT/Chat/TTS streaming intent switches and a full-chain
+      profile, with explicit activation rejection while runtime surfaces remain
+      unavailable
 - [x] route-aware Dashboard status, inline Settings editors, accessible
       capability selection, responsive layouts, and bilingual copy
 
@@ -234,14 +235,15 @@ Phase 5 PR 4 implementation is documented in
 - multi-agent, multi-device, and complex approval workflows
 - local/offline AI and mobile applications
 
-Streaming intent is already represented independently for STT and TTS in
-Runtime Routing. Until the transport and assigned adapters are implemented and
-verified, activation must continue to reject routes that request streaming.
+Streaming intent is represented independently for STT, Chat, and TTS in
+Runtime Routing, with a full-chain profile for all three. Until the transport,
+browser client, and assigned adapters are implemented and verified, activation
+must continue to reject routes that request streaming.
 
 ### Next execution order
 
-1. Implement Phase 5 capability-gated full-chain Streaming STT/Chat LLM/TTS,
-   beginning with the separately authorized contracts PR.
+1. Continue Phase 5 with the streaming coordinator, WebSocket transport,
+   browser AudioWorklet, provider adapters, qualification, and acceptance.
 2. Implement Phase 6 cross-platform audio devices.
 3. Implement Phase 7 offline wake-word detection.
 4. Implement Phase 8 generic third-party MCP and the full MCP Console.
@@ -998,12 +1000,12 @@ Phase 5 requires explicit confirmation after buffered Phase 4 acceptance.
 - Azure and generic OpenAI-compatible models remain buffered unless a specific
   endpoint and model declare streaming, pass contract tests, and complete
   capability verification.
-- Add an independent Chat streaming switch to Runtime Routes alongside the
-  existing STT and TTS switches.
+- Runtime Routes provide independent STT, Chat, and TTS streaming switches.
 - Preserve all independent combinations across the three roles. The
   full-chain profile enables STT, Chat, and TTS streaming together.
-- Route activation requires the runtime transport plus declared and verified
-  `streaming` capability for every enabled role.
+- Route activation requires the server transport, browser client,
+  role-specific provider adapter, and declared and verified `streaming`
+  capability for every enabled role.
 
 ### 9.4 Backpressure, Cancellation, and Lifecycle
 
