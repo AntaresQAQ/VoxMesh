@@ -96,6 +96,12 @@ registers none of those Phase 5 runtime surfaces, so streaming configurations
 can be saved but cannot be activated. VoxMesh reports the missing gate instead
 of silently downgrading the route to buffered execution.
 
+Provider resolution revalidates the active route against the current verified
+capabilities and runtime availability. If a route was activated in a different
+runtime composition and the required streaming surface later disappears,
+voice and implicit active-route provider resolution fail explicitly. Routing
+management remains available so an administrator can activate a safe route.
+
 The full-chain migration marks every pre-Phase-5 deployment as declaring
 `non-streaming`, because those deployments could only run through buffered
 adapters. It carries that capability into verification only when the stored

@@ -683,13 +683,14 @@ export class RuntimeRoutingStore {
     configuration: T,
     routeId?: string
   ): T {
-    const active = this.getActiveRuntimeRoute();
+    const active =
+      routeId === undefined ? this.getValidatedActiveRuntimeRoute() : undefined;
     const route =
       routeId !== undefined
         ? this.getRoute(routeId)
-        : active.mode === "composed"
+        : active?.mode === "composed"
           ? active
-          : active.fallback_route_id
+          : active?.fallback_route_id
             ? this.getRoute(active.fallback_route_id)
             : undefined;
     if (!route) {
@@ -736,13 +737,14 @@ export class RuntimeRoutingStore {
     configuration: T,
     routeId?: string
   ): T {
-    const active = this.getActiveRuntimeRoute();
+    const active =
+      routeId === undefined ? this.getValidatedActiveRuntimeRoute() : undefined;
     const route =
       routeId !== undefined
         ? this.getRoute(routeId)
-        : active.mode === "composed"
+        : active?.mode === "composed"
           ? active
-          : active.fallback_route_id
+          : active?.fallback_route_id
             ? this.getRoute(active.fallback_route_id)
             : undefined;
     if (!route) {
@@ -802,7 +804,7 @@ export class RuntimeRoutingStore {
   ): VoiceRoutingConfiguration {
     const route =
       routeId === undefined
-        ? this.getActiveRuntimeRoute()
+        ? this.getValidatedActiveRuntimeRoute()
         : this.getRoute(routeId);
     if (route.mode === "composed") {
       return {
@@ -1684,7 +1686,12 @@ export class RuntimeRoutingStore {
       .prepare(
         `SELECT r.id, r.display_name, r.mode, r.stt_model_deployment_id,
                 r.chat_model_deployment_id, r.tts_model_deployment_id,
-                r.native_model_deployment_id, r.fallback_route_id
+                r.native_model_deployment_id, r.fallback_route_id,
+                r.stt_streaming_enabled, r.chat_streaming_enabled,
+                r.tts_streaming_enabled, r.enabled,
+                r.readiness_state, r.readiness_last_tested_at,
+                r.readiness_error_category, r.readiness_error_message,
+                r.readiness_generation
          FROM active_runtime_route a
          JOIN runtime_routes r ON r.id = a.active_route_id
          WHERE a.id = 1`
@@ -1692,6 +1699,15 @@ export class RuntimeRoutingStore {
       .get() as RuntimeRouteRow | undefined;
     if (!route) {
       throw new Error("Active runtime route was not found");
+    }
+    return route;
+  }
+
+  private getValidatedActiveRuntimeRoute(): RuntimeRouteRow {
+    const route = this.getActiveRuntimeRoute();
+    this.validateRoute(route.id, routeInputFromRow(route), true);
+    if (route.enabled !== 1) {
+      throw badRequest("Disabled runtime route cannot be used");
     }
     return route;
   }

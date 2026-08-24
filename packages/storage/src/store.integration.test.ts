@@ -941,6 +941,14 @@ describe("VoxMeshStore", () => {
           chatStreamingEnabled: false
         })
       ).toThrow("Active runtime route cannot be changed");
+      store.close();
+      store = new VoxMeshStore(databasePath);
+      expect(() => store?.getRuntimeLlmConfiguration()).toThrow(
+        "Streaming voice transport is unavailable"
+      );
+      expect(() => store?.getRuntimeVoicePipelineConfiguration()).toThrow(
+        "Streaming voice transport is unavailable"
+      );
     } finally {
       store?.close();
       store = undefined;

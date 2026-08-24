@@ -53,7 +53,7 @@ export function ComposedRouteAssignmentFields(props: {
       <Checkbox
         label={t("settings.enableFullChainStreaming")}
         checked={fullChainEnabled}
-        disabled={!fullChainSupported}
+        disabled={!fullChainEnabled && !fullChainSupported}
         describedBy={fullChainHintId}
         onChange={props.onFullChainStreamingChange}
       />

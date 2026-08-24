@@ -61,6 +61,29 @@ describe("ComposedRouteAssignmentFields", () => {
     expect(callbacks.onChatStreamingChange).toHaveBeenCalledWith(true);
   });
 
+  it("allows an invalid saved full-chain profile to be turned off", async () => {
+    const user = userEvent.setup();
+    const callbacks = createCallbacks();
+    renderWithProviders(
+      <ComposedRouteAssignmentFields
+        {...baseProps(callbacks)}
+        values={{
+          ...routeValues(),
+          sttStreamingEnabled: true,
+          chatStreamingEnabled: true,
+          ttsStreamingEnabled: true
+        }}
+        models={models(false)}
+      />
+    );
+
+    const profile = screen.getByLabelText("Enable full-chain streaming");
+    expect(profile).toBeChecked();
+    expect(profile).toBeEnabled();
+    await user.click(profile);
+    expect(callbacks.onFullChainStreamingChange).toHaveBeenCalledWith(false);
+  });
+
   it("renders localized profile controls", () => {
     localStorage.setItem("voxmesh.locale", "zh-CN");
     renderWithProviders(
