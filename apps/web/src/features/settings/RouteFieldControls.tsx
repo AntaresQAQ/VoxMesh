@@ -83,9 +83,9 @@ export function supportsStreaming(
   models: ModelDeploymentSummary[],
   modelId: string | null
 ): boolean {
+  const model = models.find((candidate) => candidate.id === modelId);
   return (
-    models
-      .find((model) => model.id === modelId)
-      ?.declaredCapabilities.includes("streaming") ?? false
+    model?.declaredCapabilities.includes("streaming") === true &&
+    model.declaredCapabilities.includes("non-streaming")
   );
 }

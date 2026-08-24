@@ -23,7 +23,8 @@ describe("RouteFieldControls", () => {
           model("missing-buffered", [
             "text-input",
             "text-output",
-            "tool-calling"
+            "tool-calling",
+            "streaming"
           ]),
           model("buffered", [
             "text-input",
