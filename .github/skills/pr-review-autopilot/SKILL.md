@@ -93,7 +93,7 @@ Use blocking workflow waits instead of manual polling:
 
 ```bash
 gh pr checks PR --repo OWNER/REPO --watch --interval 10
-gh run watch RUN_ID --repo OWNER/REPO --exit-status
+gh run watch "$RUN_ID" --repo OWNER/REPO --exit-status
 ```
 
 If a wait exceeds the command timeout, read the same background shell session;
@@ -229,7 +229,10 @@ RUN_ID=$(gh run list --repo OWNER/REPO \
     )
   ][0].databaseId // empty')
 
-test -n "$RUN_ID"
+if [ -z "$RUN_ID" ]; then
+  echo "No Copilot review run found for $HEAD_SHA" >&2
+  exit 1
+fi
 
 gh run watch "$RUN_ID" --repo OWNER/REPO --exit-status
 ```
