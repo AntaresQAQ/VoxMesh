@@ -18,6 +18,45 @@ export interface LlmProvider {
   }): Promise<LlmResponse>;
 }
 
+export type StreamingLlmFinishReason =
+  "stop" | "tool_call" | "length" | "content_filter" | "other";
+
+export type StreamingLlmEvent =
+  | {
+      type: "text_delta";
+      content: string;
+    }
+  | {
+      type: "tool_call_delta";
+      index: number;
+      id: string | null;
+      nameDelta: string;
+      argumentsDelta: string;
+    }
+  | {
+      type: "usage";
+      inputTokens: number;
+      outputTokens: number;
+    }
+  | {
+      type: "completed";
+      finishReason: StreamingLlmFinishReason;
+    };
+
+/**
+ * Provider-independent Streaming Chat contract.
+ *
+ * Provider adapters own SSE or vendor protocol parsing. Agent Core receives
+ * only typed deltas and a single completed event.
+ */
+export interface StreamingLlmProvider {
+  stream(input: {
+    messages: AgentMessage[];
+    tools: ToolDefinition[];
+    signal: AbortSignal;
+  }): AsyncIterable<StreamingLlmEvent>;
+}
+
 export interface McpServer {
   readonly name: string;
   listTools(signal?: AbortSignal): Promise<ToolDefinition[]>;

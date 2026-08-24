@@ -199,6 +199,9 @@ graph, risks, and operation gates are defined in
 user accepted the plan on 2026-08-24; PR 1 still requires separate
 implementation authorization.
 
+Phase 5 PR 1 implementation is documented in
+[Voice Stream Protocol and Provider Contracts](./architecture/VOICE_STREAM_PROTOCOL.md).
+
 ### Later confirmed phases
 
 - [ ] Phase 6 browser and host audio discovery, selection, testing, capture,

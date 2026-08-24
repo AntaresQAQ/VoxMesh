@@ -35,6 +35,7 @@ links back to the governing MVP and development rules.
 
 - [Technology Stack and Development Guide](./architecture/TECHNOLOGY_STACK.md)
 - [Voice Pipeline Architecture](./architecture/VOICE_PIPELINES.md)
+- [Voice Stream Protocol](./architecture/VOICE_STREAM_PROTOCOL.md)
 - [Runtime Routing](./architecture/RUNTIME_ROUTING.md)
 - [WebSocket Event Delivery](./architecture/WEBSOCKET.md)
 - [Conversation Run Lifecycle](./architecture/CONVERSATION_LIFECYCLE.md)
