@@ -223,14 +223,26 @@ describe("StreamingVoiceCoordinator", () => {
     const store = new VoxMeshStore(":memory:");
     try {
       const routeId = createRoute(store, {
-        stt: true,
+        stt: false,
         chat: true,
         tts: true
       });
       const providers = createTrackedProviders().providers;
-      providers.streamingStt = new MockStreamingSpeechToTextProvider({
-        eventDelayMs: 50
-      });
+      providers.bufferedStt = {
+        transcribe: async (_audio, options) =>
+          new Promise((_, reject) => {
+            const signal = options?.signal;
+            if (signal?.aborted) {
+              reject(new AgentRunCancelledError());
+              return;
+            }
+            signal?.addEventListener(
+              "abort",
+              () => reject(new AgentRunCancelledError()),
+              { once: true }
+            );
+          })
+      };
       const run = new StreamingVoiceCoordinator(store, new MockMcpServer()).run(
         {
           runId: "36363636-3636-4636-8636-363636363636",
@@ -732,6 +744,33 @@ describe("StreamingVoiceCoordinator", () => {
           .filter((event) => event.type === "audio")
           .every((event) => event.chunk.data.byteLength === 882)
       ).toBe(true);
+    } finally {
+      store.close();
+    }
+  });
+
+  it("rejects buffered TTS sample rates outside protocol bounds", async () => {
+    const store = new VoxMeshStore(":memory:");
+    const providers = createTrackedProviders().providers;
+    providers.bufferedTts = new MockTextToSpeechProviderAtRate(192_000);
+    try {
+      const routeId = createRoute(store, {
+        stt: false,
+        chat: false,
+        tts: false
+      });
+      await expect(
+        consume(
+          new StreamingVoiceCoordinator(store, new MockMcpServer()).run({
+            runId: "52525252-5252-4252-8252-525252525252",
+            preparation: preparation(store, routeId, providers),
+            format,
+            audio: audioFrames(),
+            toolMode: "enabled",
+            signal: new AbortController().signal
+          })
+        )
+      ).rejects.toMatchObject({ code: "TTS_FAILED" });
     } finally {
       store.close();
     }

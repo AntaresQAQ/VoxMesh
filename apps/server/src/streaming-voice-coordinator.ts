@@ -16,12 +16,15 @@ import {
   type StreamingAudioChunk,
   type StreamingAudioFormat,
   type StreamingSpeechToTextProvider,
+  type StreamingSynthesisEvent,
+  type StreamingTranscriptionEvent,
   type StreamingTextToSpeechProvider,
   type TextToSpeechProvider,
   type TranscriptionResult
 } from "@voxmesh/audio";
 import {
   BoundedAsyncQueue,
+  VOICE_STREAM_BINARY_HEADER_BYTES,
   VOICE_STREAM_LIMITS,
   type VoiceStreamPcmFormat
 } from "@voxmesh/shared";
@@ -139,7 +142,7 @@ export class StreamingVoiceCoordinator {
     private readonly mcp: McpServer
   ) {}
 
-  public async *run(
+  public run(
     input: StreamingVoiceCoordinatorInput
   ): AsyncGenerator<
     StreamingVoiceCoordinatorEvent,
@@ -165,19 +168,39 @@ export class StreamingVoiceCoordinator {
         throw error;
       }
     );
-    try {
-      try {
-        for await (const event of events) {
-          yield event;
+    return {
+      next: async () => {
+        try {
+          const event = await events.dequeue({ signal: localAbort.signal });
+          if (event !== null) {
+            return { done: false, value: event };
+          }
+          return { done: true, value: await execution };
+        } catch {
+          return { done: true, value: await execution };
         }
-      } catch {
-        return await execution;
+      },
+      return: async (
+        value:
+          | StreamingVoiceCoordinatorResult
+          | PromiseLike<StreamingVoiceCoordinatorResult>
+      ) => {
+        localAbort.abort();
+        await execution.catch(() => undefined);
+        return {
+          done: true,
+          value: await value
+        };
+      },
+      throw: async (error?: unknown) => {
+        localAbort.abort();
+        await execution.catch(() => undefined);
+        throw asError(error);
+      },
+      [Symbol.asyncIterator]() {
+        return this;
       }
-      return await execution;
-    } finally {
-      localAbort.abort();
-      await execution.catch(() => undefined);
-    }
+    };
   }
 
   private async execute(
@@ -475,6 +498,7 @@ export class StreamingVoiceCoordinator {
       await streamingAudio?.catch(() => undefined);
       if (
         ttsStartedAt !== undefined &&
+        !signal.aborted &&
         !(error instanceof StreamingVoiceStageError && error.stage === "TTS")
       ) {
         this.store.addPipelineEvent({
@@ -536,12 +560,12 @@ export class StreamingVoiceCoordinator {
     try {
       const audio = ttsStreaming
         ? (streamingAudio ??
-          (await synthesizeStreamingText(
-            agent.response,
+          synthesizeSegments(
+            bufferedSegments(agent.response),
             input.providers.streamingTts,
             signal,
             events
-          )))
+          ))
         : await synthesizeBufferedText(
             agent.response,
             input.providers.bufferedTts,
@@ -601,57 +625,68 @@ async function consumeStreamingStt(
     VOICE_STREAM_LIMITS.providerStageTimeoutMs,
     providerAbort
   );
-  const providerIterator = session[Symbol.asyncIterator]();
-  const inputIterator = input.audio[Symbol.asyncIterator]();
+  let providerIterator: AsyncIterator<StreamingTranscriptionEvent> | undefined;
+  let inputIterator: AsyncIterator<StreamingAudioChunk> | undefined;
   let final: { result: TranscriptionResult; sequence: number } | undefined;
   let inputFinished = false;
   let expectedEventSequence = 1;
   let frames = 0;
   let audioBytes = 0;
-  const consume = (async () => {
-    while (true) {
-      const next = await withOperationTimeout(
-        providerIterator.next(),
-        providerSignal,
-        VOICE_STREAM_LIMITS.providerStageTimeoutMs,
-        providerAbort
-      );
-      if (next.done) break;
-      const event = next.value;
-      if (event.sequence !== expectedEventSequence) {
-        throw new Error("Streaming STT emitted an invalid event sequence");
-      }
-      expectedEventSequence += 1;
-      if (final) {
-        throw new Error(
-          "Streaming STT emitted an event after its final result"
+  let consume: Promise<void> | undefined;
+  try {
+    providerIterator = session[Symbol.asyncIterator]();
+    inputIterator = input.audio[Symbol.asyncIterator]();
+    consume = (async () => {
+      while (true) {
+        const next = await withOperationTimeout(
+          providerIterator.next(),
+          providerSignal,
+          VOICE_STREAM_LIMITS.providerStageTimeoutMs,
+          providerAbort
         );
-      }
-      if (event.type === "partial") {
-        if (
-          event.text.length === 0 ||
-          event.text.length > VOICE_STREAM_LIMITS.maxTranscriptCharacters
-        ) {
-          throw new Error("Streaming STT partial text is invalid");
+        if (next.done) break;
+        const event = next.value;
+        if (event.sequence !== expectedEventSequence) {
+          throw new Error("Streaming STT emitted an invalid event sequence");
         }
-        await emit(events, signal, {
-          type: "transcript_partial",
-          sequence: event.sequence,
-          text: event.text
-        });
-      } else {
-        if (!inputFinished) {
+        expectedEventSequence += 1;
+        if (final) {
           throw new Error(
-            "Streaming STT emitted its final result before input finished"
+            "Streaming STT emitted an event after its final result"
           );
         }
-        final = { result: event.result, sequence: event.sequence };
+        if (event.type === "partial") {
+          if (
+            event.text.length === 0 ||
+            event.text.length > VOICE_STREAM_LIMITS.maxTranscriptCharacters
+          ) {
+            throw new Error("Streaming STT partial text is invalid");
+          }
+          await emit(events, signal, {
+            type: "transcript_partial",
+            sequence: event.sequence,
+            text: event.text
+          });
+        } else if (event.type === "final") {
+          if (!inputFinished) {
+            throw new Error(
+              "Streaming STT emitted its final result before input finished"
+            );
+          }
+          final = { result: event.result, sequence: event.sequence };
+        } else {
+          throw new Error("Streaming STT emitted an unknown event");
+        }
       }
-    }
-    if (!inputFinished) {
-      throw new Error("Streaming STT ended before input was finished");
-    }
-  })();
+      if (!inputFinished) {
+        throw new Error("Streaming STT ended before input was finished");
+      }
+    })();
+  } catch (error) {
+    providerAbort.abort();
+    await settleWithTimeout(session.close());
+    throw error;
+  }
   const providerEnded = consume.then(
     () => {
       if (!inputFinished) {
@@ -661,6 +696,7 @@ async function consumeStreamingStt(
     },
     (error: unknown) => Promise.reject(asError(error))
   );
+  void providerEnded.catch(() => undefined);
   try {
     let expectedInputSequence = 1;
     while (true) {
@@ -715,11 +751,11 @@ async function consumeStreamingStt(
     };
   } finally {
     providerAbort.abort();
-    if (inputIterator.return) {
+    if (inputIterator?.return) {
       await settleWithTimeout(Promise.resolve(inputIterator.return()));
     }
     await settleWithTimeout(session.close());
-    await consume.catch(() => undefined);
+    await consume?.catch(() => undefined);
   }
 }
 
@@ -803,22 +839,32 @@ async function consumeStreamingAgent(
     input.toolMode === "enabled" ? mcp : disabledMcp
   ).run(transcript, { signal, toolMode: input.toolMode });
   const iterator = run[Symbol.asyncIterator]();
-  while (true) {
-    const next = await iterator.next();
-    if (next.done) return next.value;
-    await emit(events, signal, { type: "agent", event: next.value });
-    if (segmenter) {
-      try {
-        await segmenter.accept(next.value);
-      } catch (error) {
-        throw new StreamingVoiceStageError("TTS", error);
+  let completed = false;
+  try {
+    while (true) {
+      const next = await iterator.next();
+      if (next.done) {
+        completed = true;
+        return next.value;
       }
+      await emit(events, signal, { type: "agent", event: next.value });
+      if (segmenter) {
+        try {
+          await segmenter.accept(next.value);
+        } catch (error) {
+          throw new StreamingVoiceStageError("TTS", error);
+        }
+      }
+    }
+  } finally {
+    if (!completed && iterator.throw) {
+      await settleWithTimeout(iterator.throw(new AgentRunCancelledError()));
     }
   }
 }
 
 async function synthesizeSegments(
-  segments: AsyncIterable<{ index: number; text: string }>,
+  segments: AsyncIterable<{ text: string }>,
   provider: StreamingTextToSpeechProvider,
   signal: AbortSignal,
   events: BoundedAsyncQueue<StreamingVoiceCoordinatorEvent>
@@ -827,19 +873,21 @@ async function synthesizeSegments(
   let sequence = 1;
   let segmentCount = 0;
   for await (const segment of segments) {
-    const result = await synthesizeStreamingText(
-      segment.text,
-      provider,
-      signal,
-      events,
-      sequence,
-      segment.index,
-      totals
-    );
-    sequence = result.nextSequence;
-    segmentCount += 1;
-    if (segmentCount > 10_000) {
-      throw new Error("Streaming TTS segment count exceeds its limit");
+    for (const text of splitProtocolSegments(segment.text)) {
+      const result = await synthesizeStreamingText(
+        text,
+        provider,
+        signal,
+        events,
+        sequence,
+        segmentCount,
+        totals
+      );
+      sequence = result.nextSequence;
+      segmentCount += 1;
+      if (segmentCount > 10_000) {
+        throw new Error("Streaming TTS segment count exceeds its limit");
+      }
     }
   }
   return { segments: segmentCount, ...totals };
@@ -867,7 +915,7 @@ async function synthesizeStreamingText(
     VOICE_STREAM_LIMITS.providerStageTimeoutMs,
     providerAbort
   );
-  const iterator = session[Symbol.asyncIterator]();
+  let iterator: AsyncIterator<StreamingSynthesisEvent> | undefined;
   let audioBytes = 0;
   let completedDurationMs: number | undefined;
   let sequence = initialSequence;
@@ -878,6 +926,7 @@ async function synthesizeStreamingText(
   let segmentStarted = false;
   let completed = false;
   try {
+    iterator = session[Symbol.asyncIterator]();
     while (true) {
       const next = await withOperationTimeout(
         iterator.next(),
@@ -933,7 +982,7 @@ async function synthesizeStreamingText(
           chunk: { ...event.chunk, sequence }
         });
         sequence += 1;
-      } else {
+      } else if (event.type === "completed") {
         if (
           event.sequence !== expectedProviderSequence ||
           !outputFormat ||
@@ -947,6 +996,8 @@ async function synthesizeStreamingText(
           throw new Error("Streaming TTS duration metadata is inconsistent");
         }
         completed = true;
+      } else {
+        throw new Error("Streaming TTS emitted an unknown event");
       }
     }
     if (!completed || !segmentStarted || completedDurationMs === undefined) {
@@ -997,10 +1048,13 @@ async function synthesizeBufferedText(
     sampleRate: decoded.sampleRate,
     channels: decoded.channels
   };
+  if (format.sampleRate < 8_000 || format.sampleRate > 96_000) {
+    throw new Error("Buffered TTS sample rate is outside protocol bounds");
+  }
   const durationMs = audioDurationMs(decoded.pcm.byteLength, format);
   enforceOutputLimits(decoded.pcm.byteLength, durationMs);
   const frameDurationMs = selectOutputFrameDuration(format.sampleRate);
-  const segments = splitBufferedSegments(text);
+  const segments = splitProtocolSegments(text);
   await emit(events, signal, {
     type: "segment_started",
     segmentIndex: 0,
@@ -1057,21 +1111,30 @@ async function synthesizeBufferedText(
   };
 }
 
-function splitBufferedSegments(text: string): string[] {
-  const codePoints = Array.from(text);
+function splitProtocolSegments(text: string): string[] {
   const segments: string[] = [];
-  for (
-    let offset = 0;
-    offset < codePoints.length;
-    offset += VOICE_STREAM_LIMITS.maxTtsSegmentCharacters
-  ) {
-    segments.push(
-      codePoints
-        .slice(offset, offset + VOICE_STREAM_LIMITS.maxTtsSegmentCharacters)
-        .join("")
-    );
+  let pending = "";
+  for (const codePoint of text) {
+    if (
+      pending.length + codePoint.length >
+      VOICE_STREAM_LIMITS.maxTtsSegmentCharacters
+    ) {
+      if (pending.length > 0) segments.push(pending);
+      pending = codePoint;
+    } else {
+      pending += codePoint;
+    }
   }
+  if (pending.length > 0) segments.push(pending);
   return segments;
+}
+
+async function* bufferedSegments(
+  text: string
+): AsyncGenerator<{ text: string }> {
+  for (const segment of splitProtocolSegments(text)) {
+    yield { text: segment };
+  }
 }
 
 function validateCoordinatorInput(input: StreamingVoiceCoordinatorInput): void {
@@ -1088,12 +1151,17 @@ function validateCoordinatorInput(input: StreamingVoiceCoordinatorInput): void {
 
 function validateTranscriptionResult(result: TranscriptionResult): void {
   if (
+    typeof result.text !== "string" ||
     result.text.trim().length === 0 ||
     result.text.length > VOICE_STREAM_LIMITS.maxTranscriptCharacters
   ) {
     throw new Error("Final transcript text is empty or exceeds its limit");
   }
-  if (result.language.length < 1 || result.language.length > 64) {
+  if (
+    typeof result.language !== "string" ||
+    result.language.length < 1 ||
+    result.language.length > 64
+  ) {
     throw new Error("Final transcript language is invalid");
   }
 }
@@ -1131,7 +1199,9 @@ function validateAudioChunk(
     chunk.format.sampleRate !== format.sampleRate ||
     chunk.format.channels !== format.channels ||
     chunk.data.byteLength === 0 ||
-    chunk.data.byteLength % 2 !== 0
+    chunk.data.byteLength % (format.channels * 2) !== 0 ||
+    chunk.data.byteLength + VOICE_STREAM_BINARY_HEADER_BYTES >
+      VOICE_STREAM_LIMITS.maxBinaryMessageBytes
   ) {
     throw new Error("Streaming voice received an invalid audio chunk");
   }
@@ -1153,7 +1223,8 @@ function validateOutputChunk(
     chunk.format.channels > 2 ||
     chunk.data.byteLength === 0 ||
     chunk.data.byteLength % sampleFrameBytes !== 0 ||
-    chunk.data.byteLength + 16 > VOICE_STREAM_LIMITS.maxBinaryMessageBytes
+    chunk.data.byteLength + VOICE_STREAM_BINARY_HEADER_BYTES >
+      VOICE_STREAM_LIMITS.maxBinaryMessageBytes
   ) {
     throw new Error("Streaming TTS emitted an invalid audio chunk");
   }

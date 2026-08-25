@@ -46,7 +46,7 @@ export class OpenAiCompatibleSpeechToTextProvider implements SpeechToTextProvide
     form.append(
       "file",
       new Blob([buffer], { type: audio.mimeType }),
-      "recording.webm"
+      fileNameFor(audio.mimeType)
     );
     form.append("model", this.config.model);
     if (this.config.language) form.append("language", this.config.language);
@@ -119,6 +119,14 @@ export class OpenAiCompatibleTextToSpeechProvider implements TextToSpeechProvide
       mimeType: response.headers.get("content-type") ?? "audio/wav"
     };
   }
+}
+
+function fileNameFor(mimeType: string): string {
+  if (mimeType.includes("wav")) return "recording.wav";
+  if (mimeType.includes("mpeg") || mimeType.includes("mp3"))
+    return "recording.mp3";
+  if (mimeType.includes("ogg")) return "recording.ogg";
+  return "recording.webm";
 }
 
 function requestSignal(

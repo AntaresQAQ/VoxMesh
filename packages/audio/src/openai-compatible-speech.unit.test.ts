@@ -35,6 +35,34 @@ describe("OpenAI-compatible speech adapters", () => {
     });
   });
 
+  it("uses a WAV filename for WAV transcription bytes", async () => {
+    const fetcher = vi.fn(
+      async (_input: string | URL | Request, _init?: RequestInit) =>
+        Response.json({ text: "test" })
+    );
+    const provider = new OpenAiCompatibleSpeechToTextProvider(
+      {
+        baseUrl: "https://provider.example.com/v1",
+        model: "stt-model",
+        apiKey: "secret",
+        language: "en"
+      },
+      fetcher
+    );
+
+    await provider.transcribe({
+      data: new Uint8Array([1, 2]),
+      mimeType: "audio/wav"
+    });
+
+    const form = fetcher.mock.calls[0]?.[1]?.body;
+    expect(form).toBeInstanceOf(FormData);
+    expect((form as FormData).get("file")).toMatchObject({
+      name: "recording.wav",
+      type: "audio/wav"
+    });
+  });
+
   it("uses the standard speech endpoint", async () => {
     const controller = new AbortController();
     const fetcher = vi.fn(
