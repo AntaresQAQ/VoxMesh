@@ -40,4 +40,24 @@ describe("Mock speech providers", () => {
     expect(new TextDecoder().decode(result.data.slice(8, 12))).toBe("WAVE");
     expect(result.data.byteLength).toBeGreaterThan(44);
   });
+
+  it("rejects aborted buffered STT and TTS work", async () => {
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      new MockSpeechToTextProvider().transcribe(
+        {
+          data: new Uint8Array([1, 2]),
+          mimeType: "audio/webm"
+        },
+        { signal: controller.signal }
+      )
+    ).rejects.toMatchObject({ name: "AbortError" });
+    await expect(
+      new MockTextToSpeechProvider().synthesize("Test response", {
+        signal: controller.signal
+      })
+    ).rejects.toMatchObject({ name: "AbortError" });
+  });
 });
