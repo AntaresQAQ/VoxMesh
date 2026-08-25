@@ -36,6 +36,7 @@ describe("OpenAI-compatible speech adapters", () => {
   });
 
   it("uses the standard speech endpoint", async () => {
+    const controller = new AbortController();
     const fetcher = vi.fn(
       async (_input: string | URL | Request, _init?: RequestInit) =>
         new Response(new Uint8Array([1, 2]), {
@@ -53,12 +54,18 @@ describe("OpenAI-compatible speech adapters", () => {
       fetcher
     );
 
-    await expect(provider.synthesize("测试")).resolves.toMatchObject({
+    await expect(
+      provider.synthesize("测试", { signal: controller.signal })
+    ).resolves.toMatchObject({
       mimeType: "audio/wav",
       data: new Uint8Array([1, 2])
     });
     expect(fetcher.mock.calls[0]?.[0]).toBe(
       "https://provider.example.com/v1/audio/speech"
     );
+    const requestSignal = fetcher.mock.calls[0]?.[1]?.signal;
+    expect(requestSignal).toBeInstanceOf(AbortSignal);
+    controller.abort();
+    expect(requestSignal?.aborted).toBe(true);
   });
 });

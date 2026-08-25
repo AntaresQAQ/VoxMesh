@@ -88,7 +88,8 @@ All eight STT/Chat/TTS transport combinations are supported.
   sample-aligned chunks, bounded total bytes and duration, and one non-empty
   bounded final transcript.
 - Buffered STT validates and bounds the same chunks, accumulates PCM, encodes
-  one PCM16 WAV input, and calls the buffered provider once.
+  one PCM16 WAV input, and calls the buffered provider once. Buffered provider
+  contracts receive the same abort signal as streaming sessions.
 
 ### Chat
 
@@ -107,7 +108,8 @@ All eight STT/Chat/TTS transport combinations are supported.
   post-tool text; tool-disabled turns may release safe stable text earlier.
 - Buffered TTS synthesizes once, accepts only PCM16 WAV output, applies byte
   and duration limits, pads only the final transport frame with silence, and
-  emits fixed-duration sample-aligned PCM chunks.
+  emits fixed-duration sample-aligned PCM chunks. The coordinator selects a
+  protocol-representable frame duration for the provider sample rate.
 
 Enabled streaming roles never call their buffered provider method.
 
@@ -131,6 +133,9 @@ execution are bounded by the provider-stage timeout. Input frame reads use the
 input-idle timeout. Provider failure or cancellation races pending input reads,
 returns the input iterator, aborts provider work, and closes sessions with
 bounded cleanup.
+
+Streaming STT and TTS enforce ordered provider events, exactly one terminal
+event, stable formats, exact totals, and no events after terminal state.
 
 PR 7 maps these in-process events to the authenticated voice WebSocket
 protocol. The coordinator intentionally has no transport dependency.

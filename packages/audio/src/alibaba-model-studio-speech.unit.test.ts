@@ -11,6 +11,31 @@ import {
 import { decodePcm16Wav, encodePcm16Wav } from "./pcm-wav.js";
 
 describe("Alibaba Model Studio speech adapters", () => {
+  it("rejects an already aborted buffered speech operation", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const provider = new AlibabaModelStudioSpeechToTextProvider(
+      {
+        endpoint:
+          "wss://workspace.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference",
+        model: "fun-asr-realtime",
+        apiKey: "secret",
+        language: "zh"
+      },
+      createFactory(new FakeAlibabaSocket("stt")).create
+    );
+
+    await expect(
+      provider.transcribe(
+        {
+          data: new Uint8Array([1, 0]),
+          mimeType: "audio/wav"
+        },
+        { signal: controller.signal }
+      )
+    ).rejects.toMatchObject({ name: "AbortError" });
+  });
+
   it("runs a Fun-ASR task with PCM audio and final sentence results", async () => {
     const socket = new FakeAlibabaSocket("stt");
     const factory = createFactory(socket);

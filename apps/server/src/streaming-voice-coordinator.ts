@@ -194,23 +194,24 @@ export class StreamingVoiceCoordinator {
     const run = this.store.createVoiceRun(input.runId, resolved.route);
     let stage: "STT" | "AGENT" | "TTS" = "STT";
     let pressureStage: "STT" | "AGENT" | "TTS" = "STT";
-    let pressureHigh = false;
+    let pressureOrigin: "STT" | "AGENT" | "TTS" | null = null;
     const unsubscribePressure = events.subscribePressure((pressure) => {
-      if (pressure === "high" && !pressureHigh) {
-        pressureHigh = true;
+      if (pressure === "high" && pressureOrigin === null) {
+        pressureOrigin = pressureStage;
         this.store.addLog({
           conversationId: run.conversationId,
           category: "SYSTEM",
           level: "WARN",
-          message: `${pressureStage} output queue entered high pressure`
+          message: `${pressureOrigin} output queue entered high pressure`
         });
-      } else if (pressure === "normal" && pressureHigh) {
-        pressureHigh = false;
+      } else if (pressure === "normal" && pressureOrigin !== null) {
+        const recoveredStage = pressureOrigin;
+        pressureOrigin = null;
         this.store.addLog({
           conversationId: run.conversationId,
           category: "SYSTEM",
           level: "INFO",
-          message: `${pressureStage} output queue pressure recovered`
+          message: `${recoveredStage} output queue pressure recovered`
         });
       }
     });
@@ -237,6 +238,7 @@ export class StreamingVoiceCoordinator {
         }
       );
       stage = "TTS";
+      throwIfAborted(signal);
       const finalized = this.store.completeVoiceRun({
         runId: run.id,
         transcript: transcription.result.text,
@@ -309,6 +311,7 @@ export class StreamingVoiceCoordinator {
     result: TranscriptionResult;
     frames: number;
     audioBytes: number;
+    finalSequence: number;
   }> {
     const startedAt = Date.now();
     await emit(events, signal, {
@@ -445,6 +448,7 @@ export class StreamingVoiceCoordinator {
       agentFailure = error;
       throw error;
     });
+    void agentExecution.catch(() => undefined);
     let agent: AgentRunResult;
     try {
       agent = streamingAudio
@@ -481,6 +485,9 @@ export class StreamingVoiceCoordinator {
           status: "cancelled",
           message: "TTS stage cancelled before completion"
         });
+      }
+      if (error instanceof StreamingVoiceStageError) {
+        throw error;
       }
       if (agentFailure !== undefined) {
         throw new StreamingVoiceStageError("AGENT", agentFailure);
@@ -726,44 +733,61 @@ async function consumeBufferedStt(
   finalSequence: number;
 }> {
   const chunks: Uint8Array[] = [];
-  let expectedSequence = 1;
-  let audioBytes = 0;
-  for await (const chunk of input.audio) {
-    throwIfAborted(signal);
-    validateAudioChunk(chunk, input.format, expectedSequence);
-    expectedSequence += 1;
-    audioBytes += chunk.data.byteLength;
-    enforceCaptureLimits(audioBytes, input.format);
-    chunks.push(chunk.data);
-  }
-  if (chunks.length === 0) {
-    throw new Error("Streaming voice requires at least one audio frame");
-  }
   const providerAbort = new AbortController();
   const providerSignal = AbortSignal.any([signal, providerAbort.signal]);
-  const result = await withOperationTimeout(
-    input.providers.bufferedStt.transcribe({
-      data: encodePcm16Wav({
-        channels: input.format.channels,
-        sampleRate: input.format.sampleRate,
-        pcm: concatenate(chunks, audioBytes)
-      }),
-      mimeType: "audio/wav",
-      sampleRate: input.format.sampleRate,
-      channels: input.format.channels
-    }),
-    providerSignal,
-    VOICE_STREAM_LIMITS.providerStageTimeoutMs,
-    providerAbort
-  );
-  providerAbort.abort();
-  throwIfAborted(signal);
-  return {
-    result,
-    frames: chunks.length,
-    audioBytes,
-    finalSequence: 1
-  };
+  const inputIterator = input.audio[Symbol.asyncIterator]();
+  let expectedSequence = 1;
+  let audioBytes = 0;
+  try {
+    while (true) {
+      const next = await withOperationTimeout(
+        inputIterator.next(),
+        providerSignal,
+        VOICE_STREAM_LIMITS.inputIdleTimeoutMs,
+        providerAbort
+      );
+      if (next.done) break;
+      const chunk = next.value;
+      validateAudioChunk(chunk, input.format, expectedSequence);
+      expectedSequence += 1;
+      audioBytes += chunk.data.byteLength;
+      enforceCaptureLimits(audioBytes, input.format);
+      chunks.push(chunk.data);
+    }
+    if (chunks.length === 0) {
+      throw new Error("Streaming voice requires at least one audio frame");
+    }
+    const result = await withOperationTimeout(
+      input.providers.bufferedStt.transcribe(
+        {
+          data: encodePcm16Wav({
+            channels: input.format.channels,
+            sampleRate: input.format.sampleRate,
+            pcm: concatenate(chunks, audioBytes)
+          }),
+          mimeType: "audio/wav",
+          sampleRate: input.format.sampleRate,
+          channels: input.format.channels
+        },
+        { signal: providerSignal }
+      ),
+      providerSignal,
+      VOICE_STREAM_LIMITS.providerStageTimeoutMs,
+      providerAbort
+    );
+    throwIfAborted(signal);
+    return {
+      result,
+      frames: chunks.length,
+      audioBytes,
+      finalSequence: 1
+    };
+  } finally {
+    providerAbort.abort();
+    if (inputIterator.return) {
+      await settleWithTimeout(Promise.resolve(inputIterator.return()));
+    }
+  }
 }
 
 async function consumeStreamingAgent(
@@ -957,7 +981,7 @@ async function synthesizeBufferedText(
   const providerAbort = new AbortController();
   const providerSignal = AbortSignal.any([signal, providerAbort.signal]);
   const audio = await withOperationTimeout(
-    provider.synthesize(text),
+    provider.synthesize(text, { signal: providerSignal }),
     providerSignal,
     VOICE_STREAM_LIMITS.providerStageTimeoutMs,
     providerAbort
@@ -975,7 +999,7 @@ async function synthesizeBufferedText(
   };
   const durationMs = audioDurationMs(decoded.pcm.byteLength, format);
   enforceOutputLimits(decoded.pcm.byteLength, durationMs);
-  const frameDurationMs = VOICE_STREAM_LIMITS.inputFrameDurationMs;
+  const frameDurationMs = selectOutputFrameDuration(format.sampleRate);
   const segments = splitBufferedSegments(text);
   await emit(events, signal, {
     type: "segment_started",
@@ -986,9 +1010,7 @@ async function synthesizeBufferedText(
   const sampleFrameBytes = format.channels * 2;
   const frameBytes = Math.max(
     sampleFrameBytes,
-    Math.floor(
-      (format.sampleRate * VOICE_STREAM_LIMITS.inputFrameDurationMs) / 1_000
-    ) * sampleFrameBytes
+    ((format.sampleRate * frameDurationMs) / 1_000) * sampleFrameBytes
   );
   const paddedBytes =
     Math.ceil(decoded.pcm.byteLength / frameBytes) * frameBytes;
@@ -1135,15 +1157,34 @@ function validateOutputChunk(
   ) {
     throw new Error("Streaming TTS emitted an invalid audio chunk");
   }
-  const frameDurationMs = audioDurationMs(chunk.data.byteLength, chunk.format);
+  const frameSamples = chunk.data.byteLength / sampleFrameBytes;
+  const frameDurationMs = (frameSamples / chunk.format.sampleRate) * 1_000;
   if (
+    !Number.isInteger(frameDurationMs) ||
     frameDurationMs < 5 ||
     frameDurationMs > 100 ||
-    (chunk.format.sampleRate * frameDurationMs) % 1_000 !== 0
+    frameSamples !== (chunk.format.sampleRate * frameDurationMs) / 1_000
   ) {
     throw new Error("Streaming TTS emitted an invalid frame duration");
   }
   return frameDurationMs;
+}
+
+function selectOutputFrameDuration(sampleRate: number): number {
+  const preferred = [
+    VOICE_STREAM_LIMITS.inputFrameDurationMs,
+    ...Array.from({ length: 96 }, (_, index) => index + 5)
+  ];
+  const durationMs = preferred.find(
+    (candidate) =>
+      candidate >= 5 &&
+      candidate <= 100 &&
+      Number.isInteger((sampleRate * candidate) / 1_000)
+  );
+  if (durationMs === undefined) {
+    throw new Error("Buffered TTS sample rate has no protocol frame duration");
+  }
+  return durationMs;
 }
 
 function sameAudioFormat(

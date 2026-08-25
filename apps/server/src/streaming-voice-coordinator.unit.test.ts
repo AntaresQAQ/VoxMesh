@@ -9,10 +9,12 @@ import {
   type StreamingLlmProvider
 } from "@voxmesh/agent-core";
 import {
+  encodePcm16Wav,
   MockSpeechToTextProvider,
   MockStreamingSpeechToTextProvider,
   MockStreamingTextToSpeechProvider,
   MockTextToSpeechProvider,
+  type AudioData,
   type SpeechToTextProvider,
   type StreamingAudioChunk,
   type StreamingSpeechToTextProvider,
@@ -511,6 +513,45 @@ describe("StreamingVoiceCoordinator", () => {
     }
   });
 
+  it("aborts while waiting for another buffered input frame", async () => {
+    const store = new VoxMeshStore(":memory:");
+    const controller = new AbortController();
+    let inputReturned = false;
+    let inputWaiting: (() => void) | undefined;
+    const waiting = new Promise<void>((resolve) => {
+      inputWaiting = resolve;
+    });
+    try {
+      const routeId = createRoute(store, {
+        stt: false,
+        chat: false,
+        tts: false
+      });
+      const execution = consume(
+        new StreamingVoiceCoordinator(store, new MockMcpServer()).run({
+          runId: "48484848-4848-4848-8848-484848484848",
+          preparation: preparation(
+            store,
+            routeId,
+            createTrackedProviders().providers
+          ),
+          format,
+          audio: pendingFrames(() => {
+            inputReturned = true;
+          }, inputWaiting),
+          toolMode: "enabled",
+          signal: controller.signal
+        })
+      );
+      await waiting;
+      controller.abort();
+      await expect(execution).rejects.toBeInstanceOf(AgentRunCancelledError);
+      expect(inputReturned).toBe(true);
+    } finally {
+      store.close();
+    }
+  });
+
   it("rejects invalid final transcript and oversized buffered Chat output", async () => {
     const store = new VoxMeshStore(":memory:");
     try {
@@ -632,6 +673,70 @@ describe("StreamingVoiceCoordinator", () => {
     }
   });
 
+  it("rejects a fractional streaming TTS frame duration", async () => {
+    const store = new VoxMeshStore(":memory:");
+    const providers = createTrackedProviders().providers;
+    providers.streamingTts = {
+      startSynthesis: async () => fractionalFrameTtsSession()
+    };
+    try {
+      const routeId = createRoute(store, {
+        stt: false,
+        chat: false,
+        tts: true
+      });
+      await expect(
+        consume(
+          new StreamingVoiceCoordinator(store, new MockMcpServer()).run({
+            runId: "49494949-4949-4949-8949-494949494949",
+            preparation: preparation(store, routeId, providers),
+            format,
+            audio: audioFrames(),
+            toolMode: "enabled",
+            signal: new AbortController().signal
+          })
+        )
+      ).rejects.toMatchObject({ code: "TTS_FAILED" });
+    } finally {
+      store.close();
+    }
+  });
+
+  it("selects an integral frame duration for buffered TTS output", async () => {
+    const store = new VoxMeshStore(":memory:");
+    const providers = createTrackedProviders().providers;
+    providers.bufferedTts = new MockTextToSpeechProviderAtRate(11_025);
+    try {
+      const routeId = createRoute(store, {
+        stt: false,
+        chat: false,
+        tts: false
+      });
+      const consumed = await consume(
+        new StreamingVoiceCoordinator(store, new MockMcpServer()).run({
+          runId: "50505050-5050-4050-8050-505050505050",
+          preparation: preparation(store, routeId, providers),
+          format,
+          audio: audioFrames(),
+          toolMode: "enabled",
+          signal: new AbortController().signal
+        })
+      );
+      expect(
+        consumed.events.find((event) => event.type === "segment_started")
+      ).toMatchObject({
+        format: { sampleRate: 11_025, frameDurationMs: 40 }
+      });
+      expect(
+        consumed.events
+          .filter((event) => event.type === "audio")
+          .every((event) => event.chunk.data.byteLength === 882)
+      ).toBe(true);
+    } finally {
+      store.close();
+    }
+  });
+
   it("times out a buffered provider that never resolves", async () => {
     vi.useFakeTimers();
     const store = new VoxMeshStore(":memory:");
@@ -698,6 +803,44 @@ describe("StreamingVoiceCoordinator", () => {
         status: "failed",
         errorCode: "TTS_FAILED"
       });
+    } finally {
+      store.close();
+    }
+  });
+
+  it("preserves TTS failure classification while the Agent is active", async () => {
+    const store = new VoxMeshStore(":memory:");
+    const providers = createTrackedProviders().providers;
+    providers.streamingLlm = {
+      stream: async function* () {
+        yield {
+          type: "text_delta",
+          content: "This sentence starts synthesis early. "
+        };
+        await new Promise(() => undefined);
+      }
+    };
+    providers.streamingTts = new MockStreamingTextToSpeechProvider({
+      failAtChunk: 1
+    });
+    try {
+      const routeId = createRoute(store, {
+        stt: false,
+        chat: true,
+        tts: true
+      });
+      await expect(
+        consume(
+          new StreamingVoiceCoordinator(store, new MockMcpServer()).run({
+            runId: "51515151-5151-4151-8151-515151515151",
+            preparation: preparation(store, routeId, providers),
+            format,
+            audio: audioFrames(),
+            toolMode: "disabled",
+            signal: new AbortController().signal
+          })
+        )
+      ).rejects.toMatchObject({ code: "TTS_FAILED" });
     } finally {
       store.close();
     }
@@ -1056,6 +1199,52 @@ function scriptedInvalidTtsSession(): StreamingTextToSpeechSession {
       };
     }
   };
+}
+
+function fractionalFrameTtsSession(): StreamingTextToSpeechSession {
+  const outputFormat = {
+    encoding: "pcm16le",
+    sampleRate: 22_050,
+    channels: 1
+  } as const;
+  return {
+    close: async () => undefined,
+    [Symbol.asyncIterator]: async function* () {
+      yield {
+        type: "audio" as const,
+        chunk: {
+          sequence: 1,
+          format: outputFormat,
+          data: new Uint8Array(880)
+        }
+      };
+      yield {
+        type: "completed" as const,
+        sequence: 2,
+        format: outputFormat,
+        audioBytes: 880,
+        durationMs: 20
+      };
+    }
+  };
+}
+
+class MockTextToSpeechProviderAtRate implements TextToSpeechProvider {
+  public constructor(private readonly sampleRate: number) {}
+
+  public async synthesize(): Promise<AudioData> {
+    const pcm = new Uint8Array(this.sampleRate * 2);
+    return {
+      data: encodePcm16Wav({
+        channels: 1,
+        sampleRate: this.sampleRate,
+        pcm
+      }),
+      mimeType: "audio/wav",
+      sampleRate: this.sampleRate,
+      channels: 1
+    };
+  }
 }
 
 function duplicateFinalSttProvider(): StreamingSpeechToTextProvider {

@@ -39,7 +39,10 @@ export class AzureOpenAiSpeechToTextProvider implements SpeechToTextProvider {
     private readonly fetcher: Fetcher = globalThis.fetch
   ) {}
 
-  public async transcribe(audio: AudioData): Promise<TranscriptionResult> {
+  public async transcribe(
+    audio: AudioData,
+    options?: { signal?: AbortSignal }
+  ): Promise<TranscriptionResult> {
     if (audio.data.byteLength === 0) {
       throw new Error("Audio input must not be empty");
     }
@@ -61,7 +64,7 @@ export class AzureOpenAiSpeechToTextProvider implements SpeechToTextProvider {
         method: "POST",
         headers: { "api-key": this.config.apiKey },
         body: form,
-        signal: AbortSignal.timeout(this.config.timeoutMs ?? 30_000)
+        signal: requestSignal(options?.signal, this.config.timeoutMs)
       }
     );
     if (!response.ok) {
@@ -85,7 +88,10 @@ export class AzureOpenAiTextToSpeechProvider implements TextToSpeechProvider {
     private readonly fetcher: Fetcher = globalThis.fetch
   ) {}
 
-  public async synthesize(text: string): Promise<AudioData> {
+  public async synthesize(
+    text: string,
+    options?: { signal?: AbortSignal }
+  ): Promise<AudioData> {
     if (!text.trim()) {
       throw new Error("Text-to-speech input must not be empty");
     }
@@ -102,11 +108,12 @@ export class AzureOpenAiTextToSpeechProvider implements TextToSpeechProvider {
         instructions: this.config.instructions,
         response_format: "wav"
       }),
-      signal: AbortSignal.timeout(this.config.timeoutMs ?? 30_000)
+      signal: requestSignal(options?.signal, this.config.timeoutMs)
     });
     if (!response.ok) {
       throw await providerError("speech synthesis", response);
     }
+
     const bytes = new Uint8Array(await response.arrayBuffer());
     if (bytes.byteLength === 0) {
       throw new Error("Azure OpenAI speech synthesis returned empty audio");
@@ -116,6 +123,14 @@ export class AzureOpenAiTextToSpeechProvider implements TextToSpeechProvider {
       mimeType: response.headers.get("content-type") ?? "audio/wav"
     };
   }
+}
+
+function requestSignal(
+  signal: AbortSignal | undefined,
+  timeoutMs: number | undefined
+): AbortSignal {
+  const timeout = AbortSignal.timeout(timeoutMs ?? 30_000);
+  return signal ? AbortSignal.any([signal, timeout]) : timeout;
 }
 
 function endpoint(
