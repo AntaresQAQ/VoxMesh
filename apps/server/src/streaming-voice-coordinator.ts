@@ -26,6 +26,8 @@ import {
   BoundedAsyncQueue,
   VOICE_STREAM_BINARY_HEADER_BYTES,
   VOICE_STREAM_LIMITS,
+  type BoundedAsyncQueueLimits,
+  type BoundedQueueWaitOptions,
   type VoiceStreamPcmFormat
 } from "@voxmesh/shared";
 import type { RuntimeVoiceRouteSnapshot, VoxMeshStore } from "@voxmesh/storage";
@@ -153,16 +155,13 @@ export class StreamingVoiceCoordinator {
     const localAbort = new AbortController();
     const signal = AbortSignal.any([input.signal, localAbort.signal]);
     let unsubscribePressure: () => void = () => undefined;
-    const events = new BoundedAsyncQueue<StreamingVoiceCoordinatorEvent>(
-      {
-        maxItems: 4_096,
-        maxBytes: VOICE_STREAM_LIMITS.maxOutputQueueBytes,
-        maxDurationMs: VOICE_STREAM_LIMITS.maxOutputQueueDurationMs,
-        highWaterMark: 0.45,
-        lowWaterMark: 0.25
-      },
-      measureCoordinatorEvent
-    );
+    const events = new CoordinatorEventQueue({
+      maxItems: 4_096,
+      maxBytes: VOICE_STREAM_LIMITS.maxOutputQueueBytes,
+      maxDurationMs: VOICE_STREAM_LIMITS.maxOutputQueueDurationMs,
+      highWaterMark: 0.45,
+      lowWaterMark: 0.25
+    });
     const execution = this.execute(input, signal, events, (unsubscribe) => {
       unsubscribePressure = unsubscribe;
     }).then(
@@ -217,7 +216,7 @@ export class StreamingVoiceCoordinator {
   private async execute(
     input: StreamingVoiceCoordinatorInput,
     signal: AbortSignal,
-    events: BoundedAsyncQueue<StreamingVoiceCoordinatorEvent>,
+    events: CoordinatorEventQueue,
     registerPressureCleanup: (unsubscribe: () => void) => void
   ): Promise<StreamingVoiceCoordinatorResult> {
     validateCoordinatorInput(input);
@@ -227,12 +226,12 @@ export class StreamingVoiceCoordinator {
       providers: input.preparation.providers
     };
     const run = this.store.createVoiceRun(input.runId, resolved.route);
+    resolved.route = this.store.getVoiceRunRouteSnapshot(run.id);
     let stage: "STT" | "AGENT" | "TTS" = "STT";
-    let pressureStage: "STT" | "AGENT" | "TTS" = "STT";
     let pressureOrigin: "STT" | "AGENT" | "TTS" | null = null;
     const unsubscribePressure = events.subscribePressure((pressure) => {
       if (pressure === "high" && pressureOrigin === null) {
-        pressureOrigin = pressureStage;
+        pressureOrigin = events.currentProducerStage;
         this.store.addLog({
           conversationId: run.conversationId,
           category: "SYSTEM",
@@ -260,7 +259,6 @@ export class StreamingVoiceCoordinator {
         events
       );
       stage = "AGENT";
-      pressureStage = "AGENT";
       const agentAndTts = await this.runAgentAndTts(
         resolved,
         transcription.result.text,
@@ -270,7 +268,6 @@ export class StreamingVoiceCoordinator {
         events,
         () => {
           stage = "TTS";
-          pressureStage = "TTS";
         }
       );
       stage = "TTS";
@@ -671,7 +668,9 @@ async function consumeStreamingStt(
   } catch (error) {
     providerAbort.abort();
     void sessionPromise
-      .then((lateSession) => settleWithTimeout(lateSession.close()))
+      .then((lateSession) =>
+        settleWithTimeout(Promise.resolve().then(() => lateSession.close()))
+      )
       .catch(() => undefined);
     throw error;
   }
@@ -734,7 +733,7 @@ async function consumeStreamingStt(
     })();
   } catch (error) {
     providerAbort.abort();
-    await settleWithTimeout(session.close());
+    await settleWithTimeout(Promise.resolve().then(() => session.close()));
     throw error;
   }
   const providerEnded = consume.then(
@@ -801,11 +800,16 @@ async function consumeStreamingStt(
     };
   } finally {
     providerAbort.abort();
-    if (inputIterator?.return) {
-      await settleWithTimeout(Promise.resolve(inputIterator.return()));
+    try {
+      if (inputIterator?.return) {
+        await settleWithTimeout(
+          Promise.resolve().then(() => inputIterator.return?.())
+        );
+      }
+    } finally {
+      await settleWithTimeout(Promise.resolve().then(() => session.close()));
     }
-    await settleWithTimeout(session.close());
-    await consume?.catch(() => undefined);
+    await settleWithTimeout(consume ?? Promise.resolve());
   }
 }
 
@@ -871,7 +875,9 @@ async function consumeBufferedStt(
   } finally {
     providerAbort.abort();
     if (inputIterator.return) {
-      await settleWithTimeout(Promise.resolve(inputIterator.return()));
+      await settleWithTimeout(
+        Promise.resolve().then(() => inputIterator.return?.())
+      );
     }
   }
 }
@@ -974,7 +980,9 @@ async function synthesizeStreamingText(
   } catch (error) {
     providerAbort.abort();
     void sessionPromise
-      .then((lateSession) => settleWithTimeout(lateSession.close()))
+      .then((lateSession) =>
+        settleWithTimeout(Promise.resolve().then(() => lateSession.close()))
+      )
       .catch(() => undefined);
     throw error;
   }
@@ -1086,7 +1094,7 @@ async function synthesizeStreamingText(
     };
   } finally {
     providerAbort.abort();
-    await settleWithTimeout(session.close());
+    await settleWithTimeout(Promise.resolve().then(() => session.close()));
   }
 }
 
@@ -1448,6 +1456,36 @@ function asError(error: unknown): Error {
   return error instanceof Error
     ? error
     : new Error("Provider operation failed");
+}
+
+class CoordinatorEventQueue extends BoundedAsyncQueue<StreamingVoiceCoordinatorEvent> {
+  public currentProducerStage: "STT" | "AGENT" | "TTS" = "STT";
+
+  public constructor(limits: BoundedAsyncQueueLimits) {
+    super(limits, measureCoordinatorEvent);
+  }
+
+  public override enqueue(
+    value: StreamingVoiceCoordinatorEvent,
+    options: BoundedQueueWaitOptions = {}
+  ): Promise<void> {
+    this.currentProducerStage = coordinatorEventStage(value);
+    return super.enqueue(value, options);
+  }
+}
+
+function coordinatorEventStage(
+  event: StreamingVoiceCoordinatorEvent
+): "STT" | "AGENT" | "TTS" {
+  if (event.type === "stage") return event.stage;
+  if (
+    event.type === "transcript_partial" ||
+    event.type === "transcript_final"
+  ) {
+    return "STT";
+  }
+  if (event.type === "agent") return "AGENT";
+  return "TTS";
 }
 
 async function settleWithTimeout(operation: Promise<unknown>): Promise<void> {

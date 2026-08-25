@@ -987,6 +987,7 @@ describe("StreamingVoiceCoordinator", () => {
       });
       vi.runAllTicks();
       await Promise.resolve();
+      await Promise.resolve();
       expect(close).toHaveBeenCalledOnce();
     } finally {
       vi.useRealTimers();
