@@ -316,6 +316,224 @@ describe("VoxMeshStore", () => {
     expect(store.getConversation(run.conversationId)?.messages).toHaveLength(1);
   });
 
+  it("persists an immutable safe route snapshot for a composed voice run", () => {
+    store = new VoxMeshStore(":memory:");
+    const routing = store.createRuntimeRoute({
+      displayName: "Snapshot Route",
+      mode: "composed",
+      sttModelDeploymentId: "system-model-stt",
+      chatModelDeploymentId: "system-model-chat",
+      ttsModelDeploymentId: "system-model-tts",
+      nativeModelDeploymentId: null,
+      fallbackRouteId: null,
+      sttStreamingEnabled: false,
+      chatStreamingEnabled: false,
+      ttsStreamingEnabled: false,
+      enabled: true
+    });
+    const route = routing.routes.find(
+      (entry) => entry.displayName === "Snapshot Route"
+    );
+    const snapshot = store.captureRuntimeVoiceRouteSnapshot(route?.id);
+    const runId = "23232323-2323-4232-8232-232323232323";
+    const run = store.createVoiceRun(runId, snapshot);
+
+    store.updateRuntimeRoute(route?.id ?? "", {
+      ...routeInput(route),
+      displayName: "Renamed Snapshot Route"
+    });
+
+    expect(store.getVoiceRunRouteSnapshot(runId)).toEqual(snapshot);
+    expect(JSON.stringify(snapshot)).not.toContain("apiKey");
+    expect(JSON.stringify(snapshot)).not.toContain("endpoint");
+    expect(run).toMatchObject({
+      id: runId,
+      kind: "voice-composed",
+      status: "in_progress",
+      inputMessageId: null
+    });
+    const unsafeSnapshot = {
+      ...snapshot,
+      endpoint: "https://provider.example.test",
+      apiKey: "secret"
+    };
+    const normalizedRun = store.createVoiceRun(
+      "27272727-2727-4272-8272-272727272727",
+      unsafeSnapshot
+    );
+    const persisted = JSON.stringify(
+      store.getVoiceRunRouteSnapshot(normalizedRun.id)
+    );
+    expect(persisted).not.toContain("provider.example.test");
+    expect(persisted).not.toContain("secret");
+  });
+
+  it("binds route snapshots to current connection configuration", () => {
+    store = new VoxMeshStore(":memory:");
+    let routing = store.createRuntimeConnection({
+      providerId: "openai-compatible",
+      displayName: "Snapshot Connection",
+      endpoint: "https://one.example.test/v1",
+      apiKey: "first-secret",
+      enabled: true
+    });
+    const connection = routing.connections.find(
+      (entry) => entry.displayName === "Snapshot Connection"
+    );
+    routing = store.createRuntimeModel({
+      connectionId: connection?.id ?? "",
+      displayName: "Snapshot Multi-role",
+      modelName: "snapshot-model",
+      apiVersion: "",
+      providerOptions: {},
+      declaredCapabilities: [
+        "audio-input",
+        "audio-output",
+        "text-input",
+        "text-output",
+        "transcription",
+        "speech-synthesis",
+        "tool-calling",
+        "non-streaming"
+      ],
+      enabled: true
+    });
+    const model = routing.models.find(
+      (entry) => entry.displayName === "Snapshot Multi-role"
+    );
+    routing = store.createRuntimeRoute({
+      displayName: "Connection Snapshot Route",
+      mode: "composed",
+      sttModelDeploymentId: model?.id ?? null,
+      chatModelDeploymentId: model?.id ?? null,
+      ttsModelDeploymentId: model?.id ?? null,
+      nativeModelDeploymentId: null,
+      fallbackRouteId: null,
+      sttStreamingEnabled: false,
+      chatStreamingEnabled: false,
+      ttsStreamingEnabled: false,
+      enabled: true
+    });
+    const route = routing.routes.find(
+      (entry) => entry.displayName === "Connection Snapshot Route"
+    );
+    const before = store.captureRuntimeVoiceRouteSnapshot(route?.id);
+    store.updateRuntimeConnection(connection?.id ?? "", {
+      providerId: "openai-compatible",
+      displayName: "Snapshot Connection",
+      endpoint: "https://two.example.test/v1",
+      apiKey: "second-secret",
+      enabled: true
+    });
+    const after = store.captureRuntimeVoiceRouteSnapshot(route?.id);
+
+    expect(after.configurationFingerprint).not.toBe(
+      before.configurationFingerprint
+    );
+    expect(after.assignments[0].configurationFingerprint).not.toBe(
+      before.assignments[0].configurationFingerprint
+    );
+    expect(JSON.stringify(after)).not.toContain("second-secret");
+    expect(JSON.stringify(after)).not.toContain("two.example.test");
+  });
+
+  it("persists only final voice messages through terminal CAS", () => {
+    store = new VoxMeshStore(":memory:");
+    const run = store.createVoiceRun(
+      "24242424-2424-4242-8242-242424242424",
+      store.captureRuntimeVoiceRouteSnapshot()
+    );
+
+    const completed = store.completeVoiceRun({
+      runId: run.id,
+      transcript: "Final transcript",
+      response: "Final response",
+      events: [{ category: "AGENT", level: "INFO", message: "Completed" }]
+    });
+    const late = store.completeVoiceRun({
+      runId: run.id,
+      transcript: "Late transcript",
+      response: "Late response",
+      events: []
+    });
+
+    expect(completed.transitioned).toBe(true);
+    expect(late.transitioned).toBe(false);
+    expect(store.getConversationRun(run.id).inputMessageId).toBe(
+      store
+        .getConversation(run.conversationId)
+        ?.messages.find((message) => message.role === "user")?.id
+    );
+    expect(
+      store.getConversation(run.conversationId)?.messages.map((message) => ({
+        role: message.role,
+        content: message.content,
+        runId: message.runId
+      }))
+    ).toEqual([
+      { role: "user", content: "Final transcript", runId: run.id },
+      { role: "assistant", content: "Final response", runId: run.id }
+    ]);
+  });
+
+  it("prevents late voice completion after cancellation", () => {
+    store = new VoxMeshStore(":memory:");
+    const run = store.createVoiceRun(
+      "25252525-2525-4252-8252-252525252525",
+      store.captureRuntimeVoiceRouteSnapshot()
+    );
+
+    expect(store.cancelVoiceRun(run.id).transitioned).toBe(true);
+    expect(
+      store.completeVoiceRun({
+        runId: run.id,
+        transcript: "Late transcript",
+        response: "Late response",
+        events: []
+      }).transitioned
+    ).toBe(false);
+    expect(store.getConversation(run.conversationId)?.messages).toEqual([]);
+    expect(
+      store.failVoiceRun(
+        run.id,
+        "STT_FAILED",
+        "Streaming STT stage failed",
+        "STT"
+      ).transitioned
+    ).toBe(false);
+    expect(
+      store
+        .getConversation(run.conversationId)
+        ?.events.some((event) => event.status === "failed")
+    ).toBe(false);
+  });
+
+  it("reconciles an interrupted voice run and preserves its route snapshot", () => {
+    const directory = mkdtempSync(join(tmpdir(), "voxmesh-voice-restart-"));
+    const databasePath = join(directory, "voxmesh.sqlite");
+    try {
+      store = new VoxMeshStore(databasePath);
+      const snapshot = store.captureRuntimeVoiceRouteSnapshot();
+      const run = store.createVoiceRun(
+        "26262626-2626-4262-8262-262626262626",
+        snapshot
+      );
+      store.close();
+      store = new VoxMeshStore(databasePath);
+
+      expect(store.getConversationRun(run.id)).toMatchObject({
+        status: "failed",
+        errorCode: "SERVER_RESTARTED"
+      });
+      expect(store.getVoiceRunRouteSnapshot(run.id)).toEqual(snapshot);
+      expect(store.getConversation(run.conversationId)?.messages).toEqual([]);
+    } finally {
+      store?.close();
+      store = undefined;
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it("reuses a conversation and selects only durable prior Chat history", () => {
     store = new VoxMeshStore(":memory:");
     const firstRun = store.createChatRun(
@@ -947,6 +1165,9 @@ describe("VoxMeshStore", () => {
         "Streaming voice transport is unavailable"
       );
       expect(() => store?.getRuntimeVoicePipelineConfiguration()).toThrow(
+        "Streaming voice transport is unavailable"
+      );
+      expect(() => store?.captureRuntimeVoiceRouteSnapshot()).toThrow(
         "Streaming voice transport is unavailable"
       );
     } finally {
@@ -1815,6 +2036,42 @@ describe("VoxMeshStore", () => {
         "chat_streaming_enabled"
       );
       expect(migration?.id).toBe("2026-08-24-full-chain-streaming-routing-v1");
+    } finally {
+      store?.close();
+      store = undefined;
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("records the voice run route snapshot schema migration", () => {
+    const directory = mkdtempSync(join(tmpdir(), "voxmesh-snapshot-migrate-"));
+    const databasePath = join(directory, "voxmesh.sqlite");
+    try {
+      store = new VoxMeshStore(databasePath);
+      store.close();
+      store = undefined;
+
+      const database = new Database(databasePath);
+      const migration = database
+        .prepare(
+          "SELECT id FROM schema_migrations WHERE id = '2026-08-25-voice-run-route-snapshot-v1'"
+        )
+        .get() as { id: string } | undefined;
+      const table = database
+        .prepare(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'conversation_run_route_snapshots'"
+        )
+        .get() as { name: string } | undefined;
+      const index = database
+        .prepare(
+          "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_conversation_run_route_snapshots_run'"
+        )
+        .get() as { name: string } | undefined;
+      database.close();
+
+      expect(migration?.id).toBe("2026-08-25-voice-run-route-snapshot-v1");
+      expect(table?.name).toBe("conversation_run_route_snapshots");
+      expect(index?.name).toBe("idx_conversation_run_route_snapshots_run");
     } finally {
       store?.close();
       store = undefined;

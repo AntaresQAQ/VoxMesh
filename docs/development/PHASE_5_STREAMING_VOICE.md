@@ -382,6 +382,19 @@ Acceptance:
 - partials/deltas/raw audio are not persisted
 - route changes during a session do not alter its snapshot
 
+Implementation status:
+
+- implemented as the Phase 5 streaming coordinator work package
+- `voice-composed` runs and immutable safe route snapshots are persisted before
+  provider work
+- all eight role combinations execute through one bounded in-process event
+  stream
+- deterministic Mock buffered and streaming providers complete a full-chain
+  on-disk integration session
+- final transcript and assistant messages use the existing terminal CAS;
+  partials, deltas, segments, and raw audio remain transient
+- `/api/voice-stream` remains unregistered until PR 7
+
 ### PR 7 - Authenticated Voice-Stream WebSocket
 
 Suggested title: `feat: add authenticated voice streaming transport`

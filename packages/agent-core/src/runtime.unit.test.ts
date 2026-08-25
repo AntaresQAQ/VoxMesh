@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { LlmProvider } from "./types.js";
+import type { LlmProvider, McpServer } from "./types.js";
 import { AgentRunCancelledError } from "./types.js";
 import { MockLlmProvider, MockMcpServer } from "./mock.js";
 import { AgentRuntime } from "./runtime.js";
@@ -29,6 +29,34 @@ describe("AgentRuntime", () => {
     expect(result.response).toContain("living-room-light is on");
     expect(result.usedTools).toEqual(["mock.get_device_status"]);
     expect(result.events.some((event) => event.category === "MCP")).toBe(true);
+  });
+
+  it("rejects oversized MCP results before the follow-up LLM request", async () => {
+    let completions = 0;
+    const llm: LlmProvider = {
+      complete: async () => {
+        completions += 1;
+        return {
+          type: "tool_call",
+          toolCall: {
+            id: "large-result",
+            name: "large",
+            arguments: {}
+          }
+        };
+      }
+    };
+    const mcp: McpServer = {
+      name: "Large MCP",
+      listTools: async () => [{ name: "large", description: "Large result" }],
+      callTool: async () => ({ value: "x".repeat(64 * 1024) })
+    };
+
+    await expect(new AgentRuntime(llm, mcp).run("Test")).rejects.toMatchObject({
+      code: "LIMIT_EXCEEDED",
+      message: "MCP tool result exceeded its byte limit"
+    });
+    expect(completions).toBe(1);
   });
 
   it("normalizes provider abortion as an Agent cancellation", async () => {

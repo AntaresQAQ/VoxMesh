@@ -35,7 +35,9 @@ import {
   RuntimeRoutingStore,
   type RuntimeReadinessError,
   type RuntimeRouteReadinessTest,
-  type RuntimeRouteVerificationSnapshot
+  type RuntimeRouteVerificationSnapshot,
+  type RuntimeVoiceRouteAssignmentSnapshot,
+  type RuntimeVoiceRouteSnapshot
 } from "./runtime-routing-store.js";
 
 interface CountRow {
@@ -100,6 +102,10 @@ interface ConversationRunRow {
   error_code: string | null;
 }
 
+interface ConversationRunRouteSnapshotRow {
+  snapshot_json: string;
+}
+
 interface LocalDatabaseLease {
   ownerId: string;
   references: number;
@@ -149,6 +155,12 @@ export interface StoredVoicePipelineConfiguration {
   nativeProviderId: string;
   routeId?: string;
   fallbackRouteId?: string | null;
+}
+
+export interface StoredStreamingVoiceConfiguration {
+  route: RuntimeVoiceRouteSnapshot;
+  llm: StoredLlmConfiguration;
+  speech: StoredSpeechConfiguration;
 }
 
 const DEFAULT_LLM_CONFIGURATION: StoredLlmConfiguration = {
@@ -424,6 +436,35 @@ export class VoxMeshStore {
     return this.runtimeRouting.getRouteSummary(id);
   }
 
+  public captureRuntimeVoiceRouteSnapshot(
+    routeId?: string
+  ): RuntimeVoiceRouteSnapshot {
+    return this.database
+      .transaction(() => this.runtimeRouting.captureVoiceRouteSnapshot(routeId))
+      .immediate();
+  }
+
+  public captureRuntimeStreamingVoiceConfiguration(
+    routeId?: string
+  ): StoredStreamingVoiceConfiguration {
+    return this.database
+      .transaction(() => {
+        const route = this.runtimeRouting.captureVoiceRouteSnapshot(routeId);
+        return {
+          route,
+          llm: this.runtimeRouting.resolveLlm(
+            DEFAULT_LLM_CONFIGURATION,
+            route.routeId
+          ),
+          speech: this.runtimeRouting.resolveSpeech(
+            DEFAULT_SPEECH_CONFIGURATION,
+            route.routeId
+          )
+        };
+      })
+      .immediate();
+  }
+
   public captureRuntimeRouteVerification(
     id: string
   ): RuntimeRouteVerificationSnapshot {
@@ -645,6 +686,75 @@ export class VoxMeshStore {
     return run;
   }
 
+  public createVoiceRun(
+    runId: string,
+    snapshot: RuntimeVoiceRouteSnapshot
+  ): ConversationRun {
+    const normalizedSnapshot = parseVoiceRouteSnapshot(
+      JSON.stringify(snapshot)
+    );
+    const snapshotJson = JSON.stringify(normalizedSnapshot);
+    const conversationId = randomUUID();
+    const correlationId = randomUUID();
+    const startedAt = new Date().toISOString();
+    const create = this.database.transaction(() => {
+      this.database
+        .prepare(
+          "INSERT INTO conversations (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)"
+        )
+        .run(conversationId, "Voice request", startedAt, startedAt);
+      const inserted = this.database
+        .prepare(
+          `INSERT INTO conversation_runs (
+             id, conversation_id, kind, status, correlation_id,
+             input_message_id, retry_of_run_id, started_at, completed_at,
+             duration_ms, error_code
+           ) VALUES (?, ?, 'voice-composed', 'in_progress', ?, NULL, NULL, ?, NULL, NULL, NULL)
+           ON CONFLICT(id) DO NOTHING`
+        )
+        .run(runId, conversationId, correlationId, startedAt);
+      if (inserted.changes !== 1) {
+        throw conflict("Conversation run ID already exists");
+      }
+      this.database
+        .prepare(
+          `INSERT INTO conversation_run_route_snapshots (
+             run_id, snapshot_json, created_at
+           ) VALUES (?, ?, ?)`
+        )
+        .run(runId, snapshotJson, startedAt);
+      const run = this.getConversationRun(runId);
+      const event = this.insertPipelineEvent({
+        conversationId,
+        runId,
+        correlationId,
+        stage: "STT",
+        status: "started",
+        message: "Streaming voice run started",
+        durationMs: null
+      });
+      return { run, event };
+    });
+    const { run, event } = create.immediate();
+    this.emitObservabilityEvent({ type: "run.created", run });
+    this.emitObservabilityEvent({
+      type: "pipeline.created",
+      conversationId,
+      event
+    });
+    return run;
+  }
+
+  public getVoiceRunRouteSnapshot(runId: string): RuntimeVoiceRouteSnapshot {
+    const row = this.database
+      .prepare(
+        "SELECT snapshot_json FROM conversation_run_route_snapshots WHERE run_id = ?"
+      )
+      .get(runId) as ConversationRunRouteSnapshotRow | undefined;
+    if (!row) throw notFound("Conversation run route snapshot was not found");
+    return parseVoiceRouteSnapshot(row.snapshot_json);
+  }
+
   public getConversationRun(runId: string): ConversationRun {
     const row = this.database
       .prepare(
@@ -720,12 +830,39 @@ export class VoxMeshStore {
       message: string;
     }>;
   }): { run: ConversationRun; transitioned: boolean } {
-    return this.finalizeChatRun({
+    return this.finalizeRun({
       runId: input.runId,
       status: "completed",
       errorCode: null,
+      terminalStage: "AGENT",
       terminalMessage: "Agent run completed",
+      conversationTitle: null,
       messages: input.messages,
+      events: input.events
+    });
+  }
+
+  public completeVoiceRun(input: {
+    runId: string;
+    transcript: string;
+    response: string;
+    events: Array<{
+      category: LogCategory;
+      level: LogLevel;
+      message: string;
+    }>;
+  }): { run: ConversationRun; transitioned: boolean } {
+    return this.finalizeRun({
+      runId: input.runId,
+      status: "completed",
+      errorCode: null,
+      terminalStage: null,
+      terminalMessage: "Streaming voice run completed",
+      conversationTitle: conversationTitle(input.transcript),
+      messages: [
+        { role: "user", content: input.transcript },
+        { role: "assistant", content: input.response }
+      ],
       events: input.events
     });
   }
@@ -735,11 +872,31 @@ export class VoxMeshStore {
     errorCode: string,
     message: string
   ): { run: ConversationRun; transitioned: boolean } {
-    return this.finalizeChatRun({
+    return this.finalizeRun({
       runId,
       status: "failed",
       errorCode,
+      terminalStage: "AGENT",
       terminalMessage: message,
+      conversationTitle: null,
+      messages: [],
+      events: [{ category: "ERROR", level: "ERROR", message }]
+    });
+  }
+
+  public failVoiceRun(
+    runId: string,
+    errorCode: string,
+    message: string,
+    stage: PipelineStage
+  ): { run: ConversationRun; transitioned: boolean } {
+    return this.finalizeRun({
+      runId,
+      status: "failed",
+      errorCode,
+      terminalStage: stage,
+      terminalMessage: message,
+      conversationTitle: null,
       messages: [],
       events: [{ category: "ERROR", level: "ERROR", message }]
     });
@@ -749,17 +906,44 @@ export class VoxMeshStore {
     run: ConversationRun;
     transitioned: boolean;
   } {
-    return this.finalizeChatRun({
+    return this.finalizeRun({
       runId,
       status: "cancelled",
       errorCode: "RUN_CANCELLED",
+      terminalStage: "AGENT",
       terminalMessage: "Agent run cancelled",
+      conversationTitle: null,
       messages: [],
       events: [
         {
           category: "AGENT",
           level: "WARN",
           message: "Agent run cancelled"
+        }
+      ]
+    });
+  }
+
+  public cancelVoiceRun(
+    runId: string,
+    stage: PipelineStage = "AGENT"
+  ): {
+    run: ConversationRun;
+    transitioned: boolean;
+  } {
+    return this.finalizeRun({
+      runId,
+      status: "cancelled",
+      errorCode: "RUN_CANCELLED",
+      terminalStage: stage,
+      terminalMessage: `Streaming ${stage} stage cancelled`,
+      conversationTitle: null,
+      messages: [],
+      events: [
+        {
+          category: "AGENT",
+          level: "WARN",
+          message: "Streaming voice run cancelled"
         }
       ]
     });
@@ -968,11 +1152,13 @@ export class VoxMeshStore {
     }
   }
 
-  private finalizeChatRun(input: {
+  private finalizeRun(input: {
     runId: string;
     status: Exclude<ConversationRunStatus, "in_progress">;
     errorCode: string | null;
+    terminalStage: PipelineStage | null;
     terminalMessage: string;
+    conversationTitle: string | null;
     messages: Array<{ role: MessageRole; content: string }>;
     events: Array<{
       category: LogCategory;
@@ -1025,6 +1211,20 @@ export class VoxMeshStore {
           )
         );
       }
+      const inputMessage = emittedMessages.find(
+        (message) => message.role === "user"
+      );
+      if (
+        current.kind === "voice-composed" &&
+        current.inputMessageId === null &&
+        inputMessage
+      ) {
+        this.database
+          .prepare(
+            "UPDATE conversation_runs SET input_message_id = ? WHERE id = ?"
+          )
+          .run(inputMessage.id, current.id);
+      }
       for (const event of input.events) {
         emittedLogs.push(
           this.insertLog({
@@ -1046,20 +1246,26 @@ export class VoxMeshStore {
           );
         }
       }
-      emittedEvents.push(
-        this.insertPipelineEvent({
-          conversationId: current.conversationId,
-          runId: current.id,
-          correlationId: current.correlationId,
-          stage: "AGENT",
-          status: input.status,
-          message: input.terminalMessage,
-          durationMs
-        })
-      );
+      if (input.terminalStage !== null) {
+        emittedEvents.push(
+          this.insertPipelineEvent({
+            conversationId: current.conversationId,
+            runId: current.id,
+            correlationId: current.correlationId,
+            stage: input.terminalStage,
+            status: input.status,
+            message: input.terminalMessage,
+            durationMs
+          })
+        );
+      }
       this.database
-        .prepare("UPDATE conversations SET updated_at = ? WHERE id = ?")
-        .run(completedAt, current.conversationId);
+        .prepare(
+          `UPDATE conversations
+           SET title = COALESCE(?, title), updated_at = ?
+           WHERE id = ?`
+        )
+        .run(input.conversationTitle, completedAt, current.conversationId);
       run = this.getConversationRun(input.runId);
     })();
     if (!run) throw new Error("Conversation run finalization produced no run");
@@ -1337,6 +1543,17 @@ export class VoxMeshStore {
       CREATE INDEX IF NOT EXISTS idx_conversation_events_run
       ON conversation_events(run_id, created_at);
     `);
+    this.applyMigration("2026-08-25-voice-run-route-snapshot-v1", () => {
+      this.database.exec(`
+        CREATE TABLE conversation_run_route_snapshots (
+          run_id TEXT PRIMARY KEY REFERENCES conversation_runs(id) ON DELETE CASCADE,
+          snapshot_json TEXT NOT NULL CHECK (length(snapshot_json) <= 16384),
+          created_at TEXT NOT NULL
+        );
+        CREATE INDEX idx_conversation_run_route_snapshots_run
+        ON conversation_run_route_snapshots(run_id);
+      `);
+    });
     this.ensureColumn(
       "provider_connections",
       "enabled",
@@ -1824,6 +2041,66 @@ function parseStoredCapabilityStrings(value: string): string[] {
     throw new Error("Stored model capabilities are invalid");
   }
   return capabilities;
+}
+
+function parseVoiceRouteSnapshot(value: string): RuntimeVoiceRouteSnapshot {
+  const parsed = JSON.parse(value) as unknown;
+  if (
+    !isRecord(parsed) ||
+    typeof parsed.routeId !== "string" ||
+    typeof parsed.routeDisplayName !== "string" ||
+    parsed.mode !== "composed" ||
+    typeof parsed.configurationFingerprint !== "string" ||
+    !Array.isArray(parsed.assignments) ||
+    parsed.assignments.length !== 3
+  ) {
+    throw new Error("Stored voice route snapshot is invalid");
+  }
+  const assignments = parsed.assignments.map(
+    (assignment): RuntimeVoiceRouteAssignmentSnapshot => {
+      if (
+        !isRecord(assignment) ||
+        (assignment.role !== "stt" &&
+          assignment.role !== "chat" &&
+          assignment.role !== "tts") ||
+        typeof assignment.modelDeploymentId !== "string" ||
+        typeof assignment.modelDisplayName !== "string" ||
+        typeof assignment.providerId !== "string" ||
+        typeof assignment.providerDisplayName !== "string" ||
+        typeof assignment.configurationFingerprint !== "string" ||
+        typeof assignment.streamingEnabled !== "boolean"
+      ) {
+        throw new Error("Stored voice route snapshot assignment is invalid");
+      }
+      return {
+        role: assignment.role,
+        modelDeploymentId: assignment.modelDeploymentId,
+        modelDisplayName: assignment.modelDisplayName,
+        providerId: assignment.providerId,
+        providerDisplayName: assignment.providerDisplayName,
+        configurationFingerprint: assignment.configurationFingerprint,
+        streamingEnabled: assignment.streamingEnabled
+      };
+    }
+  );
+  if (
+    assignments[0]?.role !== "stt" ||
+    assignments[1]?.role !== "chat" ||
+    assignments[2]?.role !== "tts"
+  ) {
+    throw new Error("Stored voice route snapshot roles are invalid");
+  }
+  return {
+    routeId: parsed.routeId,
+    routeDisplayName: parsed.routeDisplayName,
+    mode: "composed",
+    configurationFingerprint: parsed.configurationFingerprint,
+    assignments: [assignments[0], assignments[1], assignments[2]]
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function hasVerifiedBufferedRole(capabilities: readonly string[]): boolean {

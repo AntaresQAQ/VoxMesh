@@ -33,7 +33,10 @@ export class OpenAiCompatibleSpeechToTextProvider implements SpeechToTextProvide
     private readonly fetcher: Fetcher = globalThis.fetch
   ) {}
 
-  public async transcribe(audio: AudioData): Promise<TranscriptionResult> {
+  public async transcribe(
+    audio: AudioData,
+    options?: { signal?: AbortSignal }
+  ): Promise<TranscriptionResult> {
     if (audio.data.byteLength === 0) {
       throw new Error("Audio input must not be empty");
     }
@@ -43,7 +46,7 @@ export class OpenAiCompatibleSpeechToTextProvider implements SpeechToTextProvide
     form.append(
       "file",
       new Blob([buffer], { type: audio.mimeType }),
-      "recording.webm"
+      fileNameFor(audio.mimeType)
     );
     form.append("model", this.config.model);
     if (this.config.language) form.append("language", this.config.language);
@@ -53,7 +56,7 @@ export class OpenAiCompatibleSpeechToTextProvider implements SpeechToTextProvide
         method: "POST",
         headers: { authorization: `Bearer ${this.config.apiKey}` },
         body: form,
-        signal: AbortSignal.timeout(this.config.timeoutMs ?? 30_000)
+        signal: requestSignal(options?.signal, this.config.timeoutMs)
       }
     );
     if (!response.ok) {
@@ -77,7 +80,10 @@ export class OpenAiCompatibleTextToSpeechProvider implements TextToSpeechProvide
     private readonly fetcher: Fetcher = globalThis.fetch
   ) {}
 
-  public async synthesize(text: string): Promise<AudioData> {
+  public async synthesize(
+    text: string,
+    options?: { signal?: AbortSignal }
+  ): Promise<AudioData> {
     if (!text.trim()) {
       throw new Error("Text-to-speech input must not be empty");
     }
@@ -96,7 +102,7 @@ export class OpenAiCompatibleTextToSpeechProvider implements TextToSpeechProvide
           instructions: this.config.instructions,
           response_format: "wav"
         }),
-        signal: AbortSignal.timeout(this.config.timeoutMs ?? 30_000)
+        signal: requestSignal(options?.signal, this.config.timeoutMs)
       }
     );
     if (!response.ok) {
@@ -113,6 +119,23 @@ export class OpenAiCompatibleTextToSpeechProvider implements TextToSpeechProvide
       mimeType: response.headers.get("content-type") ?? "audio/wav"
     };
   }
+}
+
+function fileNameFor(mimeType: string): string {
+  const normalized = mimeType.toLowerCase();
+  if (normalized.includes("wav")) return "recording.wav";
+  if (normalized.includes("mpeg") || normalized.includes("mp3"))
+    return "recording.mp3";
+  if (normalized.includes("ogg")) return "recording.ogg";
+  return "recording.webm";
+}
+
+function requestSignal(
+  signal: AbortSignal | undefined,
+  timeoutMs: number | undefined
+): AbortSignal {
+  const timeout = AbortSignal.timeout(timeoutMs ?? 30_000);
+  return signal ? AbortSignal.any([signal, timeout]) : timeout;
 }
 
 function baseUrl(value: string): string {

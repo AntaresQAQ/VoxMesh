@@ -18,7 +18,11 @@ const BITS_PER_SAMPLE = 16;
  * speech content. Its fixed transcript drives the Mock MCP tool path.
  */
 export class MockSpeechToTextProvider implements SpeechToTextProvider {
-  public async transcribe(audio: AudioData): Promise<TranscriptionResult> {
+  public async transcribe(
+    audio: AudioData,
+    options?: { signal?: AbortSignal }
+  ): Promise<TranscriptionResult> {
+    throwIfAborted(options?.signal);
     if (audio.data.byteLength === 0) {
       throw new Error("Audio input must not be empty");
     }
@@ -36,16 +40,27 @@ export class MockSpeechToTextProvider implements SpeechToTextProvider {
  * Produces a short valid WAV tone so browser playback can be tested offline.
  */
 export class MockTextToSpeechProvider implements TextToSpeechProvider {
-  public async synthesize(text: string): Promise<AudioData> {
+  public async synthesize(
+    text: string,
+    options?: { signal?: AbortSignal }
+  ): Promise<AudioData> {
+    throwIfAborted(options?.signal);
     if (!text.trim()) {
       throw new Error("Text-to-speech input must not be empty");
     }
+
     return {
       data: createToneWav(Math.min(0.8, 0.25 + text.length / 500)),
       mimeType: "audio/wav",
       sampleRate: SAMPLE_RATE,
       channels: CHANNELS
     };
+  }
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw new DOMException("Speech operation was aborted", "AbortError");
   }
 }
 

@@ -12,11 +12,17 @@ export interface TranscriptionResult {
 }
 
 export interface SpeechToTextProvider {
-  transcribe(audio: AudioData): Promise<TranscriptionResult>;
+  transcribe(
+    audio: AudioData,
+    options?: { signal?: AbortSignal }
+  ): Promise<TranscriptionResult>;
 }
 
 export interface TextToSpeechProvider {
-  synthesize(text: string): Promise<AudioData>;
+  synthesize(
+    text: string,
+    options?: { signal?: AbortSignal }
+  ): Promise<AudioData>;
 }
 
 /** Explicit PCM format used by provider-independent streaming audio sessions. */

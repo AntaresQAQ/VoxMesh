@@ -7,6 +7,7 @@ import {
 
 describe("Azure OpenAI speech adapters", () => {
   it("sends multipart audio and maps transcription text", async () => {
+    const controller = new AbortController();
     const fetcher = vi.fn(
       async (_input: string | URL | Request, _init?: RequestInit) =>
         Response.json({ text: "你好" })
@@ -23,16 +24,23 @@ describe("Azure OpenAI speech adapters", () => {
     );
 
     await expect(
-      provider.transcribe({
-        data: new Uint8Array([1, 2, 3]),
-        mimeType: "audio/webm"
-      })
+      provider.transcribe(
+        {
+          data: new Uint8Array([1, 2, 3]),
+          mimeType: "audio/webm"
+        },
+        { signal: controller.signal }
+      )
     ).resolves.toEqual({ text: "你好", language: "zh" });
     expect(fetcher.mock.calls[0]?.[0]).toBe(
       "https://example.openai.azure.com/openai/deployments/stt%20deployment/audio/transcriptions?api-version=2025-04-01-preview"
     );
     expect(fetcher.mock.calls[0]?.[1]?.method).toBe("POST");
     expect(fetcher.mock.calls[0]?.[1]?.body).toBeInstanceOf(FormData);
+    const requestSignal = fetcher.mock.calls[0]?.[1]?.signal;
+    expect(requestSignal).toBeInstanceOf(AbortSignal);
+    controller.abort();
+    expect(requestSignal?.aborted).toBe(true);
   });
 
   it("requests WAV speech with voice instructions", async () => {

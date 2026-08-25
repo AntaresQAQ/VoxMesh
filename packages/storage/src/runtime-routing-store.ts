@@ -129,6 +129,28 @@ export interface RuntimeReadinessError {
   category: ProviderReadinessErrorCategory;
 }
 
+export interface RuntimeVoiceRouteAssignmentSnapshot {
+  role: "stt" | "chat" | "tts";
+  modelDeploymentId: string;
+  modelDisplayName: string;
+  providerId: string;
+  providerDisplayName: string;
+  configurationFingerprint: string;
+  streamingEnabled: boolean;
+}
+
+export interface RuntimeVoiceRouteSnapshot {
+  routeId: string;
+  routeDisplayName: string;
+  mode: "composed";
+  configurationFingerprint: string;
+  assignments: [
+    RuntimeVoiceRouteAssignmentSnapshot,
+    RuntimeVoiceRouteAssignmentSnapshot,
+    RuntimeVoiceRouteAssignmentSnapshot
+  ];
+}
+
 const unavailableStreamingRuntime: StreamingRuntimeAvailability = {
   transportAvailable: false,
   browserClientAvailable: false,
@@ -839,6 +861,81 @@ export class RuntimeRoutingStore {
 
   public getRouteSummary(id: string): RuntimeRouteSummary {
     return mapRuntimeRoute(this.getRoute(id));
+  }
+
+  public captureVoiceRouteSnapshot(
+    routeId?: string
+  ): RuntimeVoiceRouteSnapshot {
+    const active =
+      routeId === undefined ? this.getValidatedActiveRuntimeRoute() : null;
+    const route =
+      routeId !== undefined
+        ? this.getRoute(routeId)
+        : active?.mode === "composed"
+          ? active
+          : active?.fallback_route_id
+            ? this.getRoute(active.fallback_route_id)
+            : undefined;
+    if (!route || route.mode !== "composed") {
+      throw badRequest(
+        "Streaming voice requires a Composed route or an explicit Composed fallback"
+      );
+    }
+    if (route.enabled !== 1) {
+      throw badRequest("Disabled runtime route cannot start a voice run");
+    }
+    this.validateRoute(
+      route.id,
+      routeInputFromRow(route),
+      routeId === undefined
+    );
+    const assignment = (
+      role: "stt" | "chat" | "tts",
+      modelId: string | null,
+      streamingEnabled: boolean
+    ): RuntimeVoiceRouteAssignmentSnapshot => {
+      if (!modelId) {
+        throw new Error(`Composed runtime route requires a ${role} model`);
+      }
+      const model = this.getModel(modelId);
+      const connection = this.getConnection(model.connection_id);
+      return {
+        role,
+        modelDeploymentId: model.id,
+        modelDisplayName: model.display_name,
+        providerId: connection.provider_id,
+        providerDisplayName: connection.display_name,
+        configurationFingerprint: this.modelVerificationToken(model.id),
+        streamingEnabled
+      };
+    };
+    const assignments: RuntimeVoiceRouteSnapshot["assignments"] = [
+      assignment(
+        "stt",
+        route.stt_model_deployment_id,
+        route.stt_streaming_enabled === 1
+      ),
+      assignment(
+        "chat",
+        route.chat_model_deployment_id,
+        route.chat_streaming_enabled === 1
+      ),
+      assignment(
+        "tts",
+        route.tts_model_deployment_id,
+        route.tts_streaming_enabled === 1
+      )
+    ];
+    return {
+      routeId: route.id,
+      routeDisplayName: route.display_name,
+      mode: "composed",
+      configurationFingerprint: configurationFingerprint([
+        routeVerificationSignature(route),
+        assignments.map((entry) => entry.configurationFingerprint)
+      ]),
+      assignments
+    };
   }
 
   public captureRouteVerification(

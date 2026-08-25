@@ -66,7 +66,11 @@ export class AlibabaModelStudioSpeechToTextProvider implements SpeechToTextProvi
     });
   }
 
-  public async transcribe(audio: AudioData): Promise<TranscriptionResult> {
+  public async transcribe(
+    audio: AudioData,
+    options?: { signal?: AbortSignal }
+  ): Promise<TranscriptionResult> {
+    throwIfAborted(options?.signal);
     if (audio.data.byteLength === 0) {
       throw new Error("Audio input must not be empty");
     }
@@ -83,6 +87,7 @@ export class AlibabaModelStudioSpeechToTextProvider implements SpeechToTextProvi
         ? {}
         : { timeoutMs: this.config.timeoutMs }),
       createSocket: this.createSocket,
+      ...(options?.signal ? { signal: options.signal } : {}),
       createRunTask: (taskId) => ({
         header: taskHeader("run-task", taskId),
         payload: {
@@ -152,7 +157,11 @@ export class AlibabaModelStudioTextToSpeechProvider implements TextToSpeechProvi
     });
   }
 
-  public async synthesize(text: string): Promise<AudioData> {
+  public async synthesize(
+    text: string,
+    options?: { signal?: AbortSignal }
+  ): Promise<AudioData> {
+    throwIfAborted(options?.signal);
     if (!text.trim()) {
       throw new Error("Text-to-speech input must not be empty");
     }
@@ -165,6 +174,7 @@ export class AlibabaModelStudioTextToSpeechProvider implements TextToSpeechProvi
         ? {}
         : { timeoutMs: this.config.timeoutMs }),
       createSocket: this.createSocket,
+      ...(options?.signal ? { signal: options.signal } : {}),
       createRunTask: (taskId) => ({
         header: taskHeader("run-task", taskId),
         payload: {
@@ -235,6 +245,7 @@ async function runAlibabaTask(input: {
   apiKey: string;
   timeoutMs?: number;
   createSocket: AlibabaWebSocketFactory;
+  signal?: AbortSignal;
   createRunTask: (taskId: string) => Record<string, unknown>;
   onStarted: (socket: AlibabaWebSocket, taskId: string) => void;
   onEvent?: (event: AlibabaEvent) => void;
@@ -258,12 +269,21 @@ async function runAlibabaTask(input: {
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
+      input.signal?.removeEventListener("abort", onAbort);
       socket.close();
       if (error) reject(error);
       else resolve();
     };
+    const onAbort = () =>
+      finish(new DOMException("Speech operation was aborted", "AbortError"));
+    if (input.signal?.aborted) {
+      onAbort();
+      return;
+    }
+    input.signal?.addEventListener("abort", onAbort, { once: true });
 
     socket.on("open", () => {
+      if (settled) return;
       try {
         socket.send(JSON.stringify(input.createRunTask(taskId)));
       } catch (error) {
@@ -271,6 +291,7 @@ async function runAlibabaTask(input: {
       }
     });
     socket.on("message", (data, isBinary) => {
+      if (settled) return;
       try {
         if (isBinary) {
           input.onBinary?.(rawDataToBytes(data));
@@ -301,21 +322,27 @@ async function runAlibabaTask(input: {
       }
     });
     socket.on("error", (error) => {
+      if (settled) return;
       finish(normalizeError("WebSocket failed", error));
     });
     socket.on("close", (code, reason) => {
-      if (!settled) {
-        const detail = reason.toString().trim();
-        finish(
-          new Error(
-            `Alibaba Model Studio WebSocket closed before completion (${code})${
-              detail ? `: ${detail}` : ""
-            }`
-          )
-        );
-      }
+      if (settled) return;
+      const detail = reason.toString().trim();
+      finish(
+        new Error(
+          `Alibaba Model Studio WebSocket closed before completion (${code})${
+            detail ? `: ${detail}` : ""
+          }`
+        )
+      );
     });
   });
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw new DOMException("Speech operation was aborted", "AbortError");
+  }
 }
 
 function taskHeader(action: string, taskId: string) {

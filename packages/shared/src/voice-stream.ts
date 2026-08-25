@@ -30,6 +30,7 @@ export const VOICE_STREAM_LIMITS = Object.freeze({
   maxTranscriptCharacters: 8_000,
   maxAssistantCharacters: 32_000,
   maxToolArgumentsBytes: 32 * 1024,
+  maxMcpResultBytes: 64 * 1024,
   maxToolCalls: 3,
   minTtsSegmentCharacters: 24,
   maxTtsSegmentCharacters: 240,

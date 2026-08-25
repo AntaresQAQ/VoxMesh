@@ -477,6 +477,55 @@ describe("StreamingAgentRuntime", () => {
     });
   });
 
+  it("rejects oversized serialized MCP results", async () => {
+    const mcp: McpServer = {
+      name: "Oversized MCP",
+      listTools: async () => [
+        {
+          name: "mock.get_device_status",
+          description: "Status"
+        }
+      ],
+      callTool: async () => ({ value: "x".repeat(64 * 1024) })
+    };
+
+    await expect(
+      collectRun(
+        new StreamingAgentRuntime(
+          new ScriptedStreamingLlmProvider([toolCompletion("{}")]),
+          mcp
+        ).run("Tool", {
+          toolMode: "enabled",
+          signal: new AbortController().signal
+        })
+      )
+    ).rejects.toMatchObject({
+      code: "STREAM_LIMIT_EXCEEDED",
+      message: "MCP tool result exceeded its byte limit"
+    });
+  });
+
+  it("rejects unknown Streaming LLM event discriminators", async () => {
+    const provider = new ScriptedStreamingLlmProvider([
+      [
+        { type: "unknown" } as unknown as StreamingLlmEvent,
+        { type: "completed", finishReason: "stop" }
+      ]
+    ]);
+
+    await expect(
+      collectRun(
+        new StreamingAgentRuntime(provider, new MockMcpServer()).run("Test", {
+          toolMode: "disabled",
+          signal: new AbortController().signal
+        })
+      )
+    ).rejects.toMatchObject({
+      code: "INVALID_STREAM_EVENT",
+      message: "Streaming LLM emitted an unknown event"
+    });
+  });
+
   it("counts UTF-8 arguments correctly across split surrogate pairs", async () => {
     const prefix = '{"value":"';
     const suffix = '"}';

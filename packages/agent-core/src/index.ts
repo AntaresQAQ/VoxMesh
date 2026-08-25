@@ -5,4 +5,5 @@ export * from "./native-voice.js";
 export * from "./runtime.js";
 export * from "./streaming-runtime.js";
 export * from "./streaming-tts-segmenter.js";
+export * from "./tool-result.js";
 export * from "./types.js";
