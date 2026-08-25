@@ -615,6 +615,24 @@ describe("StreamingVoiceCoordinator", () => {
         )
       ).rejects.toMatchObject({ code: "AGENT_FAILED" });
       expect(oversizedChat.bufferedTts).not.toHaveBeenCalled();
+
+      const whitespaceChat = createTrackedProviders();
+      whitespaceChat.providers.bufferedLlm = {
+        complete: async () => ({ type: "message", content: "   " })
+      };
+      await expect(
+        consume(
+          new StreamingVoiceCoordinator(store, new MockMcpServer()).run({
+            runId: "54545454-5454-4454-8454-545454545454",
+            preparation: preparation(store, routeId, whitespaceChat.providers),
+            format,
+            audio: audioFrames(),
+            toolMode: "disabled",
+            signal: new AbortController().signal
+          })
+        )
+      ).rejects.toMatchObject({ code: "AGENT_FAILED" });
+      expect(whitespaceChat.bufferedTts).not.toHaveBeenCalled();
     } finally {
       store.close();
     }
@@ -622,7 +640,8 @@ describe("StreamingVoiceCoordinator", () => {
 
   it("splits long buffered response metadata within protocol segment limits", async () => {
     const store = new VoxMeshStore(":memory:");
-    const providers = createTrackedProviders().providers;
+    const tracked = createTrackedProviders();
+    const providers = tracked.providers;
     const response = "😀".repeat(250);
     providers.bufferedLlm = {
       complete: async () => ({ type: "message", content: response })
@@ -656,6 +675,7 @@ describe("StreamingVoiceCoordinator", () => {
       expect(
         consumed.events.find((event) => event.type === "audio_completed")
       ).toMatchObject({ segments: 3 });
+      expect(tracked.bufferedTts).toHaveBeenCalledTimes(3);
     } finally {
       store.close();
     }
@@ -685,6 +705,36 @@ describe("StreamingVoiceCoordinator", () => {
           })
         )
       ).rejects.toMatchObject({ code: "TTS_FAILED" });
+    } finally {
+      store.close();
+    }
+  });
+
+  it("copies provider-owned streaming audio buffers before queueing", async () => {
+    const store = new VoxMeshStore(":memory:");
+    const providers = createTrackedProviders().providers;
+    providers.streamingTts = {
+      startSynthesis: async () => reusedBufferTtsSession()
+    };
+    try {
+      const routeId = createRoute(store, {
+        stt: false,
+        chat: false,
+        tts: true
+      });
+      const consumed = await consume(
+        new StreamingVoiceCoordinator(store, new MockMcpServer()).run({
+          runId: "55555555-5555-4555-8555-555555555555",
+          preparation: preparation(store, routeId, providers),
+          format,
+          audio: audioFrames(),
+          toolMode: "enabled",
+          signal: new AbortController().signal
+        })
+      );
+      const audio = consumed.events.filter((event) => event.type === "audio");
+      expect(audio[0]?.chunk.data[0]).toBe(1);
+      expect(audio[1]?.chunk.data[0]).toBe(2);
     } finally {
       store.close();
     }
@@ -976,6 +1026,47 @@ describe("StreamingVoiceCoordinator", () => {
       ).rejects.toMatchObject({ code: "AGENT_FAILED" });
       const run = store.getConversationRun(
         "38383838-3838-4838-8838-383838383838"
+      );
+      expect(
+        store
+          .getConversation(run.conversationId)
+          ?.events.some(
+            (event) => event.stage === "TTS" && event.status === "cancelled"
+          )
+      ).toBe(true);
+    } finally {
+      store.close();
+    }
+  });
+
+  it("classifies an empty streaming completion as an Agent failure", async () => {
+    const store = new VoxMeshStore(":memory:");
+    const providers = createTrackedProviders().providers;
+    providers.streamingLlm = {
+      stream: async function* () {
+        yield { type: "completed", finishReason: "stop" };
+      }
+    };
+    try {
+      const routeId = createRoute(store, {
+        stt: false,
+        chat: true,
+        tts: true
+      });
+      await expect(
+        consume(
+          new StreamingVoiceCoordinator(store, new MockMcpServer()).run({
+            runId: "56565656-5656-4656-8656-565656565656",
+            preparation: preparation(store, routeId, providers),
+            format,
+            audio: audioFrames(),
+            toolMode: "disabled",
+            signal: new AbortController().signal
+          })
+        )
+      ).rejects.toMatchObject({ code: "AGENT_FAILED" });
+      const run = store.getConversationRun(
+        "56565656-5656-4656-8656-565656565656"
       );
       expect(
         store
@@ -1330,6 +1421,32 @@ function fractionalFrameTtsSession(): StreamingTextToSpeechSession {
         format: outputFormat,
         audioBytes: 880,
         durationMs: 20
+      };
+    }
+  };
+}
+
+function reusedBufferTtsSession(): StreamingTextToSpeechSession {
+  const data = new Uint8Array(640);
+  return {
+    close: async () => undefined,
+    [Symbol.asyncIterator]: async function* () {
+      data.fill(1);
+      yield {
+        type: "audio" as const,
+        chunk: { sequence: 1, format, data }
+      };
+      data.fill(2);
+      yield {
+        type: "audio" as const,
+        chunk: { sequence: 2, format, data }
+      };
+      yield {
+        type: "completed" as const,
+        sequence: 3,
+        format,
+        audioBytes: 1_280,
+        durationMs: 40
       };
     }
   };

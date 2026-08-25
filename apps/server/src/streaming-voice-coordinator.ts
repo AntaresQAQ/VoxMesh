@@ -152,6 +152,7 @@ export class StreamingVoiceCoordinator {
   > {
     const localAbort = new AbortController();
     const signal = AbortSignal.any([input.signal, localAbort.signal]);
+    let unsubscribePressure: () => void = () => undefined;
     const events = new BoundedAsyncQueue<StreamingVoiceCoordinatorEvent>(
       {
         maxItems: 4_096,
@@ -160,7 +161,9 @@ export class StreamingVoiceCoordinator {
       },
       measureCoordinatorEvent
     );
-    const execution = this.execute(input, signal, events).then(
+    const execution = this.execute(input, signal, events, (unsubscribe) => {
+      unsubscribePressure = unsubscribe;
+    }).then(
       (result) => {
         events.close();
         return result;
@@ -177,8 +180,10 @@ export class StreamingVoiceCoordinator {
           if (event !== null) {
             return { done: false, value: event };
           }
+          unsubscribePressure();
           return { done: true, value: await execution };
         } catch {
+          unsubscribePressure();
           return { done: true, value: await execution };
         }
       },
@@ -189,6 +194,7 @@ export class StreamingVoiceCoordinator {
       ) => {
         localAbort.abort();
         await execution.catch(() => undefined);
+        unsubscribePressure();
         return {
           done: true,
           value: await value
@@ -197,6 +203,7 @@ export class StreamingVoiceCoordinator {
       throw: async (error?: unknown) => {
         localAbort.abort();
         await execution.catch(() => undefined);
+        unsubscribePressure();
         throw asError(error);
       },
       [Symbol.asyncIterator]() {
@@ -208,7 +215,8 @@ export class StreamingVoiceCoordinator {
   private async execute(
     input: StreamingVoiceCoordinatorInput,
     signal: AbortSignal,
-    events: BoundedAsyncQueue<StreamingVoiceCoordinatorEvent>
+    events: BoundedAsyncQueue<StreamingVoiceCoordinatorEvent>,
+    registerPressureCleanup: (unsubscribe: () => void) => void
   ): Promise<StreamingVoiceCoordinatorResult> {
     validateCoordinatorInput(input);
     const resolved: ResolvedStreamingVoiceCoordinatorInput = {
@@ -229,6 +237,7 @@ export class StreamingVoiceCoordinator {
           level: "WARN",
           message: `${pressureOrigin} output queue entered high pressure`
         });
+        registerPressureCleanup(unsubscribePressure);
       } else if (pressure === "normal" && pressureOrigin !== null) {
         const recoveredStage = pressureOrigin;
         pressureOrigin = null;
@@ -289,31 +298,26 @@ export class StreamingVoiceCoordinator {
       };
     } catch (error) {
       if (signal.aborted || error instanceof AgentRunCancelledError) {
-        const cancelled = this.store.cancelVoiceRun(run.id);
-        if (cancelled.transitioned) {
-          this.store.addPipelineEvent({
-            conversationId: run.conversationId,
-            runId: run.id,
-            correlationId: run.correlationId,
-            stage,
-            status: "cancelled",
-            message: `Streaming ${stage} stage cancelled`
-          });
-        }
+        this.store.cancelVoiceRun(run.id, stage);
         throw new AgentRunCancelledError();
       }
       const failedStage =
         error instanceof StreamingVoiceStageError ? error.stage : stage;
       const safeMessage = `Streaming ${failedStage} stage failed`;
-      this.store.addPipelineEvent({
-        conversationId: run.conversationId,
-        runId: run.id,
-        correlationId: run.correlationId,
-        stage: failedStage,
-        status: "failed",
-        message: safeMessage
-      });
-      this.store.failVoiceRun(run.id, `${failedStage}_FAILED`, safeMessage);
+      const failed = this.store.failVoiceRun(
+        run.id,
+        `${failedStage}_FAILED`,
+        safeMessage,
+        failedStage
+      );
+      if (!failed.transitioned) {
+        if (failed.run.status === "cancelled") {
+          throw new AgentRunCancelledError();
+        }
+        throw new Error(
+          `Streaming voice run ended as ${failed.run.status} before failure`
+        );
+      }
       throw new StreamingVoiceCoordinatorError(
         `${failedStage}_FAILED`,
         safeMessage,
@@ -321,8 +325,6 @@ export class StreamingVoiceCoordinator {
           cause: error instanceof StreamingVoiceStageError ? error.cause : error
         }
       );
-    } finally {
-      unsubscribePressure();
     }
   }
 
@@ -487,6 +489,11 @@ export class StreamingVoiceCoordinator {
             )
           ])
         : await agentExecution;
+      try {
+        validateAssistantResponse(agent.response);
+      } catch (error) {
+        throw new StreamingVoiceStageError("AGENT", error);
+      }
       if (segmenter) {
         try {
           await segmenter.finish(agent.response);
@@ -520,11 +527,6 @@ export class StreamingVoiceCoordinator {
         throw new StreamingVoiceStageError("AGENT", agentFailure);
       }
       throw error;
-    }
-    try {
-      validateAssistantResponse(agent.response);
-    } catch (error) {
-      throw new StreamingVoiceStageError("AGENT", error);
     }
     if (!chatStreaming) {
       await emit(events, stageSignal, {
@@ -891,6 +893,9 @@ async function synthesizeSegments(
   let segmentCount = 0;
   for await (const segment of segments) {
     for (const text of splitProtocolSegments(segment.text)) {
+      if (segmentCount >= 10_000) {
+        throw new Error("Streaming TTS segment count exceeds its limit");
+      }
       const result = await synthesizeStreamingText(
         text,
         provider,
@@ -902,9 +907,6 @@ async function synthesizeSegments(
       );
       sequence = result.nextSequence;
       segmentCount += 1;
-      if (segmentCount > 10_000) {
-        throw new Error("Streaming TTS segment count exceeds its limit");
-      }
     }
   }
   return { segments: segmentCount, ...totals };
@@ -1009,7 +1011,11 @@ async function synthesizeStreamingText(
         enforceOutputLimits(cumulativeBytes, cumulativeDurationMs);
         await emit(events, providerSignal, {
           type: "audio",
-          chunk: { ...event.chunk, sequence }
+          chunk: {
+            ...event.chunk,
+            sequence,
+            data: event.chunk.data.slice()
+          }
         });
         sequence += 1;
       } else if (event.type === "completed") {
@@ -1200,7 +1206,7 @@ function validateTranscriptionResult(result: TranscriptionResult): void {
 
 function validateAssistantResponse(response: string): void {
   if (
-    response.length === 0 ||
+    response.trim().length === 0 ||
     response.length > VOICE_STREAM_LIMITS.maxAssistantCharacters
   ) {
     throw new Error("Assistant response is empty or exceeds its limit");
@@ -1365,7 +1371,11 @@ function withOperationTimeout<T>(
   timeoutMs: number,
   abortController?: AbortController
 ): Promise<T> {
-  if (signal.aborted) return Promise.reject(new AgentRunCancelledError());
+  if (signal.aborted) {
+    abortController?.abort();
+    void operation.catch(() => undefined);
+    return Promise.reject(new AgentRunCancelledError());
+  }
   return new Promise<T>((resolve, reject) => {
     const onAbort = () => {
       cleanup();

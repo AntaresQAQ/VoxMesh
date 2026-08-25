@@ -885,13 +885,14 @@ export class VoxMeshStore {
   public failVoiceRun(
     runId: string,
     errorCode: string,
-    message: string
+    message: string,
+    stage: PipelineStage
   ): { run: ConversationRun; transitioned: boolean } {
     return this.finalizeRun({
       runId,
       status: "failed",
       errorCode,
-      terminalStage: null,
+      terminalStage: stage,
       terminalMessage: message,
       conversationTitle: null,
       messages: [],
@@ -921,7 +922,10 @@ export class VoxMeshStore {
     });
   }
 
-  public cancelVoiceRun(runId: string): {
+  public cancelVoiceRun(
+    runId: string,
+    stage: PipelineStage = "AGENT"
+  ): {
     run: ConversationRun;
     transitioned: boolean;
   } {
@@ -929,8 +933,8 @@ export class VoxMeshStore {
       runId,
       status: "cancelled",
       errorCode: "RUN_CANCELLED",
-      terminalStage: null,
-      terminalMessage: "Streaming voice run cancelled",
+      terminalStage: stage,
+      terminalMessage: `Streaming ${stage} stage cancelled`,
       conversationTitle: null,
       messages: [],
       events: [

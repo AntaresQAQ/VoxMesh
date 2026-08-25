@@ -493,6 +493,19 @@ describe("VoxMeshStore", () => {
       }).transitioned
     ).toBe(false);
     expect(store.getConversation(run.conversationId)?.messages).toEqual([]);
+    expect(
+      store.failVoiceRun(
+        run.id,
+        "STT_FAILED",
+        "Streaming STT stage failed",
+        "STT"
+      ).transitioned
+    ).toBe(false);
+    expect(
+      store
+        .getConversation(run.conversationId)
+        ?.events.some((event) => event.status === "failed")
+    ).toBe(false);
   });
 
   it("reconciles an interrupted voice run and preserves its route snapshot", () => {
