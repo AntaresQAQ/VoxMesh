@@ -268,6 +268,43 @@ describe("StreamingVoiceCoordinator", () => {
     }
   });
 
+  it("records output pressure and recovery against the originating stage", async () => {
+    const store = new VoxMeshStore(":memory:");
+    const providers = createTrackedProviders().providers;
+    providers.streamingTts = new MockStreamingTextToSpeechProvider({
+      chunkCount: 240,
+      chunkDurationMs: 20
+    });
+    try {
+      const routeId = createRoute(store, {
+        stt: false,
+        chat: false,
+        tts: true
+      });
+      const run = new StreamingVoiceCoordinator(store, new MockMcpServer()).run(
+        {
+          runId: "57575757-5757-4757-8757-575757575757",
+          preparation: preparation(store, routeId, providers),
+          format,
+          audio: audioFrames(),
+          toolMode: "enabled",
+          signal: new AbortController().signal
+        }
+      );
+      await waitForLog(store, "TTS output queue entered high pressure");
+      await consumeRemaining(run, []);
+
+      const messages = store
+        .listLogs()
+        .filter((entry) => entry.conversationId !== null)
+        .map((entry) => entry.message);
+      expect(messages).toContain("TTS output queue entered high pressure");
+      expect(messages).toContain("TTS output queue pressure recovered");
+    } finally {
+      store.close();
+    }
+  });
+
   it("keeps the captured route unchanged while configuration changes", async () => {
     const store = new VoxMeshStore(":memory:");
     let release: (() => void) | undefined;
@@ -821,6 +858,42 @@ describe("StreamingVoiceCoordinator", () => {
         consume(
           new StreamingVoiceCoordinator(store, new MockMcpServer()).run({
             runId: "52525252-5252-4252-8252-525252525252",
+            preparation: preparation(store, routeId, providers),
+            format,
+            audio: audioFrames(),
+            toolMode: "enabled",
+            signal: new AbortController().signal
+          })
+        )
+      ).rejects.toMatchObject({ code: "TTS_FAILED" });
+    } finally {
+      store.close();
+    }
+  });
+
+  it("rejects oversized buffered TTS bytes before WAV decoding", async () => {
+    const store = new VoxMeshStore(":memory:");
+    const providers = createTrackedProviders().providers;
+    providers.bufferedTts = {
+      synthesize: async () => ({
+        data: new Uint8Array(
+          VOICE_STREAM_LIMITS.maxBufferedTtsBytes +
+            VOICE_STREAM_LIMITS.maxBinaryMessageBytes +
+            1
+        ),
+        mimeType: "audio/wav"
+      })
+    };
+    try {
+      const routeId = createRoute(store, {
+        stt: false,
+        chat: false,
+        tts: false
+      });
+      await expect(
+        consume(
+          new StreamingVoiceCoordinator(store, new MockMcpServer()).run({
+            runId: "58585858-5858-4858-8858-585858585858",
             preparation: preparation(store, routeId, providers),
             format,
             audio: audioFrames(),
@@ -1508,6 +1581,14 @@ function rejectAfter(message: string, milliseconds: number): Promise<never> {
   return new Promise((_, reject) =>
     setTimeout(() => reject(new Error(message)), milliseconds)
   );
+}
+
+async function waitForLog(store: VoxMeshStore, message: string): Promise<void> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (store.listLogs().some((entry) => entry.message === message)) return;
+    await new Promise<void>((resolve) => setTimeout(resolve, 5));
+  }
+  throw new Error(`Expected log was not persisted: ${message}`);
 }
 
 async function consume(

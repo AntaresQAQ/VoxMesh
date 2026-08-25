@@ -157,7 +157,9 @@ export class StreamingVoiceCoordinator {
       {
         maxItems: 4_096,
         maxBytes: VOICE_STREAM_LIMITS.maxOutputQueueBytes,
-        maxDurationMs: VOICE_STREAM_LIMITS.maxOutputQueueDurationMs
+        maxDurationMs: VOICE_STREAM_LIMITS.maxOutputQueueDurationMs,
+        highWaterMark: 0.45,
+        lowWaterMark: 0.25
       },
       measureCoordinatorEvent
     );
@@ -442,7 +444,19 @@ export class StreamingVoiceCoordinator {
       | Promise<{ segments: number; audioBytes: number; durationMs: number }>
       | undefined;
     if (chatStreaming && ttsStreaming) {
-      await startTtsStage();
+      try {
+        await startTtsStage();
+      } catch (error) {
+        this.store.addPipelineEvent({
+          conversationId,
+          runId: input.runId,
+          correlationId,
+          stage: "AGENT",
+          status: "cancelled",
+          message: "Agent stage cancelled before provider execution"
+        });
+        throw error;
+      }
       segmenter = new StreamingTtsSegmenter({ signal: stageSignal });
       streamingAudio = synthesizeSegments(
         segmenter,
@@ -477,6 +491,7 @@ export class StreamingVoiceCoordinator {
     });
     void agentExecution.catch(() => undefined);
     let agent: AgentRunResult;
+    let agentCompleted = false;
     try {
       agent = streamingAudio
         ? await Promise.race([
@@ -494,6 +509,7 @@ export class StreamingVoiceCoordinator {
       } catch (error) {
         throw new StreamingVoiceStageError("AGENT", error);
       }
+      agentCompleted = true;
       if (segmenter) {
         try {
           await segmenter.finish(agent.response);
@@ -506,6 +522,21 @@ export class StreamingVoiceCoordinator {
       segmenter?.cancel();
       await streamingAudio?.catch(() => undefined);
       await settleWithTimeout(rawAgentExecution);
+      if (
+        !agentCompleted &&
+        ttsStartedAt !== undefined &&
+        (signal.aborted ||
+          (error instanceof StreamingVoiceStageError && error.stage === "TTS"))
+      ) {
+        this.store.addPipelineEvent({
+          conversationId,
+          runId: input.runId,
+          correlationId,
+          stage: "AGENT",
+          status: "cancelled",
+          message: "Agent stage cancelled after TTS termination"
+        });
+      }
       if (
         ttsStartedAt !== undefined &&
         !signal.aborted &&
@@ -681,7 +712,7 @@ async function consumeStreamingStt(
           ) {
             throw new Error("Streaming STT partial text is invalid");
           }
-          await emit(events, signal, {
+          await emit(events, providerSignal, {
             type: "transcript_partial",
             sequence: event.sequence,
             text: event.text
@@ -1014,7 +1045,8 @@ async function synthesizeStreamingText(
           chunk: {
             ...event.chunk,
             sequence,
-            data: event.chunk.data.slice()
+            format: { ...event.chunk.format },
+            data: new Uint8Array(event.chunk.data)
           }
         });
         sequence += 1;
@@ -1086,6 +1118,14 @@ async function synthesizeBufferedText(
     );
     providerAbort.abort();
     throwIfAborted(signal);
+    const remainingAudioBytes =
+      VOICE_STREAM_LIMITS.maxBufferedTtsBytes - audioBytes;
+    if (
+      audio.data.byteLength >
+      remainingAudioBytes + VOICE_STREAM_LIMITS.maxBinaryMessageBytes
+    ) {
+      throw new Error("Buffered TTS response exceeds its raw byte limit");
+    }
     if (!isWavMimeType(audio.mimeType)) {
       throw new Error("Buffered TTS must return PCM16 WAV audio");
     }
