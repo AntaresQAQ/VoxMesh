@@ -52,7 +52,7 @@ describe("OpenAI-compatible speech adapters", () => {
 
     await provider.transcribe({
       data: new Uint8Array([1, 2]),
-      mimeType: "audio/wav"
+      mimeType: "Audio/WAV"
     });
 
     const form = fetcher.mock.calls[0]?.[1]?.body;

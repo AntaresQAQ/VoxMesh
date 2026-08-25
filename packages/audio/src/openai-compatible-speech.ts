@@ -122,10 +122,11 @@ export class OpenAiCompatibleTextToSpeechProvider implements TextToSpeechProvide
 }
 
 function fileNameFor(mimeType: string): string {
-  if (mimeType.includes("wav")) return "recording.wav";
-  if (mimeType.includes("mpeg") || mimeType.includes("mp3"))
+  const normalized = mimeType.toLowerCase();
+  if (normalized.includes("wav")) return "recording.wav";
+  if (normalized.includes("mpeg") || normalized.includes("mp3"))
     return "recording.mp3";
-  if (mimeType.includes("ogg")) return "recording.ogg";
+  if (normalized.includes("ogg")) return "recording.ogg";
   return "recording.webm";
 }
 
