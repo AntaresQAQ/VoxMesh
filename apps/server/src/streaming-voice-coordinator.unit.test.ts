@@ -306,6 +306,43 @@ describe("StreamingVoiceCoordinator", () => {
     }
   });
 
+  it("does not report pressure recovery when the output queue fails", async () => {
+    const store = new VoxMeshStore(":memory:");
+    const providers = createTrackedProviders().providers;
+    let failProvider: ((error: Error) => void) | undefined;
+    const failure = new Promise<never>((_, reject) => {
+      failProvider = reject;
+    });
+    providers.streamingTts = pressureFailingTtsProvider(failure);
+    try {
+      const routeId = createRoute(store, {
+        stt: false,
+        chat: false,
+        tts: true
+      });
+      const run = new StreamingVoiceCoordinator(store, new MockMcpServer(), {
+        outputHighWaterMark: 0.01,
+        outputLowWaterMark: 0.005
+      }).run({
+        runId: "61616161-6161-4161-8161-616161616161",
+        preparation: preparation(store, routeId, providers),
+        format,
+        audio: audioFrames(),
+        toolMode: "enabled",
+        signal: new AbortController().signal
+      });
+      await waitForLog(store, "TTS output queue entered high pressure");
+      failProvider?.(new Error("TTS provider failed under pressure"));
+      await expect(consume(run)).rejects.toMatchObject({ code: "TTS_FAILED" });
+
+      const messages = store.listLogs().map((entry) => entry.message);
+      expect(messages).toContain("TTS output queue entered high pressure");
+      expect(messages).not.toContain("TTS output queue pressure recovered");
+    } finally {
+      store.close();
+    }
+  });
+
   it("keeps the captured route unchanged while configuration changes", async () => {
     const store = new VoxMeshStore(":memory:");
     let release: (() => void) | undefined;
@@ -1604,6 +1641,29 @@ function reusedBufferTtsSession(): StreamingTextToSpeechSession {
         durationMs: 40
       };
     }
+  };
+}
+
+function pressureFailingTtsProvider(
+  failure: Promise<never>
+): StreamingTextToSpeechProvider {
+  return {
+    startSynthesis: async () => ({
+      close: async () => undefined,
+      [Symbol.asyncIterator]: async function* () {
+        for (let sequence = 1; sequence <= 10; sequence += 1) {
+          yield {
+            type: "audio" as const,
+            chunk: {
+              sequence,
+              format,
+              data: new Uint8Array(640)
+            }
+          };
+        }
+        await failure;
+      }
+    })
   };
 }
 

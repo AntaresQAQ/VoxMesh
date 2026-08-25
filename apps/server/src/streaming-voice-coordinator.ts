@@ -128,6 +128,11 @@ export interface StreamingVoiceCoordinatorInput {
   signal: AbortSignal;
 }
 
+export interface StreamingVoiceCoordinatorOptions {
+  outputHighWaterMark?: number;
+  outputLowWaterMark?: number;
+}
+
 type ResolvedStreamingVoiceCoordinatorInput = Omit<
   StreamingVoiceCoordinatorInput,
   "preparation"
@@ -146,7 +151,8 @@ type ResolvedStreamingVoiceCoordinatorInput = Omit<
 export class StreamingVoiceCoordinator {
   public constructor(
     private readonly store: VoxMeshStore,
-    private readonly mcp: McpServer
+    private readonly mcp: McpServer,
+    private readonly options: StreamingVoiceCoordinatorOptions = {}
   ) {}
 
   public run(
@@ -162,8 +168,8 @@ export class StreamingVoiceCoordinator {
       maxItems: 4_096,
       maxBytes: VOICE_STREAM_LIMITS.maxOutputQueueBytes,
       maxDurationMs: VOICE_STREAM_LIMITS.maxOutputQueueDurationMs,
-      highWaterMark: 0.45,
-      lowWaterMark: 0.25
+      highWaterMark: optionsOrDefault(this.options.outputHighWaterMark, 0.45),
+      lowWaterMark: optionsOrDefault(this.options.outputLowWaterMark, 0.25)
     });
     const execution = this.execute(input, signal, events, (unsubscribe) => {
       unsubscribePressure = unsubscribe;
@@ -1490,6 +1496,13 @@ function asError(error: unknown): Error {
   return error instanceof Error
     ? error
     : new Error("Provider operation failed");
+}
+
+function optionsOrDefault(
+  value: number | undefined,
+  defaultValue: number
+): number {
+  return value ?? defaultValue;
 }
 
 class CoordinatorEventQueue extends BoundedAsyncQueue<StreamingVoiceCoordinatorEvent> {
