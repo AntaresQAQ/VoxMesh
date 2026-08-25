@@ -9,6 +9,7 @@ import {
   type LlmProvider,
   type McpServer
 } from "./types.js";
+import { serializeMcpResult } from "./tool-result.js";
 
 export class AgentRuntime {
   public constructor(
@@ -90,10 +91,7 @@ export class AgentRuntime {
         messages.push({
           role: "tool",
           toolCallId: result.toolCall.id,
-          content: JSON.stringify({
-            name: tool.name,
-            result: toolResult
-          })
+          content: serializeMcpResult(tool.name, toolResult)
         });
       }
     } catch (error) {

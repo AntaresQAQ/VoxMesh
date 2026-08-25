@@ -380,15 +380,6 @@ export class StreamingVoiceCoordinator {
     validateTranscriptionResult(result.result);
     const durationMs = Date.now() - startedAt;
     const message = `STT completed with ${result.frames} frames and ${result.audioBytes} audio bytes`;
-    this.store.addPipelineEvent({
-      conversationId,
-      runId: input.runId,
-      correlationId,
-      stage: "STT",
-      status: "completed",
-      durationMs,
-      message
-    });
     await emit(events, signal, {
       type: "transcript_final",
       sequence: result.finalSequence,
@@ -397,6 +388,15 @@ export class StreamingVoiceCoordinator {
     });
     await emit(events, signal, {
       type: "stage",
+      stage: "STT",
+      status: "completed",
+      durationMs,
+      message
+    });
+    this.store.addPipelineEvent({
+      conversationId,
+      runId: input.runId,
+      correlationId,
       stage: "STT",
       status: "completed",
       durationMs,
@@ -582,6 +582,22 @@ export class StreamingVoiceCoordinator {
       }
       throw error;
     }
+    const cleanupTtsAfterAgentOutputFailure = async () => {
+      stageAbort.abort();
+      segmenter?.cancel();
+      await streamingAudio?.catch(() => undefined);
+      await settleWithTimeout(rawAgentExecution);
+      if (ttsStartedAt !== undefined) {
+        this.store.addPipelineEvent({
+          conversationId,
+          runId: input.runId,
+          correlationId,
+          stage: "TTS",
+          status: "cancelled",
+          message: "TTS stage cancelled after Agent output failure"
+        });
+      }
+    };
     if (!chatStreaming) {
       try {
         await emit(events, stageSignal, {
@@ -596,6 +612,7 @@ export class StreamingVoiceCoordinator {
           }
         });
       } catch (error) {
+        await cleanupTtsAfterAgentOutputFailure();
         throw new StreamingVoiceStageError("AGENT", error);
       }
     }
@@ -610,6 +627,7 @@ export class StreamingVoiceCoordinator {
         message: agentMessage
       });
     } catch (error) {
+      await cleanupTtsAfterAgentOutputFailure();
       throw new StreamingVoiceStageError("AGENT", error);
     }
     this.store.addPipelineEvent({
@@ -651,21 +669,21 @@ export class StreamingVoiceCoordinator {
     }
     const ttsDurationMs = Date.now() - (ttsStartedAt ?? Date.now());
     const ttsMessage = `TTS completed with ${resolvedAudio.audioBytes} audio bytes over ${resolvedAudio.durationMs} ms`;
-    this.store.addPipelineEvent({
-      conversationId,
-      runId: input.runId,
-      correlationId,
-      stage: "TTS",
-      status: "completed",
-      durationMs: ttsDurationMs,
-      message: ttsMessage
-    });
     await emit(events, signal, {
       type: "audio_completed",
       ...resolvedAudio
     });
     await emit(events, signal, {
       type: "stage",
+      stage: "TTS",
+      status: "completed",
+      durationMs: ttsDurationMs,
+      message: ttsMessage
+    });
+    this.store.addPipelineEvent({
+      conversationId,
+      runId: input.runId,
+      correlationId,
       stage: "TTS",
       status: "completed",
       durationMs: ttsDurationMs,

@@ -14,6 +14,10 @@ import {
   type StreamingLlmFinishReason,
   type StreamingLlmProvider
 } from "./types.js";
+import {
+  McpResultSerializationError,
+  serializeMcpResult
+} from "./tool-result.js";
 
 interface CompletionResult {
   finishReason: StreamingLlmFinishReason;
@@ -134,7 +138,25 @@ export class StreamingAgentRuntime {
             signal
           );
           throwIfAgentRunCancelled(signal);
-          toolResultContent = serializeToolResult(tool.name, toolResult);
+          try {
+            toolResultContent = serializeMcpResult(tool.name, toolResult);
+          } catch (error) {
+            if (
+              error instanceof McpResultSerializationError &&
+              error.code === "LIMIT_EXCEEDED"
+            ) {
+              throw new StreamingAgentError(
+                "STREAM_LIMIT_EXCEEDED",
+                error.message,
+                { cause: error }
+              );
+            }
+            throw new StreamingAgentError(
+              "MCP_RESULT_INVALID",
+              "MCP tool result could not be serialized",
+              { cause: error }
+            );
+          }
         } catch (error) {
           yield {
             type: "tool_finished",
@@ -430,30 +452,6 @@ function validateUsage(
 
 function invalidEvent(message: string): StreamingAgentError {
   return new StreamingAgentError("INVALID_STREAM_EVENT", message);
-}
-
-function serializeToolResult(toolName: string, result: unknown): string {
-  let serialized: string;
-  try {
-    serialized = JSON.stringify({ name: toolName, result });
-    if (typeof serialized !== "string") throw new Error("No JSON result");
-  } catch (error) {
-    throw new StreamingAgentError(
-      "MCP_RESULT_INVALID",
-      "MCP tool result could not be serialized",
-      { cause: error }
-    );
-  }
-  if (
-    new TextEncoder().encode(serialized).byteLength >
-    VOICE_STREAM_LIMITS.maxMcpResultBytes
-  ) {
-    throw new StreamingAgentError(
-      "STREAM_LIMIT_EXCEEDED",
-      "MCP tool result exceeded its byte limit"
-    );
-  }
-  return serialized;
 }
 
 function countUtf8Fragment(
