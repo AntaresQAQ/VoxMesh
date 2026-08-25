@@ -477,6 +477,34 @@ describe("StreamingAgentRuntime", () => {
     });
   });
 
+  it("rejects oversized serialized MCP results", async () => {
+    const mcp: McpServer = {
+      name: "Oversized MCP",
+      listTools: async () => [
+        {
+          name: "mock.get_device_status",
+          description: "Status"
+        }
+      ],
+      callTool: async () => ({ value: "x".repeat(64 * 1024) })
+    };
+
+    await expect(
+      collectRun(
+        new StreamingAgentRuntime(
+          new ScriptedStreamingLlmProvider([toolCompletion("{}")]),
+          mcp
+        ).run("Tool", {
+          toolMode: "enabled",
+          signal: new AbortController().signal
+        })
+      )
+    ).rejects.toMatchObject({
+      code: "STREAM_LIMIT_EXCEEDED",
+      message: "MCP tool result exceeded its byte limit"
+    });
+  });
+
   it("counts UTF-8 arguments correctly across split surrogate pairs", async () => {
     const prefix = '{"value":"';
     const suffix = '"}';

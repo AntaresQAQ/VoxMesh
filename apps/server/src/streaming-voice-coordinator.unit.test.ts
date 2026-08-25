@@ -1063,6 +1063,16 @@ describe("StreamingVoiceCoordinator", () => {
           })
         )
       ).rejects.toMatchObject({ code: "TTS_FAILED" });
+      const run = store.getConversationRun(
+        "51515151-5151-4151-8151-515151515151"
+      );
+      expect(
+        store
+          .getConversation(run.conversationId)
+          ?.events.some(
+            (event) => event.stage === "AGENT" && event.status === "cancelled"
+          )
+      ).toBe(true);
     } finally {
       store.close();
     }

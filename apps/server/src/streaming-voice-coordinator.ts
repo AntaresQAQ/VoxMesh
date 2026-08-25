@@ -33,6 +33,9 @@ import {
 import type { RuntimeVoiceRouteSnapshot, VoxMeshStore } from "@voxmesh/storage";
 
 const PROVIDER_CLEANUP_TIMEOUT_MS = 1_000;
+const STT_STAGE_TIMEOUT_MS =
+  VOICE_STREAM_LIMITS.maxCaptureDurationMs +
+  VOICE_STREAM_LIMITS.providerStageTimeoutMs;
 
 export type StreamingVoiceCoordinatorEvent =
   | {
@@ -238,7 +241,6 @@ export class StreamingVoiceCoordinator {
           level: "WARN",
           message: `${pressureOrigin} output queue entered high pressure`
         });
-        registerPressureCleanup(unsubscribePressure);
       } else if (pressure === "normal" && pressureOrigin !== null) {
         const recoveredStage = pressureOrigin;
         pressureOrigin = null;
@@ -250,6 +252,7 @@ export class StreamingVoiceCoordinator {
         });
       }
     });
+    registerPressureCleanup(unsubscribePressure);
     try {
       const transcription = await this.runStt(
         resolved,
@@ -348,9 +351,22 @@ export class StreamingVoiceCoordinator {
       message: "STT stage started"
     });
     const streaming = role(input.route, "stt").streamingEnabled;
-    const result = streaming
-      ? await consumeStreamingStt(input, signal, events)
-      : await consumeBufferedStt(input, signal);
+    const stageAbort = new AbortController();
+    const stageSignal = AbortSignal.any([signal, stageAbort.signal]);
+    const stageExecution = streaming
+      ? consumeStreamingStt(input, stageSignal, events)
+      : consumeBufferedStt(input, stageSignal);
+    let result: Awaited<typeof stageExecution>;
+    try {
+      result = await withOperationTimeout(
+        stageExecution,
+        stageSignal,
+        STT_STAGE_TIMEOUT_MS,
+        stageAbort
+      );
+    } finally {
+      stageAbort.abort();
+    }
     validateTranscriptionResult(result.result);
     const durationMs = Date.now() - startedAt;
     const message = `STT completed with ${result.frames} frames and ${result.audioBytes} audio bytes`;
@@ -557,31 +573,39 @@ export class StreamingVoiceCoordinator {
       throw error;
     }
     if (!chatStreaming) {
-      await emit(events, stageSignal, {
-        type: "agent",
-        event: {
-          type: "completion_finished",
-          completionIndex: 0,
-          finishReason: "stop",
-          text: agent.response,
-          speakableText: agent.response,
-          usage: null
-        }
-      });
+      try {
+        await emit(events, stageSignal, {
+          type: "agent",
+          event: {
+            type: "completion_finished",
+            completionIndex: 0,
+            finishReason: "stop",
+            text: agent.response,
+            speakableText: agent.response,
+            usage: null
+          }
+        });
+      } catch (error) {
+        throw new StreamingVoiceStageError("AGENT", error);
+      }
     }
     const agentDurationMs = Date.now() - agentStartedAt;
     const agentMessage = `Agent completed with ${agent.usedTools.length} tool calls`;
+    try {
+      await emit(events, signal, {
+        type: "stage",
+        stage: "AGENT",
+        status: "completed",
+        durationMs: agentDurationMs,
+        message: agentMessage
+      });
+    } catch (error) {
+      throw new StreamingVoiceStageError("AGENT", error);
+    }
     this.store.addPipelineEvent({
       conversationId,
       runId: input.runId,
       correlationId,
-      stage: "AGENT",
-      status: "completed",
-      durationMs: agentDurationMs,
-      message: agentMessage
-    });
-    await emit(events, signal, {
-      type: "stage",
       stage: "AGENT",
       status: "completed",
       durationMs: agentDurationMs,
@@ -1116,15 +1140,19 @@ async function synthesizeBufferedText(
     throwIfAborted(signal);
     const providerAbort = new AbortController();
     const providerSignal = AbortSignal.any([signal, providerAbort.signal]);
-    const audio = await withOperationTimeout(
-      provider.synthesize(segments[segmentIndex] ?? "", {
-        signal: providerSignal
-      }),
-      providerSignal,
-      VOICE_STREAM_LIMITS.providerStageTimeoutMs,
-      providerAbort
-    );
-    providerAbort.abort();
+    let audio: Awaited<ReturnType<TextToSpeechProvider["synthesize"]>>;
+    try {
+      audio = await withOperationTimeout(
+        provider.synthesize(segments[segmentIndex] ?? "", {
+          signal: providerSignal
+        }),
+        providerSignal,
+        VOICE_STREAM_LIMITS.providerStageTimeoutMs,
+        providerAbort
+      );
+    } finally {
+      providerAbort.abort();
+    }
     throwIfAborted(signal);
     const remainingAudioBytes =
       VOICE_STREAM_LIMITS.maxBufferedTtsBytes - audioBytes;
@@ -1194,7 +1222,12 @@ async function synthesizeBufferedText(
 
 function isWavMimeType(value: string): boolean {
   const mediaType = value.split(";", 1)[0]?.trim().toLowerCase();
-  return mediaType === "audio/wav" || mediaType === "audio/x-wav";
+  return (
+    mediaType === "audio/wav" ||
+    mediaType === "audio/x-wav" ||
+    mediaType === "audio/wave" ||
+    mediaType === "audio/vnd.wave"
+  );
 }
 
 function splitProtocolSegments(text: string): string[] {

@@ -431,10 +431,10 @@ function invalidEvent(message: string): StreamingAgentError {
 }
 
 function serializeToolResult(toolName: string, result: unknown): string {
+  let serialized: string;
   try {
-    const serialized = JSON.stringify({ name: toolName, result });
+    serialized = JSON.stringify({ name: toolName, result });
     if (typeof serialized !== "string") throw new Error("No JSON result");
-    return serialized;
   } catch (error) {
     throw new StreamingAgentError(
       "MCP_RESULT_INVALID",
@@ -442,6 +442,16 @@ function serializeToolResult(toolName: string, result: unknown): string {
       { cause: error }
     );
   }
+  if (
+    new TextEncoder().encode(serialized).byteLength >
+    VOICE_STREAM_LIMITS.maxMcpResultBytes
+  ) {
+    throw new StreamingAgentError(
+      "STREAM_LIMIT_EXCEEDED",
+      "MCP tool result exceeded its byte limit"
+    );
+  }
+  return serialized;
 }
 
 function countUtf8Fragment(

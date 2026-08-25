@@ -439,7 +439,9 @@ export class VoxMeshStore {
   public captureRuntimeVoiceRouteSnapshot(
     routeId?: string
   ): RuntimeVoiceRouteSnapshot {
-    return this.runtimeRouting.captureVoiceRouteSnapshot(routeId);
+    return this.database
+      .transaction(() => this.runtimeRouting.captureVoiceRouteSnapshot(routeId))
+      .immediate();
   }
 
   public captureRuntimeStreamingVoiceConfiguration(
