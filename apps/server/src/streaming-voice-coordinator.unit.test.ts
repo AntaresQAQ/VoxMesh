@@ -17,8 +17,10 @@ import {
   type StreamingAudioChunk,
   type StreamingSpeechToTextProvider,
   type StreamingTextToSpeechProvider,
+  type StreamingTextToSpeechSession,
   type TextToSpeechProvider
 } from "@voxmesh/audio";
+import { VOICE_STREAM_LIMITS } from "@voxmesh/shared";
 import { VoxMeshStore } from "@voxmesh/storage";
 
 import {
@@ -84,6 +86,34 @@ describe("StreamingVoiceCoordinator", () => {
           .map((event) => event.chunk.sequence);
         expect(audioSequences).toEqual(
           audioSequences.map((_, index) => index + 1)
+        );
+        const outputCompleted = consumed.events.find(
+          (event) => event.type === "audio_completed"
+        );
+        const segmentStarted = consumed.events.filter(
+          (event) => event.type === "segment_started"
+        );
+        const segmentFinished = consumed.events.filter(
+          (event) => event.type === "segment_finished"
+        );
+        expect(segmentStarted).toHaveLength(outputCompleted?.segments ?? -1);
+        expect(segmentFinished).toHaveLength(outputCompleted?.segments ?? -1);
+        expect(
+          segmentStarted.every((event) => event.format.frameDurationMs === 20)
+        ).toBe(true);
+        expect(
+          segmentStarted.map((event) => ({
+            segmentIndex: event.segmentIndex,
+            text: event.text
+          }))
+        ).toEqual(
+          segmentFinished.map((event) => ({
+            segmentIndex: event.segmentIndex,
+            text:
+              segmentStarted.find(
+                (started) => started.segmentIndex === event.segmentIndex
+              )?.text ?? ""
+          }))
         );
         if (chatStreaming && ttsStreaming) {
           const finalCompletion = consumed.events.findIndex(
@@ -300,6 +330,7 @@ describe("StreamingVoiceCoordinator", () => {
         chat: false,
         tts: false
       });
+
       await expect(
         consume(
           new StreamingVoiceCoordinator(store, new MockMcpServer()).run({
@@ -329,6 +360,310 @@ describe("StreamingVoiceCoordinator", () => {
         JSON.stringify(store.getConversation(run.conversationId))
       ).not.toContain("provider.example.test");
     } finally {
+      store.close();
+    }
+  });
+
+  it("rejects empty, malformed, and unbounded streaming input", async () => {
+    for (const audio of [emptyFrames(), malformedFrames(), oversizedFrames()]) {
+      const store = new VoxMeshStore(":memory:");
+      try {
+        const routeId = createRoute(store, {
+          stt: true,
+          chat: false,
+          tts: false
+        });
+        await expect(
+          consume(
+            new StreamingVoiceCoordinator(store, new MockMcpServer()).run({
+              runId: crypto.randomUUID(),
+              preparation: preparation(
+                store,
+                routeId,
+                createTrackedProviders().providers
+              ),
+              format,
+              audio,
+              toolMode: "enabled",
+              signal: new AbortController().signal
+            })
+          )
+        ).rejects.toMatchObject({ code: "STT_FAILED" });
+      } finally {
+        store.close();
+      }
+    }
+  });
+
+  it("rejects duplicate Streaming STT final events", async () => {
+    const store = new VoxMeshStore(":memory:");
+    const providers = createTrackedProviders().providers;
+    providers.streamingStt = duplicateFinalSttProvider();
+    try {
+      const routeId = createRoute(store, {
+        stt: true,
+        chat: false,
+        tts: false
+      });
+      await expect(
+        consume(
+          new StreamingVoiceCoordinator(store, new MockMcpServer()).run({
+            runId: "46464646-4646-4646-8646-464646464646",
+            preparation: preparation(store, routeId, providers),
+            format,
+            audio: audioFrames(),
+            toolMode: "enabled",
+            signal: new AbortController().signal
+          })
+        )
+      ).rejects.toMatchObject({ code: "STT_FAILED" });
+    } finally {
+      store.close();
+    }
+  });
+
+  it("stops waiting for input when the streaming STT iterator fails", async () => {
+    const store = new VoxMeshStore(":memory:");
+    let inputReturned = false;
+    const providers = createTrackedProviders().providers;
+    providers.streamingStt = {
+      startSession: async () => ({
+        write: async () => undefined,
+        finishInput: async () => undefined,
+        close: async () => undefined,
+        [Symbol.asyncIterator]: () => ({
+          next: async () => {
+            throw new Error("STT provider failed");
+          }
+        })
+      })
+    };
+    try {
+      const routeId = createRoute(store, {
+        stt: true,
+        chat: false,
+        tts: false
+      });
+      await expect(
+        Promise.race([
+          consume(
+            new StreamingVoiceCoordinator(store, new MockMcpServer()).run({
+              runId: "39393939-3939-4939-8939-393939393939",
+              preparation: preparation(store, routeId, providers),
+              format,
+              audio: pendingFrames(() => {
+                inputReturned = true;
+              }),
+              toolMode: "enabled",
+              signal: new AbortController().signal
+            })
+          ),
+          rejectAfter("STT failure did not interrupt input", 1_000)
+        ])
+      ).rejects.toMatchObject({ code: "STT_FAILED" });
+      expect(inputReturned).toBe(true);
+    } finally {
+      store.close();
+    }
+  });
+
+  it("aborts while waiting for another streaming input frame", async () => {
+    const store = new VoxMeshStore(":memory:");
+    const controller = new AbortController();
+    let inputReturned = false;
+    let inputWaiting: (() => void) | undefined;
+    const waiting = new Promise<void>((resolve) => {
+      inputWaiting = resolve;
+    });
+    try {
+      const routeId = createRoute(store, {
+        stt: true,
+        chat: false,
+        tts: false
+      });
+      const execution = consume(
+        new StreamingVoiceCoordinator(store, new MockMcpServer()).run({
+          runId: "41414141-4141-4141-8141-414141414141",
+          preparation: preparation(
+            store,
+            routeId,
+            createTrackedProviders().providers
+          ),
+          format,
+          audio: pendingFrames(() => {
+            inputReturned = true;
+          }, inputWaiting),
+          toolMode: "enabled",
+          signal: controller.signal
+        })
+      );
+      await waiting;
+      controller.abort();
+      await expect(
+        Promise.race([
+          execution,
+          rejectAfter("Cancellation did not interrupt input", 1_000)
+        ])
+      ).rejects.toBeInstanceOf(AgentRunCancelledError);
+      expect(inputReturned).toBe(true);
+    } finally {
+      store.close();
+    }
+  });
+
+  it("rejects invalid final transcript and oversized buffered Chat output", async () => {
+    const store = new VoxMeshStore(":memory:");
+    try {
+      const routeId = createRoute(store, {
+        stt: false,
+        chat: false,
+        tts: false
+      });
+      const invalidTranscript = createTrackedProviders().providers;
+      invalidTranscript.bufferedStt = {
+        transcribe: async () => ({ text: "", language: "" })
+      };
+      await expect(
+        consume(
+          new StreamingVoiceCoordinator(store, new MockMcpServer()).run({
+            runId: "42424242-4242-4242-8242-424242424242",
+            preparation: preparation(store, routeId, invalidTranscript),
+            format,
+            audio: audioFrames(),
+            toolMode: "enabled",
+            signal: new AbortController().signal
+          })
+        )
+      ).rejects.toMatchObject({ code: "STT_FAILED" });
+
+      const oversizedChat = createTrackedProviders();
+      oversizedChat.providers.bufferedLlm = {
+        complete: async () => ({
+          type: "message",
+          content: "x".repeat(VOICE_STREAM_LIMITS.maxAssistantCharacters + 1)
+        })
+      };
+      await expect(
+        consume(
+          new StreamingVoiceCoordinator(store, new MockMcpServer()).run({
+            runId: "43434343-4343-4343-8343-434343434343",
+            preparation: preparation(store, routeId, oversizedChat.providers),
+            format,
+            audio: audioFrames(),
+            toolMode: "disabled",
+            signal: new AbortController().signal
+          })
+        )
+      ).rejects.toMatchObject({ code: "AGENT_FAILED" });
+      expect(oversizedChat.bufferedTts).not.toHaveBeenCalled();
+    } finally {
+      store.close();
+    }
+  });
+
+  it("splits long buffered response metadata within protocol segment limits", async () => {
+    const store = new VoxMeshStore(":memory:");
+    const providers = createTrackedProviders().providers;
+    const response = "x".repeat(500);
+    providers.bufferedLlm = {
+      complete: async () => ({ type: "message", content: response })
+    };
+    try {
+      const routeId = createRoute(store, {
+        stt: false,
+        chat: false,
+        tts: false
+      });
+      const consumed = await consume(
+        new StreamingVoiceCoordinator(store, new MockMcpServer()).run({
+          runId: "47474747-4747-4747-8747-474747474747",
+          preparation: preparation(store, routeId, providers),
+          format,
+          audio: audioFrames(),
+          toolMode: "disabled",
+          signal: new AbortController().signal
+        })
+      );
+      const segments = consumed.events.filter(
+        (event) => event.type === "segment_started"
+      );
+      expect(segments.map((segment) => segment.text).join("")).toBe(response);
+      expect(
+        segments.every(
+          (segment) =>
+            Array.from(segment.text).length <=
+            VOICE_STREAM_LIMITS.maxTtsSegmentCharacters
+        )
+      ).toBe(true);
+      expect(
+        consumed.events.find((event) => event.type === "audio_completed")
+      ).toMatchObject({ segments: 3 });
+    } finally {
+      store.close();
+    }
+  });
+
+  it("rejects inconsistent streaming TTS completion metadata", async () => {
+    const store = new VoxMeshStore(":memory:");
+    const providers = createTrackedProviders().providers;
+    providers.streamingTts = {
+      startSynthesis: async () => scriptedInvalidTtsSession()
+    };
+    try {
+      const routeId = createRoute(store, {
+        stt: false,
+        chat: false,
+        tts: true
+      });
+      await expect(
+        consume(
+          new StreamingVoiceCoordinator(store, new MockMcpServer()).run({
+            runId: "44444444-4444-4444-8444-444444444444",
+            preparation: preparation(store, routeId, providers),
+            format,
+            audio: audioFrames(),
+            toolMode: "enabled",
+            signal: new AbortController().signal
+          })
+        )
+      ).rejects.toMatchObject({ code: "TTS_FAILED" });
+    } finally {
+      store.close();
+    }
+  });
+
+  it("times out a buffered provider that never resolves", async () => {
+    vi.useFakeTimers();
+    const store = new VoxMeshStore(":memory:");
+    const providers = createTrackedProviders().providers;
+    providers.bufferedStt = {
+      transcribe: () => new Promise(() => undefined)
+    };
+    try {
+      const routeId = createRoute(store, {
+        stt: false,
+        chat: false,
+        tts: false
+      });
+      const execution = consume(
+        new StreamingVoiceCoordinator(store, new MockMcpServer()).run({
+          runId: "45454545-4545-4545-8545-454545454545",
+          preparation: preparation(store, routeId, providers),
+          format,
+          audio: audioFrames(),
+          toolMode: "enabled",
+          signal: new AbortController().signal
+        })
+      );
+      const rejection = expect(execution).rejects.toMatchObject({
+        code: "STT_FAILED"
+      });
+      await vi.advanceTimersByTimeAsync(
+        VOICE_STREAM_LIMITS.providerStageTimeoutMs + 1
+      );
+      await rejection;
+    } finally {
+      vi.useRealTimers();
       store.close();
     }
   });
@@ -651,6 +986,113 @@ async function* audioFrames(): AsyncGenerator<StreamingAudioChunk> {
       data: new Uint8Array(640)
     };
   }
+}
+
+async function* emptyFrames(): AsyncGenerator<StreamingAudioChunk> {}
+
+async function* malformedFrames(): AsyncGenerator<StreamingAudioChunk> {
+  yield { sequence: 2, format, data: new Uint8Array(640) };
+}
+
+async function* oversizedFrames(): AsyncGenerator<StreamingAudioChunk> {
+  const frames = Math.floor(VOICE_STREAM_LIMITS.maxBufferedSttBytes / 640) + 2;
+  for (let sequence = 1; sequence <= frames; sequence += 1) {
+    yield { sequence, format, data: new Uint8Array(640) };
+  }
+}
+
+function pendingFrames(
+  onReturn: () => void,
+  onPending?: () => void
+): AsyncIterable<StreamingAudioChunk> {
+  let emitted = false;
+  return {
+    [Symbol.asyncIterator](): AsyncIterator<StreamingAudioChunk> {
+      return {
+        next: async () => {
+          if (!emitted) {
+            emitted = true;
+            return {
+              done: false,
+              value: {
+                sequence: 1,
+                format,
+                data: new Uint8Array(640)
+              }
+            };
+          }
+          onPending?.();
+          return new Promise<IteratorResult<StreamingAudioChunk>>(
+            () => undefined
+          );
+        },
+        return: async () => {
+          onReturn();
+          return { done: true, value: undefined };
+        }
+      };
+    }
+  };
+}
+
+function scriptedInvalidTtsSession(): StreamingTextToSpeechSession {
+  return {
+    close: async () => undefined,
+    [Symbol.asyncIterator]: async function* () {
+      yield {
+        type: "audio" as const,
+        chunk: {
+          sequence: 1,
+          format,
+          data: new Uint8Array(640)
+        }
+      };
+      yield {
+        type: "completed" as const,
+        sequence: 2,
+        format,
+        audioBytes: 1,
+        durationMs: 20
+      };
+    }
+  };
+}
+
+function duplicateFinalSttProvider(): StreamingSpeechToTextProvider {
+  return {
+    startSession: async () => {
+      let release: (() => void) | undefined;
+      const finished = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return {
+        write: async () => undefined,
+        finishInput: async () => {
+          release?.();
+        },
+        close: async () => undefined,
+        [Symbol.asyncIterator]: async function* () {
+          await finished;
+          yield {
+            type: "final" as const,
+            sequence: 1,
+            result: { text: "First", language: "en" }
+          };
+          yield {
+            type: "final" as const,
+            sequence: 2,
+            result: { text: "Second", language: "en" }
+          };
+        }
+      };
+    }
+  };
+}
+
+function rejectAfter(message: string, milliseconds: number): Promise<never> {
+  return new Promise((_, reject) =>
+    setTimeout(() => reject(new Error(message)), milliseconds)
+  );
 }
 
 async function consume(

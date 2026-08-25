@@ -688,8 +688,10 @@ export class VoxMeshStore {
     runId: string,
     snapshot: RuntimeVoiceRouteSnapshot
   ): ConversationRun {
-    const snapshotJson = JSON.stringify(snapshot);
-    parseVoiceRouteSnapshot(snapshotJson);
+    const normalizedSnapshot = parseVoiceRouteSnapshot(
+      JSON.stringify(snapshot)
+    );
+    const snapshotJson = JSON.stringify(normalizedSnapshot);
     const conversationId = randomUUID();
     const correlationId = randomUUID();
     const startedAt = new Date().toISOString();
@@ -1202,6 +1204,20 @@ export class VoxMeshStore {
             completedAt
           )
         );
+      }
+      const inputMessage = emittedMessages.find(
+        (message) => message.role === "user"
+      );
+      if (
+        current.kind === "voice-composed" &&
+        current.inputMessageId === null &&
+        inputMessage
+      ) {
+        this.database
+          .prepare(
+            "UPDATE conversation_runs SET input_message_id = ? WHERE id = ?"
+          )
+          .run(inputMessage.id, current.id);
       }
       for (const event of input.events) {
         emittedLogs.push(

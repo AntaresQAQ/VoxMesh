@@ -866,7 +866,8 @@ export class RuntimeRoutingStore {
   public captureVoiceRouteSnapshot(
     routeId?: string
   ): RuntimeVoiceRouteSnapshot {
-    const active = routeId === undefined ? this.getActiveRuntimeRoute() : null;
+    const active =
+      routeId === undefined ? this.getValidatedActiveRuntimeRoute() : null;
     const route =
       routeId !== undefined
         ? this.getRoute(routeId)
@@ -883,7 +884,11 @@ export class RuntimeRoutingStore {
     if (route.enabled !== 1) {
       throw badRequest("Disabled runtime route cannot start a voice run");
     }
-    this.validateRoute(route.id, routeInputFromRow(route), false);
+    this.validateRoute(
+      route.id,
+      routeInputFromRow(route),
+      routeId === undefined
+    );
     const assignment = (
       role: "stt" | "chat" | "tts",
       modelId: string | null,
@@ -900,7 +905,7 @@ export class RuntimeRoutingStore {
         modelDisplayName: model.display_name,
         providerId: connection.provider_id,
         providerDisplayName: connection.display_name,
-        configurationFingerprint: model.configuration_fingerprint,
+        configurationFingerprint: this.modelVerificationToken(model.id),
         streamingEnabled
       };
     };

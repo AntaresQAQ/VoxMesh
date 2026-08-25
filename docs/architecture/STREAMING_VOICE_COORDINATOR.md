@@ -62,7 +62,11 @@ On success, one terminal transaction:
 3. inserts the final user transcript
 4. inserts the final assistant response
 5. links both messages to the run
-6. updates the conversation title and terminal TTS event
+6. records the final user message as the run input
+7. updates the conversation title
+
+The Coordinator persists the TTS completion event immediately before the
+terminal transaction.
 
 Partials, LLM deltas, tool-call fragments, speech segments, and raw audio are
 never inserted into `messages`.
@@ -80,6 +84,9 @@ All eight STT/Chat/TTS transport combinations are supported.
 
 - Streaming STT receives ordered PCM16LE chunks and emits partial and final
   transcript events.
+- Both STT paths require 16 kHz mono PCM, at least one frame, ordered
+  sample-aligned chunks, bounded total bytes and duration, and one non-empty
+  bounded final transcript.
 - Buffered STT validates and bounds the same chunks, accumulates PCM, encodes
   one PCM16 WAV input, and calls the buffered provider once.
 
@@ -93,11 +100,14 @@ All eight STT/Chat/TTS transport combinations are supported.
 
 - Streaming TTS consumes stable segments sequentially and globally resequences
   audio chunks across segments.
+- Segment start/finish events retain the segment index, stable text, PCM
+  format, and frame duration required by the voice-stream protocol.
 - When Chat and TTS are both streaming, `StreamingTtsSegmenter` connects the
   Agent event stream to synthesis. Tool-enabled turns release only final
   post-tool text; tool-disabled turns may release safe stable text earlier.
 - Buffered TTS synthesizes once, accepts only PCM16 WAV output, applies byte
-  and duration limits, and emits bounded PCM chunks.
+  and duration limits, pads only the final transport frame with silence, and
+  emits fixed-duration sample-aligned PCM chunks.
 
 Enabled streaming roles never call their buffered provider method.
 
@@ -112,8 +122,15 @@ Enabled streaming roles never call their buffered provider method.
 - final audio byte and duration totals
 
 The output queue uses the shared bounded queue. Producer backpressure is
-propagated rather than dropping events. High-pressure and recovered-pressure
-transitions are persisted as safe conversation-scoped observability logs.
+propagated rather than dropping events and uses the protocol's output-queue
+byte and duration limits. High-pressure and recovered-pressure transitions are
+persisted as safe conversation-scoped observability logs.
+
+Provider starts, writes, iterator reads, finishes, buffered calls, and Agent
+execution are bounded by the provider-stage timeout. Input frame reads use the
+input-idle timeout. Provider failure or cancellation races pending input reads,
+returns the input iterator, aborts provider work, and closes sessions with
+bounded cleanup.
 
 PR 7 maps these in-process events to the authenticated voice WebSocket
 protocol. The coordinator intentionally has no transport dependency.
@@ -143,7 +160,8 @@ The persisted failure code identifies the failed stage:
 - `SERVER_RESTARTED`
 
 Persisted failure messages are generic and safe. The original in-process error
-is rethrown to the caller for request handling, but provider endpoints,
+is retained only as an in-process `cause`; the public coordinator error remains
+stage-normalized. Provider endpoints,
 credentials, response bodies, and raw exception text are not stored.
 
 ## Verification

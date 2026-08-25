@@ -352,6 +352,89 @@ describe("VoxMeshStore", () => {
       status: "in_progress",
       inputMessageId: null
     });
+    const unsafeSnapshot = {
+      ...snapshot,
+      endpoint: "https://provider.example.test",
+      apiKey: "secret"
+    };
+    const normalizedRun = store.createVoiceRun(
+      "27272727-2727-4272-8272-272727272727",
+      unsafeSnapshot
+    );
+    const persisted = JSON.stringify(
+      store.getVoiceRunRouteSnapshot(normalizedRun.id)
+    );
+    expect(persisted).not.toContain("provider.example.test");
+    expect(persisted).not.toContain("secret");
+  });
+
+  it("binds route snapshots to current connection configuration", () => {
+    store = new VoxMeshStore(":memory:");
+    let routing = store.createRuntimeConnection({
+      providerId: "openai-compatible",
+      displayName: "Snapshot Connection",
+      endpoint: "https://one.example.test/v1",
+      apiKey: "first-secret",
+      enabled: true
+    });
+    const connection = routing.connections.find(
+      (entry) => entry.displayName === "Snapshot Connection"
+    );
+    routing = store.createRuntimeModel({
+      connectionId: connection?.id ?? "",
+      displayName: "Snapshot Multi-role",
+      modelName: "snapshot-model",
+      apiVersion: "",
+      providerOptions: {},
+      declaredCapabilities: [
+        "audio-input",
+        "audio-output",
+        "text-input",
+        "text-output",
+        "transcription",
+        "speech-synthesis",
+        "tool-calling",
+        "non-streaming"
+      ],
+      enabled: true
+    });
+    const model = routing.models.find(
+      (entry) => entry.displayName === "Snapshot Multi-role"
+    );
+    routing = store.createRuntimeRoute({
+      displayName: "Connection Snapshot Route",
+      mode: "composed",
+      sttModelDeploymentId: model?.id ?? null,
+      chatModelDeploymentId: model?.id ?? null,
+      ttsModelDeploymentId: model?.id ?? null,
+      nativeModelDeploymentId: null,
+      fallbackRouteId: null,
+      sttStreamingEnabled: false,
+      chatStreamingEnabled: false,
+      ttsStreamingEnabled: false,
+      enabled: true
+    });
+    const route = routing.routes.find(
+      (entry) => entry.displayName === "Connection Snapshot Route"
+    );
+    const before = store.captureRuntimeVoiceRouteSnapshot(route?.id);
+    store.updateRuntimeConnection(connection?.id ?? "", {
+      providerId: "openai-compatible",
+      displayName: "Snapshot Connection",
+      endpoint: "https://two.example.test/v1",
+      apiKey: "second-secret",
+      enabled: true
+    });
+    const after = store.captureRuntimeVoiceRouteSnapshot(route?.id);
+
+    expect(after.configurationFingerprint).not.toBe(
+      before.configurationFingerprint
+    );
+    expect(after.assignments[0].configurationFingerprint).not.toBe(
+      before.assignments[0].configurationFingerprint
+    );
+    expect(JSON.stringify(after)).not.toContain("second-secret");
+    expect(JSON.stringify(after)).not.toContain("two.example.test");
   });
 
   it("persists only final voice messages through terminal CAS", () => {
@@ -376,6 +459,11 @@ describe("VoxMeshStore", () => {
 
     expect(completed.transitioned).toBe(true);
     expect(late.transitioned).toBe(false);
+    expect(store.getConversationRun(run.id).inputMessageId).toBe(
+      store
+        .getConversation(run.conversationId)
+        ?.messages.find((message) => message.role === "user")?.id
+    );
     expect(
       store.getConversation(run.conversationId)?.messages.map((message) => ({
         role: message.role,
@@ -1064,6 +1152,9 @@ describe("VoxMeshStore", () => {
         "Streaming voice transport is unavailable"
       );
       expect(() => store?.getRuntimeVoicePipelineConfiguration()).toThrow(
+        "Streaming voice transport is unavailable"
+      );
+      expect(() => store?.captureRuntimeVoiceRouteSnapshot()).toThrow(
         "Streaming voice transport is unavailable"
       );
     } finally {
