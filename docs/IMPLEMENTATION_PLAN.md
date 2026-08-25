@@ -212,6 +212,12 @@ Phase 5 PR 3 implementation is documented in
 Phase 5 PR 4 implementation is documented in
 [Streaming Text-to-Speech Segmentation](./architecture/STREAMING_TTS_SEGMENTATION.md).
 
+Phase 5 PR 5 implementation is documented in
+[Runtime Routing](./architecture/RUNTIME_ROUTING.md).
+
+Phase 5 PR 6 implementation is documented in
+[Streaming Voice Coordinator](./architecture/STREAMING_VOICE_COORDINATOR.md).
+
 ### Later confirmed phases
 
 - [ ] Phase 6 browser and host audio discovery, selection, testing, capture,
@@ -242,8 +248,8 @@ must continue to reject routes that request streaming.
 
 ### Next execution order
 
-1. Continue Phase 5 with the streaming coordinator, WebSocket transport,
-   browser AudioWorklet, provider adapters, qualification, and acceptance.
+1. Continue Phase 5 with the WebSocket transport, browser AudioWorklet,
+   provider adapters, qualification, and acceptance.
 2. Implement Phase 6 cross-platform audio devices.
 3. Implement Phase 7 offline wake-word detection.
 4. Implement Phase 8 generic third-party MCP and the full MCP Console.

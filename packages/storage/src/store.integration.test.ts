@@ -316,6 +316,123 @@ describe("VoxMeshStore", () => {
     expect(store.getConversation(run.conversationId)?.messages).toHaveLength(1);
   });
 
+  it("persists an immutable safe route snapshot for a composed voice run", () => {
+    store = new VoxMeshStore(":memory:");
+    const routing = store.createRuntimeRoute({
+      displayName: "Snapshot Route",
+      mode: "composed",
+      sttModelDeploymentId: "system-model-stt",
+      chatModelDeploymentId: "system-model-chat",
+      ttsModelDeploymentId: "system-model-tts",
+      nativeModelDeploymentId: null,
+      fallbackRouteId: null,
+      sttStreamingEnabled: false,
+      chatStreamingEnabled: false,
+      ttsStreamingEnabled: false,
+      enabled: true
+    });
+    const route = routing.routes.find(
+      (entry) => entry.displayName === "Snapshot Route"
+    );
+    const snapshot = store.captureRuntimeVoiceRouteSnapshot(route?.id);
+    const runId = "23232323-2323-4232-8232-232323232323";
+    const run = store.createVoiceRun(runId, snapshot);
+
+    store.updateRuntimeRoute(route?.id ?? "", {
+      ...routeInput(route),
+      displayName: "Renamed Snapshot Route"
+    });
+
+    expect(store.getVoiceRunRouteSnapshot(runId)).toEqual(snapshot);
+    expect(JSON.stringify(snapshot)).not.toContain("apiKey");
+    expect(JSON.stringify(snapshot)).not.toContain("endpoint");
+    expect(run).toMatchObject({
+      id: runId,
+      kind: "voice-composed",
+      status: "in_progress",
+      inputMessageId: null
+    });
+  });
+
+  it("persists only final voice messages through terminal CAS", () => {
+    store = new VoxMeshStore(":memory:");
+    const run = store.createVoiceRun(
+      "24242424-2424-4242-8242-242424242424",
+      store.captureRuntimeVoiceRouteSnapshot()
+    );
+
+    const completed = store.completeVoiceRun({
+      runId: run.id,
+      transcript: "Final transcript",
+      response: "Final response",
+      events: [{ category: "AGENT", level: "INFO", message: "Completed" }]
+    });
+    const late = store.completeVoiceRun({
+      runId: run.id,
+      transcript: "Late transcript",
+      response: "Late response",
+      events: []
+    });
+
+    expect(completed.transitioned).toBe(true);
+    expect(late.transitioned).toBe(false);
+    expect(
+      store.getConversation(run.conversationId)?.messages.map((message) => ({
+        role: message.role,
+        content: message.content,
+        runId: message.runId
+      }))
+    ).toEqual([
+      { role: "user", content: "Final transcript", runId: run.id },
+      { role: "assistant", content: "Final response", runId: run.id }
+    ]);
+  });
+
+  it("prevents late voice completion after cancellation", () => {
+    store = new VoxMeshStore(":memory:");
+    const run = store.createVoiceRun(
+      "25252525-2525-4252-8252-252525252525",
+      store.captureRuntimeVoiceRouteSnapshot()
+    );
+
+    expect(store.cancelVoiceRun(run.id).transitioned).toBe(true);
+    expect(
+      store.completeVoiceRun({
+        runId: run.id,
+        transcript: "Late transcript",
+        response: "Late response",
+        events: []
+      }).transitioned
+    ).toBe(false);
+    expect(store.getConversation(run.conversationId)?.messages).toEqual([]);
+  });
+
+  it("reconciles an interrupted voice run and preserves its route snapshot", () => {
+    const directory = mkdtempSync(join(tmpdir(), "voxmesh-voice-restart-"));
+    const databasePath = join(directory, "voxmesh.sqlite");
+    try {
+      store = new VoxMeshStore(databasePath);
+      const snapshot = store.captureRuntimeVoiceRouteSnapshot();
+      const run = store.createVoiceRun(
+        "26262626-2626-4262-8262-262626262626",
+        snapshot
+      );
+      store.close();
+      store = new VoxMeshStore(databasePath);
+
+      expect(store.getConversationRun(run.id)).toMatchObject({
+        status: "failed",
+        errorCode: "SERVER_RESTARTED"
+      });
+      expect(store.getVoiceRunRouteSnapshot(run.id)).toEqual(snapshot);
+      expect(store.getConversation(run.conversationId)?.messages).toEqual([]);
+    } finally {
+      store?.close();
+      store = undefined;
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it("reuses a conversation and selects only durable prior Chat history", () => {
     store = new VoxMeshStore(":memory:");
     const firstRun = store.createChatRun(

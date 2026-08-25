@@ -39,6 +39,7 @@ links back to the governing MVP and development rules.
 - [Bounded Streaming Primitives](./architecture/STREAMING_PRIMITIVES.md)
 - [Streaming Agent Core](./architecture/STREAMING_AGENT.md)
 - [Streaming TTS Segmentation](./architecture/STREAMING_TTS_SEGMENTATION.md)
+- [Streaming Voice Coordinator](./architecture/STREAMING_VOICE_COORDINATOR.md)
 - [Runtime Routing](./architecture/RUNTIME_ROUTING.md)
 - [WebSocket Event Delivery](./architecture/WEBSOCKET.md)
 - [Conversation Run Lifecycle](./architecture/CONVERSATION_LIFECYCLE.md)
