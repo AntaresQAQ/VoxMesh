@@ -6,6 +6,7 @@ import {
   MockMcpServer,
   MockStreamingLlmProvider,
   type LlmProvider,
+  type McpServer,
   type StreamingLlmProvider
 } from "@voxmesh/agent-core";
 import {
@@ -771,6 +772,40 @@ describe("StreamingVoiceCoordinator", () => {
         )
       ).rejects.toMatchObject({ code: "AGENT_FAILED" });
       expect(whitespaceChat.bufferedTts).not.toHaveBeenCalled();
+    } finally {
+      store.close();
+    }
+  });
+
+  it("rejects oversized MCP results in buffered Chat coordination", async () => {
+    const store = new VoxMeshStore(":memory:");
+    const tracked = createTrackedProviders();
+    const mcp: McpServer = {
+      name: "Oversized MCP",
+      listTools: async () => [
+        { name: "mock.get_device_status", description: "Status" }
+      ],
+      callTool: async () => ({ value: "x".repeat(64 * 1024) })
+    };
+    try {
+      const routeId = createRoute(store, {
+        stt: false,
+        chat: false,
+        tts: false
+      });
+      await expect(
+        consume(
+          new StreamingVoiceCoordinator(store, mcp).run({
+            runId: "62626262-6262-4262-8262-626262626262",
+            preparation: preparation(store, routeId, tracked.providers),
+            format,
+            audio: audioFrames(),
+            toolMode: "enabled",
+            signal: new AbortController().signal
+          })
+        )
+      ).rejects.toMatchObject({ code: "AGENT_FAILED" });
+      expect(tracked.bufferedTts).not.toHaveBeenCalled();
     } finally {
       store.close();
     }
