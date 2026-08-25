@@ -505,6 +505,27 @@ describe("StreamingAgentRuntime", () => {
     });
   });
 
+  it("rejects unknown Streaming LLM event discriminators", async () => {
+    const provider = new ScriptedStreamingLlmProvider([
+      [
+        { type: "unknown" } as unknown as StreamingLlmEvent,
+        { type: "completed", finishReason: "stop" }
+      ]
+    ]);
+
+    await expect(
+      collectRun(
+        new StreamingAgentRuntime(provider, new MockMcpServer()).run("Test", {
+          toolMode: "disabled",
+          signal: new AbortController().signal
+        })
+      )
+    ).rejects.toMatchObject({
+      code: "INVALID_STREAM_EVENT",
+      message: "Streaming LLM emitted an unknown event"
+    });
+  });
+
   it("counts UTF-8 arguments correctly across split surrogate pairs", async () => {
     const prefix = '{"value":"';
     const suffix = '"}';

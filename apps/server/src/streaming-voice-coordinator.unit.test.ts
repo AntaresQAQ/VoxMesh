@@ -9,6 +9,7 @@ import {
   type StreamingLlmProvider
 } from "@voxmesh/agent-core";
 import {
+  decodePcm16Wav,
   encodePcm16Wav,
   MockSpeechToTextProvider,
   MockStreamingSpeechToTextProvider,
@@ -479,6 +480,36 @@ describe("StreamingVoiceCoordinator", () => {
     }
   });
 
+  it("allows an empty streaming partial to clear an interim hypothesis", async () => {
+    const store = new VoxMeshStore(":memory:");
+    const providers = createTrackedProviders().providers;
+    providers.streamingStt = emptyPartialSttProvider();
+    try {
+      const routeId = createRoute(store, {
+        stt: true,
+        chat: false,
+        tts: false
+      });
+      const consumed = await consume(
+        new StreamingVoiceCoordinator(store, new MockMcpServer()).run({
+          runId: "60606060-6060-4060-8060-606060606060",
+          preparation: preparation(store, routeId, providers),
+          format,
+          audio: audioFrames(),
+          toolMode: "disabled",
+          signal: new AbortController().signal
+        })
+      );
+      expect(consumed.events).toContainEqual({
+        type: "transcript_partial",
+        sequence: 1,
+        text: ""
+      });
+    } finally {
+      store.close();
+    }
+  });
+
   it("stops waiting for input when the streaming STT iterator fails", async () => {
     const store = new VoxMeshStore(":memory:");
     let inputReturned = false;
@@ -602,6 +633,39 @@ describe("StreamingVoiceCoordinator", () => {
       controller.abort();
       await expect(execution).rejects.toBeInstanceOf(AgentRunCancelledError);
       expect(inputReturned).toBe(true);
+    } finally {
+      store.close();
+    }
+  });
+
+  it("copies reused buffered input frames before accumulating WAV audio", async () => {
+    const store = new VoxMeshStore(":memory:");
+    const providers = createTrackedProviders().providers;
+    let capturedPcm: Uint8Array | undefined;
+    providers.bufferedStt = {
+      transcribe: async (audio) => {
+        capturedPcm = decodePcm16Wav(audio.data).pcm;
+        return { text: "Copied input", language: "en" };
+      }
+    };
+    try {
+      const routeId = createRoute(store, {
+        stt: false,
+        chat: false,
+        tts: false
+      });
+      await consume(
+        new StreamingVoiceCoordinator(store, new MockMcpServer()).run({
+          runId: "59595959-5959-4959-8959-595959595959",
+          preparation: preparation(store, routeId, providers),
+          format,
+          audio: reusedBufferInput(),
+          toolMode: "disabled",
+          signal: new AbortController().signal
+        })
+      );
+      expect(capturedPcm?.[0]).toBe(1);
+      expect(capturedPcm?.[640]).toBe(2);
     } finally {
       store.close();
     }
@@ -1425,6 +1489,13 @@ async function* oversizedSingleFrame(): AsyncGenerator<StreamingAudioChunk> {
   };
 }
 
+async function* reusedBufferInput(): AsyncGenerator<StreamingAudioChunk> {
+  const data = Buffer.alloc(640, 1);
+  yield { sequence: 1, format, data };
+  data.fill(2);
+  yield { sequence: 2, format, data };
+}
+
 function pendingFrames(
   onReturn: () => void,
   onPending?: () => void
@@ -1581,6 +1652,33 @@ function duplicateFinalSttProvider(): StreamingSpeechToTextProvider {
             type: "final" as const,
             sequence: 2,
             result: { text: "Second", language: "en" }
+          };
+        }
+      };
+    }
+  };
+}
+
+function emptyPartialSttProvider(): StreamingSpeechToTextProvider {
+  return {
+    startSession: async () => {
+      let release: (() => void) | undefined;
+      const finished = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return {
+        write: async () => undefined,
+        finishInput: async () => {
+          release?.();
+        },
+        close: async () => undefined,
+        [Symbol.asyncIterator]: async function* () {
+          await finished;
+          yield { type: "partial" as const, sequence: 1, text: "" };
+          yield {
+            type: "final" as const,
+            sequence: 2,
+            result: { text: "Final", language: "en" }
           };
         }
       };

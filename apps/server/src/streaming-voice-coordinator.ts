@@ -242,6 +242,10 @@ export class StreamingVoiceCoordinator {
           message: `${pressureOrigin} output queue entered high pressure`
         });
       } else if (pressure === "normal" && pressureOrigin !== null) {
+        if (events.terminalFailure) {
+          pressureOrigin = null;
+          return;
+        }
         const recoveredStage = pressureOrigin;
         pressureOrigin = null;
         this.store.addLog({
@@ -729,10 +733,7 @@ async function consumeStreamingStt(
           );
         }
         if (event.type === "partial") {
-          if (
-            event.text.length === 0 ||
-            event.text.length > VOICE_STREAM_LIMITS.maxTranscriptCharacters
-          ) {
+          if (event.text.length > VOICE_STREAM_LIMITS.maxTranscriptCharacters) {
             throw new Error("Streaming STT partial text is invalid");
           }
           await emit(events, providerSignal, {
@@ -866,7 +867,7 @@ async function consumeBufferedStt(
       expectedSequence += 1;
       audioBytes += chunk.data.byteLength;
       enforceCaptureLimits(audioBytes, input.format);
-      chunks.push(chunk.data);
+      chunks.push(new Uint8Array(chunk.data));
     }
     if (chunks.length === 0) {
       throw new Error("Streaming voice requires at least one audio frame");
@@ -1493,6 +1494,7 @@ function asError(error: unknown): Error {
 
 class CoordinatorEventQueue extends BoundedAsyncQueue<StreamingVoiceCoordinatorEvent> {
   public currentProducerStage: "STT" | "AGENT" | "TTS" = "STT";
+  public terminalFailure = false;
 
   public constructor(limits: BoundedAsyncQueueLimits) {
     super(limits, measureCoordinatorEvent);
@@ -1504,6 +1506,11 @@ class CoordinatorEventQueue extends BoundedAsyncQueue<StreamingVoiceCoordinatorE
   ): Promise<void> {
     this.currentProducerStage = coordinatorEventStage(value);
     return super.enqueue(value, options);
+  }
+
+  public override fail(cause: unknown): void {
+    this.terminalFailure = true;
+    super.fail(cause);
   }
 }
 

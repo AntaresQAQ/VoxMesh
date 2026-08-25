@@ -272,6 +272,8 @@ export class StreamingAgentRuntime {
             "PROVIDER_FAILED",
             `Streaming LLM failed: ${event.code}: ${event.safeMessage}`
           );
+        default:
+          throw invalidEvent("Streaming LLM emitted an unknown event");
       }
     }
 
