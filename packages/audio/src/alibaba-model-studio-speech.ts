@@ -283,6 +283,7 @@ async function runAlibabaTask(input: {
     input.signal?.addEventListener("abort", onAbort, { once: true });
 
     socket.on("open", () => {
+      if (settled) return;
       try {
         socket.send(JSON.stringify(input.createRunTask(taskId)));
       } catch (error) {
@@ -290,6 +291,7 @@ async function runAlibabaTask(input: {
       }
     });
     socket.on("message", (data, isBinary) => {
+      if (settled) return;
       try {
         if (isBinary) {
           input.onBinary?.(rawDataToBytes(data));
@@ -320,19 +322,19 @@ async function runAlibabaTask(input: {
       }
     });
     socket.on("error", (error) => {
+      if (settled) return;
       finish(normalizeError("WebSocket failed", error));
     });
     socket.on("close", (code, reason) => {
-      if (!settled) {
-        const detail = reason.toString().trim();
-        finish(
-          new Error(
-            `Alibaba Model Studio WebSocket closed before completion (${code})${
-              detail ? `: ${detail}` : ""
-            }`
-          )
-        );
-      }
+      if (settled) return;
+      const detail = reason.toString().trim();
+      finish(
+        new Error(
+          `Alibaba Model Studio WebSocket closed before completion (${code})${
+            detail ? `: ${detail}` : ""
+          }`
+        )
+      );
     });
   });
 }

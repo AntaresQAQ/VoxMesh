@@ -18,6 +18,7 @@ import {
   type SpeechToTextProvider,
   type StreamingAudioChunk,
   type StreamingSpeechToTextProvider,
+  type StreamingSpeechToTextSession,
   type StreamingTextToSpeechProvider,
   type StreamingTextToSpeechSession,
   type TextToSpeechProvider
@@ -379,7 +380,12 @@ describe("StreamingVoiceCoordinator", () => {
   });
 
   it("rejects empty, malformed, and unbounded streaming input", async () => {
-    for (const audio of [emptyFrames(), malformedFrames(), oversizedFrames()]) {
+    for (const audio of [
+      emptyFrames(),
+      malformedFrames(),
+      oversizedSingleFrame(),
+      oversizedFrames()
+    ]) {
       const store = new VoxMeshStore(":memory:");
       try {
         const routeId = createRoute(store, {
@@ -617,7 +623,7 @@ describe("StreamingVoiceCoordinator", () => {
   it("splits long buffered response metadata within protocol segment limits", async () => {
     const store = new VoxMeshStore(":memory:");
     const providers = createTrackedProviders().providers;
-    const response = "x".repeat(500);
+    const response = "😀".repeat(250);
     providers.bufferedLlm = {
       complete: async () => ({ type: "message", content: response })
     };
@@ -644,8 +650,7 @@ describe("StreamingVoiceCoordinator", () => {
       expect(
         segments.every(
           (segment) =>
-            Array.from(segment.text).length <=
-            VOICE_STREAM_LIMITS.maxTtsSegmentCharacters
+            segment.text.length <= VOICE_STREAM_LIMITS.maxTtsSegmentCharacters
         )
       ).toBe(true);
       expect(
@@ -717,7 +722,10 @@ describe("StreamingVoiceCoordinator", () => {
   it("selects an integral frame duration for buffered TTS output", async () => {
     const store = new VoxMeshStore(":memory:");
     const providers = createTrackedProviders().providers;
-    providers.bufferedTts = new MockTextToSpeechProviderAtRate(11_025);
+    providers.bufferedTts = new MockTextToSpeechProviderAtRate(
+      11_025,
+      "Audio/WAV; charset=binary"
+    );
     try {
       const routeId = createRoute(store, {
         stt: false,
@@ -806,6 +814,57 @@ describe("StreamingVoiceCoordinator", () => {
         VOICE_STREAM_LIMITS.providerStageTimeoutMs + 1
       );
       await rejection;
+    } finally {
+      vi.useRealTimers();
+      store.close();
+    }
+  });
+
+  it("closes a streaming STT session that resolves after start timeout", async () => {
+    vi.useFakeTimers();
+    const store = new VoxMeshStore(":memory:");
+    const providers = createTrackedProviders().providers;
+    let resolveSession:
+      ((session: StreamingSpeechToTextSession) => void) | undefined;
+    const close = vi.fn(async () => undefined);
+    providers.streamingStt = {
+      startSession: () =>
+        new Promise((resolve) => {
+          resolveSession = resolve;
+        })
+    };
+    try {
+      const routeId = createRoute(store, {
+        stt: true,
+        chat: false,
+        tts: false
+      });
+      const execution = consume(
+        new StreamingVoiceCoordinator(store, new MockMcpServer()).run({
+          runId: "53535353-5353-4353-8353-535353535353",
+          preparation: preparation(store, routeId, providers),
+          format,
+          audio: audioFrames(),
+          toolMode: "enabled",
+          signal: new AbortController().signal
+        })
+      );
+      const rejection = expect(execution).rejects.toMatchObject({
+        code: "STT_FAILED"
+      });
+      await vi.advanceTimersByTimeAsync(
+        VOICE_STREAM_LIMITS.providerStageTimeoutMs + 1
+      );
+      await rejection;
+      resolveSession?.({
+        write: async () => undefined,
+        finishInput: async () => undefined,
+        close,
+        [Symbol.asyncIterator]: async function* () {}
+      });
+      vi.runAllTicks();
+      await Promise.resolve();
+      expect(close).toHaveBeenCalledOnce();
     } finally {
       vi.useRealTimers();
       store.close();
@@ -1183,6 +1242,14 @@ async function* oversizedFrames(): AsyncGenerator<StreamingAudioChunk> {
   }
 }
 
+async function* oversizedSingleFrame(): AsyncGenerator<StreamingAudioChunk> {
+  yield {
+    sequence: 1,
+    format,
+    data: new Uint8Array(VOICE_STREAM_LIMITS.maxBinaryMessageBytes)
+  };
+}
+
 function pendingFrames(
   onReturn: () => void,
   onPending?: () => void
@@ -1269,7 +1336,10 @@ function fractionalFrameTtsSession(): StreamingTextToSpeechSession {
 }
 
 class MockTextToSpeechProviderAtRate implements TextToSpeechProvider {
-  public constructor(private readonly sampleRate: number) {}
+  public constructor(
+    private readonly sampleRate: number,
+    private readonly mimeType = "audio/wav"
+  ) {}
 
   public async synthesize(): Promise<AudioData> {
     const pcm = new Uint8Array(this.sampleRate * 2);
@@ -1279,7 +1349,7 @@ class MockTextToSpeechProviderAtRate implements TextToSpeechProvider {
         sampleRate: this.sampleRate,
         pcm
       }),
-      mimeType: "audio/wav",
+      mimeType: this.mimeType,
       sampleRate: this.sampleRate,
       channels: 1
     };

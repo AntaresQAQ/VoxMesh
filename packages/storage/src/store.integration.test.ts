@@ -2029,6 +2029,42 @@ describe("VoxMeshStore", () => {
       rmSync(directory, { recursive: true, force: true });
     }
   });
+
+  it("records the voice run route snapshot schema migration", () => {
+    const directory = mkdtempSync(join(tmpdir(), "voxmesh-snapshot-migrate-"));
+    const databasePath = join(directory, "voxmesh.sqlite");
+    try {
+      store = new VoxMeshStore(databasePath);
+      store.close();
+      store = undefined;
+
+      const database = new Database(databasePath);
+      const migration = database
+        .prepare(
+          "SELECT id FROM schema_migrations WHERE id = '2026-08-25-voice-run-route-snapshot-v1'"
+        )
+        .get() as { id: string } | undefined;
+      const table = database
+        .prepare(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'conversation_run_route_snapshots'"
+        )
+        .get() as { name: string } | undefined;
+      const index = database
+        .prepare(
+          "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_conversation_run_route_snapshots_run'"
+        )
+        .get() as { name: string } | undefined;
+      database.close();
+
+      expect(migration?.id).toBe("2026-08-25-voice-run-route-snapshot-v1");
+      expect(table?.name).toBe("conversation_run_route_snapshots");
+      expect(index?.name).toBe("idx_conversation_run_route_snapshots_run");
+    } finally {
+      store?.close();
+      store = undefined;
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
 });
 
 function routeInput(

@@ -49,6 +49,9 @@ configuration values are never persisted in the snapshot.
 The snapshot is stored before provider execution. Later route, connection, or
 model edits cannot change the run's recorded configuration.
 
+The `2026-08-25-voice-run-route-snapshot-v1` forward migration creates the
+run-linked snapshot table and index for both existing and new databases.
+
 ## Run Lifecycle
 
 The coordinator creates a pending conversation and a `voice-composed` run
@@ -106,10 +109,12 @@ All eight STT/Chat/TTS transport combinations are supported.
 - When Chat and TTS are both streaming, `StreamingTtsSegmenter` connects the
   Agent event stream to synthesis. Tool-enabled turns release only final
   post-tool text; tool-disabled turns may release safe stable text earlier.
-- Buffered TTS synthesizes once, accepts only PCM16 WAV output, applies byte
-  and duration limits, pads only the final transport frame with silence, and
-  emits fixed-duration sample-aligned PCM chunks. The coordinator selects a
-  protocol-representable frame duration for the provider sample rate.
+- Buffered TTS accepts only PCM16 WAV output, normalizes common WAV media-type
+  parameters and aliases, synthesizes each bounded text segment independently,
+  applies aggregate byte and duration limits, pads only each final transport
+  frame with silence, and emits fixed-duration sample-aligned PCM chunks. The
+  coordinator selects a protocol-representable frame duration for the provider
+  sample rate.
 
 Enabled streaming roles never call their buffered provider method.
 
@@ -132,7 +137,8 @@ Provider starts, writes, iterator reads, finishes, buffered calls, and Agent
 execution are bounded by the provider-stage timeout. Input frame reads use the
 input-idle timeout. Provider failure or cancellation races pending input reads,
 returns the input iterator, aborts provider work, and closes sessions with
-bounded cleanup.
+bounded one-second cleanup. Sessions that resolve after a start timeout are
+closed when they become available.
 
 Streaming STT and TTS enforce ordered provider events, exactly one terminal
 event, stable formats, exact totals, and no events after terminal state.

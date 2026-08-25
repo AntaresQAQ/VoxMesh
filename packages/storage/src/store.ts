@@ -1440,12 +1440,6 @@ export class VoxMeshStore {
         error_code TEXT
       );
 
-      CREATE TABLE IF NOT EXISTS conversation_run_route_snapshots (
-        run_id TEXT PRIMARY KEY REFERENCES conversation_runs(id) ON DELETE CASCADE,
-        snapshot_json TEXT NOT NULL CHECK (length(snapshot_json) <= 16384),
-        created_at TEXT NOT NULL
-      );
-
       CREATE TABLE IF NOT EXISTS logs (
         id TEXT PRIMARY KEY,
         category TEXT NOT NULL,
@@ -1542,9 +1536,18 @@ export class VoxMeshStore {
       ON messages(run_id);
       CREATE INDEX IF NOT EXISTS idx_conversation_events_run
       ON conversation_events(run_id, created_at);
-      CREATE INDEX IF NOT EXISTS idx_conversation_run_route_snapshots_run
-      ON conversation_run_route_snapshots(run_id);
     `);
+    this.applyMigration("2026-08-25-voice-run-route-snapshot-v1", () => {
+      this.database.exec(`
+        CREATE TABLE conversation_run_route_snapshots (
+          run_id TEXT PRIMARY KEY REFERENCES conversation_runs(id) ON DELETE CASCADE,
+          snapshot_json TEXT NOT NULL CHECK (length(snapshot_json) <= 16384),
+          created_at TEXT NOT NULL
+        );
+        CREATE INDEX idx_conversation_run_route_snapshots_run
+        ON conversation_run_route_snapshots(run_id);
+      `);
+    });
     this.ensureColumn(
       "provider_connections",
       "enabled",

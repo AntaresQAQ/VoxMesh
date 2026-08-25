@@ -36,6 +36,38 @@ describe("Alibaba Model Studio speech adapters", () => {
     ).rejects.toMatchObject({ name: "AbortError" });
   });
 
+  it("ignores queued WebSocket callbacks after cancellation", async () => {
+    const controller = new AbortController();
+    const socket = new FakeAlibabaSocket("stt");
+    const provider = new AlibabaModelStudioSpeechToTextProvider(
+      {
+        endpoint:
+          "wss://workspace.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference",
+        model: "fun-asr-realtime",
+        apiKey: "secret",
+        language: "zh"
+      },
+      createFactory(socket).create
+    );
+    const execution = provider.transcribe(
+      {
+        data: encodePcm16Wav({
+          channels: 1,
+          sampleRate: 16_000,
+          pcm: new Uint8Array([1, 0])
+        }),
+        mimeType: "audio/wav"
+      },
+      { signal: controller.signal }
+    );
+    controller.abort();
+
+    await expect(execution).rejects.toMatchObject({ name: "AbortError" });
+    await Promise.resolve();
+    expect(socket.runTask).toBeNull();
+    expect(socket.binaryInput).toEqual([]);
+  });
+
   it("runs a Fun-ASR task with PCM audio and final sentence results", async () => {
     const socket = new FakeAlibabaSocket("stt");
     const factory = createFactory(socket);

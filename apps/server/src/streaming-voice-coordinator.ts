@@ -30,6 +30,8 @@ import {
 } from "@voxmesh/shared";
 import type { RuntimeVoiceRouteSnapshot, VoxMeshStore } from "@voxmesh/storage";
 
+const PROVIDER_CLEANUP_TIMEOUT_MS = 1_000;
+
 export type StreamingVoiceCoordinatorEvent =
   | {
       type: "stage";
@@ -496,6 +498,7 @@ export class StreamingVoiceCoordinator {
       stageAbort.abort();
       segmenter?.cancel();
       await streamingAudio?.catch(() => undefined);
+      await settleWithTimeout(rawAgentExecution);
       if (
         ttsStartedAt !== undefined &&
         !signal.aborted &&
@@ -518,7 +521,11 @@ export class StreamingVoiceCoordinator {
       }
       throw error;
     }
-    validateAssistantResponse(agent.response);
+    try {
+      validateAssistantResponse(agent.response);
+    } catch (error) {
+      throw new StreamingVoiceStageError("AGENT", error);
+    }
     if (!chatStreaming) {
       await emit(events, stageSignal, {
         type: "agent",
@@ -616,15 +623,25 @@ async function consumeStreamingStt(
 }> {
   const providerAbort = new AbortController();
   const providerSignal = AbortSignal.any([signal, providerAbort.signal]);
-  const session = await withOperationTimeout(
-    input.providers.streamingStt.startSession({
-      format: input.format,
-      signal: providerSignal
-    }),
-    providerSignal,
-    VOICE_STREAM_LIMITS.providerStageTimeoutMs,
-    providerAbort
-  );
+  const sessionPromise = input.providers.streamingStt.startSession({
+    format: input.format,
+    signal: providerSignal
+  });
+  let session: Awaited<typeof sessionPromise>;
+  try {
+    session = await withOperationTimeout(
+      sessionPromise,
+      providerSignal,
+      VOICE_STREAM_LIMITS.providerStageTimeoutMs,
+      providerAbort
+    );
+  } catch (error) {
+    providerAbort.abort();
+    void sessionPromise
+      .then((lateSession) => settleWithTimeout(lateSession.close()))
+      .catch(() => undefined);
+    throw error;
+  }
   let providerIterator: AsyncIterator<StreamingTranscriptionEvent> | undefined;
   let inputIterator: AsyncIterator<StreamingAudioChunk> | undefined;
   let final: { result: TranscriptionResult; sequence: number } | undefined;
@@ -909,12 +926,25 @@ async function synthesizeStreamingText(
 }> {
   const providerAbort = new AbortController();
   const providerSignal = AbortSignal.any([signal, providerAbort.signal]);
-  const session = await withOperationTimeout(
-    provider.startSynthesis({ text, signal: providerSignal }),
-    providerSignal,
-    VOICE_STREAM_LIMITS.providerStageTimeoutMs,
-    providerAbort
-  );
+  const sessionPromise = provider.startSynthesis({
+    text,
+    signal: providerSignal
+  });
+  let session: Awaited<typeof sessionPromise>;
+  try {
+    session = await withOperationTimeout(
+      sessionPromise,
+      providerSignal,
+      VOICE_STREAM_LIMITS.providerStageTimeoutMs,
+      providerAbort
+    );
+  } catch (error) {
+    providerAbort.abort();
+    void sessionPromise
+      .then((lateSession) => settleWithTimeout(lateSession.close()))
+      .catch(() => undefined);
+    throw error;
+  }
   let iterator: AsyncIterator<StreamingSynthesisEvent> | undefined;
   let audioBytes = 0;
   let completedDurationMs: number | undefined;
@@ -1028,87 +1058,89 @@ async function synthesizeBufferedText(
   signal: AbortSignal,
   events: BoundedAsyncQueue<StreamingVoiceCoordinatorEvent>
 ): Promise<{ segments: number; audioBytes: number; durationMs: number }> {
-  throwIfAborted(signal);
-  const providerAbort = new AbortController();
-  const providerSignal = AbortSignal.any([signal, providerAbort.signal]);
-  const audio = await withOperationTimeout(
-    provider.synthesize(text, { signal: providerSignal }),
-    providerSignal,
-    VOICE_STREAM_LIMITS.providerStageTimeoutMs,
-    providerAbort
-  );
-  providerAbort.abort();
-  throwIfAborted(signal);
-  if (audio.mimeType !== "audio/wav") {
-    throw new Error("Buffered TTS must return PCM16 WAV audio");
-  }
-  const decoded = decodePcm16Wav(audio.data);
-  const format: StreamingAudioFormat = {
-    encoding: "pcm16le",
-    sampleRate: decoded.sampleRate,
-    channels: decoded.channels
-  };
-  if (format.sampleRate < 8_000 || format.sampleRate > 96_000) {
-    throw new Error("Buffered TTS sample rate is outside protocol bounds");
-  }
-  const durationMs = audioDurationMs(decoded.pcm.byteLength, format);
-  enforceOutputLimits(decoded.pcm.byteLength, durationMs);
-  const frameDurationMs = selectOutputFrameDuration(format.sampleRate);
   const segments = splitProtocolSegments(text);
-  await emit(events, signal, {
-    type: "segment_started",
-    segmentIndex: 0,
-    text: segments[0] ?? text,
-    format: { ...format, frameDurationMs }
-  });
-  const sampleFrameBytes = format.channels * 2;
-  const frameBytes = Math.max(
-    sampleFrameBytes,
-    ((format.sampleRate * frameDurationMs) / 1_000) * sampleFrameBytes
-  );
-  const paddedBytes =
-    Math.ceil(decoded.pcm.byteLength / frameBytes) * frameBytes;
-  const outputPcm = new Uint8Array(paddedBytes);
-  outputPcm.set(decoded.pcm);
-  const outputDurationMs = audioDurationMs(outputPcm.byteLength, format);
-  enforceOutputLimits(outputPcm.byteLength, outputDurationMs);
+  let audioBytes = 0;
+  let durationMs = 0;
   let sequence = 1;
-  for (let offset = 0; offset < outputPcm.byteLength; offset += frameBytes) {
-    await emit(events, signal, {
-      type: "audio",
-      chunk: {
-        sequence,
-        format,
-        data: outputPcm.slice(offset, offset + frameBytes)
-      }
-    });
-    sequence += 1;
-  }
-  await emit(events, signal, {
-    type: "segment_finished",
-    segmentIndex: 0
-  });
   for (
-    let segmentIndex = 1;
+    let segmentIndex = 0;
     segmentIndex < segments.length;
     segmentIndex += 1
   ) {
+    throwIfAborted(signal);
+    const providerAbort = new AbortController();
+    const providerSignal = AbortSignal.any([signal, providerAbort.signal]);
+    const audio = await withOperationTimeout(
+      provider.synthesize(segments[segmentIndex] ?? "", {
+        signal: providerSignal
+      }),
+      providerSignal,
+      VOICE_STREAM_LIMITS.providerStageTimeoutMs,
+      providerAbort
+    );
+    providerAbort.abort();
+    throwIfAborted(signal);
+    if (!isWavMimeType(audio.mimeType)) {
+      throw new Error("Buffered TTS must return PCM16 WAV audio");
+    }
+    const decoded = decodePcm16Wav(audio.data);
+    const format: StreamingAudioFormat = {
+      encoding: "pcm16le",
+      sampleRate: decoded.sampleRate,
+      channels: decoded.channels
+    };
+    if (format.sampleRate < 8_000 || format.sampleRate > 96_000) {
+      throw new Error("Buffered TTS sample rate is outside protocol bounds");
+    }
+    const frameDurationMs = selectOutputFrameDuration(format.sampleRate);
+    const sampleFrameBytes = format.channels * 2;
+    const frameBytes = Math.max(
+      sampleFrameBytes,
+      ((format.sampleRate * frameDurationMs) / 1_000) * sampleFrameBytes
+    );
+    const paddedBytes =
+      Math.ceil(decoded.pcm.byteLength / frameBytes) * frameBytes;
+    const outputPcm = new Uint8Array(paddedBytes);
+    outputPcm.set(decoded.pcm);
+    const segmentDurationMs = audioDurationMs(outputPcm.byteLength, format);
+    enforceOutputLimits(
+      audioBytes + outputPcm.byteLength,
+      durationMs + segmentDurationMs
+    );
     await emit(events, signal, {
       type: "segment_started",
       segmentIndex,
       text: segments[segmentIndex] ?? "",
       format: { ...format, frameDurationMs }
     });
+    for (let offset = 0; offset < outputPcm.byteLength; offset += frameBytes) {
+      await emit(events, signal, {
+        type: "audio",
+        chunk: {
+          sequence,
+          format,
+          data: outputPcm.slice(offset, offset + frameBytes)
+        }
+      });
+      sequence += 1;
+    }
     await emit(events, signal, {
       type: "segment_finished",
       segmentIndex
     });
+    audioBytes += outputPcm.byteLength;
+    durationMs += segmentDurationMs;
   }
   return {
     segments: segments.length,
-    audioBytes: outputPcm.byteLength,
-    durationMs: outputDurationMs
+    audioBytes,
+    durationMs
   };
+}
+
+function isWavMimeType(value: string): boolean {
+  const mediaType = value.split(";", 1)[0]?.trim().toLowerCase();
+  return mediaType === "audio/wav" || mediaType === "audio/x-wav";
 }
 
 function splitProtocolSegments(text: string): string[] {
@@ -1370,10 +1402,7 @@ function asError(error: unknown): Error {
 
 async function settleWithTimeout(operation: Promise<unknown>): Promise<void> {
   await new Promise<void>((resolve) => {
-    const timeout = setTimeout(
-      resolve,
-      VOICE_STREAM_LIMITS.providerStageTimeoutMs
-    );
+    const timeout = setTimeout(resolve, PROVIDER_CLEANUP_TIMEOUT_MS);
     operation.then(
       () => {
         clearTimeout(timeout);
