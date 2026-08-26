@@ -51,6 +51,7 @@ type VoiceStreamServerPayload = VoiceStreamServerMessage extends infer Message
 interface VoiceClientState {
   alive: boolean;
   tokenHash: string;
+  principalId: string;
   controller: AbortController;
   clientProtocol: VoiceStreamClientProtocolState;
   serverProtocol: VoiceStreamServerProtocolState | null;
@@ -135,21 +136,31 @@ export function registerVoiceStreamTransport(input: {
     }
     if (
       clients.size >= maxClients ||
-      clients.size >= maxClientsPerAdministrator
+      countPrincipalClients(authentication.principalId) >=
+        maxClientsPerAdministrator
     ) {
       rejectWebSocketUpgrade(socket, 503, "Too Many Connections");
       return;
     }
     server.handleUpgrade(request, socket, head, (webSocket) => {
-      initializeClient(webSocket, authentication.tokenHash);
+      initializeClient(
+        webSocket,
+        authentication.tokenHash,
+        authentication.principalId
+      );
     });
   };
 
-  const initializeClient = (webSocket: WebSocket, tokenHash: string): void => {
+  const initializeClient = (
+    webSocket: WebSocket,
+    tokenHash: string,
+    principalId: string
+  ): void => {
     const controller = new AbortController();
     const state: VoiceClientState = {
       alive: true,
       tokenHash,
+      principalId,
       controller,
       clientProtocol: new VoiceStreamClientProtocolState(),
       serverProtocol: null,
@@ -594,7 +605,7 @@ export function registerVoiceStreamTransport(input: {
         const failure = normalizeFailure(error);
         sendControl(webSocket, state, {
           type: "voice.failed",
-          stage: "transport",
+          stage: failure.stage,
           code: failure.code,
           message: failure.message
         });
@@ -649,6 +660,7 @@ export function registerVoiceStreamTransport(input: {
   const abortClient = (state: VoiceClientState): void => {
     clearTimeout(state.setupTimer);
     if (state.sessionTimer) clearTimeout(state.sessionTimer);
+    state.cancellationRequested = true;
     state.controller.abort();
     state.inputQueue?.fail(new AgentRunCancelledError());
     state.unsubscribeInputPressure();
@@ -689,6 +701,14 @@ export function registerVoiceStreamTransport(input: {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
   };
+
+  function countPrincipalClients(principalId: string): number {
+    let count = 0;
+    for (const state of clients.values()) {
+      if (state.principalId === principalId) count += 1;
+    }
+    return count;
+  }
 }
 
 function isClientMessage(

@@ -384,6 +384,9 @@ describe("voice stream WebSocket", () => {
     store.deleteAllSessions();
     expect(await closed).toBe(4401);
     await waitForRunStatus(store, start.runId, "cancelled");
+    expect(
+      client.controls.some((message) => message.type === "voice.failed")
+    ).toBe(false);
   });
 
   it("terminates voice clients during server shutdown", async () => {
@@ -535,6 +538,7 @@ async function connectVoice(
   socket.send(JSON.stringify(start));
   return {
     socket,
+    controls,
     sendAudio: (sequence: number) => {
       socket.send(
         encodeVoiceStreamBinaryFrame({

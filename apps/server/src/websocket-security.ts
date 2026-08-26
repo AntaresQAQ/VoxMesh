@@ -10,7 +10,11 @@ import { hashSessionToken } from "./security.js";
 const SESSION_COOKIE = "voxmesh_session";
 
 export type WebSocketAuthenticationResult =
-  | { authenticated: true; tokenHash: string }
+  | {
+      authenticated: true;
+      tokenHash: string;
+      principalId: "administrator";
+    }
   | { authenticated: false; status: number; message: string };
 
 /** Validates the shared administrator cookie for a WebSocket upgrade. */
@@ -38,7 +42,11 @@ export function authenticateWebSocketUpgrade(
       message: "Authentication Required"
     };
   }
-  return { authenticated: true, tokenHash };
+  return {
+    authenticated: true,
+    tokenHash,
+    principalId: "administrator"
+  };
 }
 
 /** Requires an HTTP(S) Origin whose authority exactly matches Host. */
