@@ -100,6 +100,7 @@ export function registerVoiceStreamTransport(input: {
     maxPayload: VOICE_STREAM_LIMITS.maxBinaryMessageBytes
   });
   const clients = new Map<WebSocket, VoiceClientState>();
+  const activeTasks = new Set<Promise<void>>();
 
   const upgrade = (
     request: IncomingMessage,
@@ -343,17 +344,6 @@ export function registerVoiceStreamTransport(input: {
       chat: "buffered" | "streaming";
       tts: "buffered" | "streaming";
     };
-    sendControl(webSocket, state, {
-      type: "voice.ready",
-      runId: start.runId,
-      toolMode: start.toolMode,
-      inputFormat: start.inputFormat,
-      profile
-    });
-    state.sessionTimer = setTimeout(
-      () => failTransport(webSocket, state, "TIMEOUT", "Session timed out"),
-      sessionTimeoutMs
-    );
     const run = new StreamingVoiceCoordinator(input.store, input.mcp).run({
       runId: start.runId,
       preparation,
@@ -366,8 +356,24 @@ export function registerVoiceStreamTransport(input: {
       toolMode: start.toolMode,
       signal: state.controller.signal
     });
-    state.task = pumpCoordinator(webSocket, state, run);
-    void state.task.catch(() => undefined);
+    state.task = Promise.resolve().then(() =>
+      pumpCoordinator(webSocket, state, run)
+    );
+    activeTasks.add(state.task);
+    void state.task
+      .finally(() => activeTasks.delete(state.task))
+      .catch(() => undefined);
+    sendControl(webSocket, state, {
+      type: "voice.ready",
+      runId: start.runId,
+      toolMode: start.toolMode,
+      inputFormat: start.inputFormat,
+      profile
+    });
+    state.sessionTimer = setTimeout(
+      () => failTransport(webSocket, state, "TIMEOUT", "Session timed out"),
+      sessionTimeoutMs
+    );
   };
 
   const pumpCoordinator = async (
@@ -703,13 +709,13 @@ export function registerVoiceStreamTransport(input: {
     close: async () => {
       clearInterval(heartbeat);
       input.app.server.off("upgrade", upgrade);
-      for (const [webSocket, state] of clients) {
+      const activeClients = [...clients.entries()];
+      const tasks = [...activeTasks];
+      for (const [webSocket, state] of activeClients) {
         abortClient(state);
         webSocket.terminate();
       }
-      await Promise.allSettled(
-        [...clients.values()].map((state) => state.task)
-      );
+      await Promise.allSettled(tasks);
       clients.clear();
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
