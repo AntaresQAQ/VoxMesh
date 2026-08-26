@@ -114,6 +114,14 @@ export class BoundedAsyncQueue<T> implements AsyncIterable<T> {
     return this.producers.length;
   }
 
+  public get queuedBytes(): number {
+    return this.queued.bytes;
+  }
+
+  public get queuedDurationMs(): number {
+    return this.queued.durationMs;
+  }
+
   public get currentPressure(): BoundedQueuePressure {
     return this.pressure;
   }

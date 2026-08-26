@@ -68,6 +68,9 @@ import {
   createSpeechToTextProvider,
   createTextToSpeechProvider
 } from "./speech-providers.js";
+import type { StreamingVoiceRunPreparation } from "./streaming-voice-coordinator.js";
+import { registerVoiceStreamTransport } from "./voice-stream-transport.js";
+import { registerWebSocketUpgradeFallback } from "./websocket-security.js";
 
 const SESSION_COOKIE = "voxmesh_session";
 
@@ -78,6 +81,13 @@ export interface AppDependencies {
   eventHeartbeatMs?: number;
   eventMaxClients?: number;
   eventMaxBufferedBytes?: number;
+  voiceMaxClients?: number;
+  voiceMaxClientsPerAdministrator?: number;
+  voiceMaxBufferedBytes?: number;
+  voiceHeartbeatMs?: number;
+  voiceSetupTimeoutMs?: number;
+  voiceSessionTimeoutMs?: number;
+  prepareStreamingVoiceRun?: () => StreamingVoiceRunPreparation;
   mcp?: McpServer;
   createLlm?: (routeId?: string) => LlmProvider;
   deviceStatusProvider?: DeviceStatusProvider;
@@ -135,6 +145,39 @@ export async function buildServer(
       ? { maxBufferedBytes: dependencies.eventMaxBufferedBytes }
       : {})
   });
+  const voiceStream = registerVoiceStreamTransport({
+    app,
+    store,
+    mcp,
+    ...(dependencies.prepareStreamingVoiceRun
+      ? { prepare: dependencies.prepareStreamingVoiceRun }
+      : {}),
+    ...(dependencies.voiceMaxClients
+      ? { maxClients: dependencies.voiceMaxClients }
+      : {}),
+    ...(dependencies.voiceMaxClientsPerAdministrator
+      ? {
+          maxClientsPerAdministrator:
+            dependencies.voiceMaxClientsPerAdministrator
+        }
+      : {}),
+    ...(dependencies.voiceMaxBufferedBytes
+      ? { maxBufferedBytes: dependencies.voiceMaxBufferedBytes }
+      : {}),
+    ...(dependencies.voiceHeartbeatMs
+      ? { heartbeatMs: dependencies.voiceHeartbeatMs }
+      : {}),
+    ...(dependencies.voiceSetupTimeoutMs
+      ? { setupTimeoutMs: dependencies.voiceSetupTimeoutMs }
+      : {}),
+    ...(dependencies.voiceSessionTimeoutMs
+      ? { sessionTimeoutMs: dependencies.voiceSessionTimeoutMs }
+      : {})
+  });
+  const webSocketFallback = registerWebSocketUpgradeFallback(
+    app,
+    new Set(["/api/events", "/api/voice-stream"])
+  );
   app.addContentTypeParser(
     /^audio\/.+/,
     { parseAs: "buffer", bodyLimit: 5 * 1024 * 1024 },
@@ -148,6 +191,8 @@ export async function buildServer(
 
   app.addHook("preClose", async () => {
     eventStream.close();
+    await voiceStream.close();
+    webSocketFallback.close();
     unsubscribeObservability();
   });
   app.addHook("onClose", async () => {

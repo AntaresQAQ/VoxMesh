@@ -48,7 +48,11 @@ describe("BoundedAsyncQueue", () => {
     queue.subscribePressure((value) => pressure.push(value));
 
     await queue.enqueue("a");
+    expect(queue.queuedBytes).toBe(1);
+    expect(queue.queuedDurationMs).toBe(1);
     await queue.dequeue();
+    expect(queue.queuedBytes).toBe(0);
+    expect(queue.queuedDurationMs).toBe(0);
 
     expect(pressure).toEqual(["normal", "high", "normal"]);
   });

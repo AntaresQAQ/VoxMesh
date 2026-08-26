@@ -425,6 +425,18 @@ Acceptance:
 - disconnect releases all resources and marks the run terminal
 - no reconnect/resume claim is made
 
+Implementation status:
+
+- implemented as the Phase 5 authenticated voice transport work package
+- `/api/voice-stream` reuses administrator cookie and same-origin validation
+- shared client/server protocol state machines validate every control and frame
+- all eight Mock role profiles complete through raw WebSocket integration tests
+- input queue, rate, connection, frame, control, setup, session, and output
+  backpressure limits fail closed
+- cancel, disconnect, revocation, and server shutdown release resources and
+  leave terminal runs
+- reconnect and resume remain explicitly unsupported
+
 ### PR 8 - Browser AudioWorklet and Streaming UX
 
 Suggested title: `feat: add browser streaming voice experience`

@@ -11,8 +11,8 @@ This document is the project-visible implementation roadmap. It does not authori
 
 Last updated: 2026-08-25 (UTC+08:00)
 
-Implementation baseline: merged `main` through PR #31
-(`docs: add PR review autopilot skill`).
+Implementation baseline: merged `main` through PR #32
+(`feat: coordinate streaming voice runs`).
 
 Recent merged milestones:
 
@@ -36,6 +36,7 @@ Recent merged milestones:
 - PR #29: streaming TTS segmentation
 - PR #30: full-chain Runtime Routing controls
 - PR #31: PR review autopilot Skill
+- PR #32: Streaming Voice Run persistence and Coordinator
 
 ### Phase Status
 
@@ -45,7 +46,7 @@ Recent merged milestones:
 | 2     | Agent Core and Mock pipeline     | Complete                             |
 | 3     | Web Console                      | Complete                             |
 | 4     | Buffered real AI providers       | Accepted; deferred gaps tracked      |
-| 5     | Full-chain streaming voice       | PRs 1-5 complete; PR 6 planned       |
+| 5     | Full-chain streaming voice       | PRs 1-6 complete; PR 7 planned       |
 | 6     | Cross-platform audio devices     | Planned; requires Phase 5 acceptance |
 | 7     | Offline wake word                | Planned; requires Phase 6 acceptance |
 | 8     | Generic third-party MCP          | Planned; requires Phase 7 acceptance |
@@ -221,6 +222,9 @@ Phase 5 PR 4 implementation is documented in
 
 Phase 5 PR 5 implementation is documented in
 [Runtime Routing](./architecture/RUNTIME_ROUTING.md).
+
+Phase 5 PR 6 implementation is documented in
+[Streaming Voice Coordinator](./architecture/STREAMING_VOICE_COORDINATOR.md).
 
 ### Later confirmed phases
 

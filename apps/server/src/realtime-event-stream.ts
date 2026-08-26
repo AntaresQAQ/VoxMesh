@@ -7,10 +7,12 @@ import WebSocket, { WebSocketServer } from "ws";
 import type { EventStreamMessage, RealtimeEvent } from "@voxmesh/shared";
 import type { VoxMeshStore } from "@voxmesh/storage";
 
-import { hashSessionToken } from "./security.js";
 import type { RealtimeEventHub } from "./realtime-event-hub.js";
-
-const SESSION_COOKIE = "voxmesh_session";
+import {
+  authenticateWebSocketUpgrade,
+  isSameWebSocketOrigin,
+  rejectWebSocketUpgrade
+} from "./websocket-security.js";
 
 interface EventStreamRegistration {
   close(): void;
@@ -47,41 +49,40 @@ export function registerRealtimeEventStream(input: {
     try {
       url = new URL(request.url ?? "/", `http://${host ?? "localhost"}`);
     } catch {
-      rejectUpgrade(socket, 400, "Invalid Request");
+      rejectWebSocketUpgrade(socket, 400, "Invalid Request");
       return;
     }
     if (url.pathname !== "/api/events") {
-      rejectUpgrade(socket, 404, "Not Found");
       return;
     }
-    if (!isSameOrigin(request)) {
-      rejectUpgrade(socket, 403, "Forbidden");
+    if (!isSameWebSocketOrigin(request)) {
+      rejectWebSocketUpgrade(socket, 403, "Forbidden");
       return;
     }
     if (clients.size >= maxClients) {
-      rejectUpgrade(socket, 503, "Too Many Connections");
+      rejectWebSocketUpgrade(socket, 503, "Too Many Connections");
       return;
     }
     const afterSequence = parseAfterSequence(url.searchParams.get("after"));
     if (afterSequence === null) {
-      rejectUpgrade(socket, 400, "Invalid Replay Cursor");
+      rejectWebSocketUpgrade(socket, 400, "Invalid Replay Cursor");
       return;
     }
-    let cookies: Record<string, string>;
-    try {
-      cookies = input.app.parseCookie(request.headers.cookie ?? "");
-    } catch {
-      rejectUpgrade(socket, 400, "Invalid Cookie");
-      return;
-    }
-    const token = cookies[SESSION_COOKIE];
-    const tokenHash = token ? hashSessionToken(token) : null;
-    if (!tokenHash || !input.store.getSessionExpiry(tokenHash)) {
-      rejectUpgrade(socket, 401, "Authentication Required");
+    const authentication = authenticateWebSocketUpgrade(
+      input.app,
+      input.store,
+      request
+    );
+    if (!authentication.authenticated) {
+      rejectWebSocketUpgrade(
+        socket,
+        authentication.status,
+        authentication.message
+      );
       return;
     }
     server.handleUpgrade(request, socket, head, (webSocket) => {
-      initializeClient(webSocket, tokenHash, afterSequence);
+      initializeClient(webSocket, authentication.tokenHash, afterSequence);
     });
   };
 
@@ -170,25 +171,4 @@ function parseAfterSequence(value: string | null): number | null {
   if (!/^\d+$/.test(value)) return null;
   const parsed = Number(value);
   return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
-}
-
-function isSameOrigin(request: IncomingMessage): boolean {
-  const origin = request.headers.origin;
-  const host = request.headers.host;
-  if (!origin || !host) return false;
-  try {
-    const parsed = new URL(origin);
-    return (
-      (parsed.protocol === "http:" || parsed.protocol === "https:") &&
-      parsed.host.toLowerCase() === host.toLowerCase()
-    );
-  } catch {
-    return false;
-  }
-}
-
-function rejectUpgrade(socket: Socket, status: number, message: string): void {
-  socket.end(
-    `HTTP/1.1 ${status} ${message}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`
-  );
 }
