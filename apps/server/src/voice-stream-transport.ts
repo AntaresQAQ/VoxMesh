@@ -672,7 +672,7 @@ export function registerVoiceStreamTransport(input: {
     state.inputQueue?.close();
     state.unsubscribeInputPressure();
     if (webSocket.readyState === WebSocket.OPEN) {
-      webSocket.close(1000, "Voice session completed");
+      webSocket.close(1000, "Voice session ended");
     }
   };
 
