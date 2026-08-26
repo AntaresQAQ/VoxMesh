@@ -294,6 +294,31 @@ describe("voice stream WebSocket", () => {
     });
   });
 
+  it("rejects an output write that would exceed WebSocket buffering", async () => {
+    store = new VoxMeshStore(":memory:");
+    app = await buildServer({
+      config,
+      store,
+      voiceMaxBufferedBytes: 1,
+      prepareStreamingVoiceRun: () =>
+        preparation({ stt: true, chat: true, tts: true })
+    });
+    const cookie = await authenticate(app);
+    const baseUrl = await listen(app);
+    const socket = await connectRaw(`${baseUrl}/api/voice-stream`, cookie);
+    const closed = waitForClose(socket);
+    socket.send(
+      JSON.stringify(startMessage("81818181-8181-4181-8181-818181818181"))
+    );
+
+    expect(await closed).toBe(1013);
+    await waitForRunStatus(
+      store,
+      "81818181-8181-4181-8181-818181818181",
+      "cancelled"
+    );
+  });
+
   it("cancels a run when the socket disconnects", async () => {
     store = new VoxMeshStore(":memory:");
     app = await buildServer({

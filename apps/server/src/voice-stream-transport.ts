@@ -370,6 +370,7 @@ export function registerVoiceStreamTransport(input: {
       inputFormat: start.inputFormat,
       profile
     });
+    if (state.terminal) return;
     state.sessionTimer = setTimeout(
       () => failTransport(webSocket, state, "TIMEOUT", "Session timed out"),
       sessionTimeoutMs
@@ -598,7 +599,9 @@ export function registerVoiceStreamTransport(input: {
     data: string | Uint8Array
   ): void => {
     if (webSocket.readyState !== WebSocket.OPEN || state.terminal) return;
-    if (webSocket.bufferedAmount > maxBufferedBytes) {
+    const payloadBytes =
+      typeof data === "string" ? Buffer.byteLength(data) : data.byteLength;
+    if (webSocket.bufferedAmount + payloadBytes > maxBufferedBytes) {
       state.terminal = true;
       webSocket.close(1013, "Client is too slow");
       abortClient(state);
