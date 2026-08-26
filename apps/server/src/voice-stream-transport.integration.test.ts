@@ -38,6 +38,7 @@ const config: ServerConfig = {
 
 let store: VoxMeshStore | undefined;
 let app: FastifyInstance | undefined;
+const closeCodes = new WeakMap<WebSocket, number>();
 
 afterEach(async () => {
   await app?.close();
@@ -582,6 +583,7 @@ async function connectRaw(url: string, cookie: string): Promise<WebSocket> {
   const socket = new WebSocket(url, {
     headers: { Cookie: cookie, Origin: origin }
   });
+  trackCloseCode(socket);
   await new Promise<void>((resolve, reject) => {
     socket.once("open", resolve);
     socket.once("error", reject);
@@ -597,6 +599,7 @@ async function connectRawWithFirstMessage(
   const socket = new WebSocket(url, {
     headers: { Cookie: cookie, Origin: origin }
   });
+  trackCloseCode(socket);
   await new Promise<void>((resolve, reject) => {
     let opened = false;
     let received = false;
@@ -642,17 +645,35 @@ function waitForMessage(
   deadline: number
 ): Promise<void> {
   return new Promise((resolve) => {
-    const timer = setTimeout(resolve, Math.max(0, deadline - Date.now()));
-    waiters.push(() => {
+    const waiter = () => {
       clearTimeout(timer);
       resolve();
-    });
+    };
+    const timer = setTimeout(
+      () => {
+        const index = waiters.indexOf(waiter);
+        if (index >= 0) waiters.splice(index, 1);
+        resolve();
+      },
+      Math.max(0, deadline - Date.now())
+    );
+    waiters.push(waiter);
   });
 }
 
 async function waitForClose(socket: WebSocket): Promise<number> {
-  if (socket.readyState === WebSocket.CLOSED) return 1000;
+  if (socket.readyState === WebSocket.CLOSED) {
+    const code = closeCodes.get(socket);
+    if (code === undefined) {
+      throw new Error("WebSocket closed before its close code was recorded");
+    }
+    return code;
+  }
   return new Promise<number>((resolve) => socket.once("close", resolve));
+}
+
+function trackCloseCode(socket: WebSocket): void {
+  socket.once("close", (code) => closeCodes.set(socket, code));
 }
 
 async function expectRejected(
