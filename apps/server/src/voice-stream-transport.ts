@@ -527,7 +527,14 @@ export function registerVoiceStreamTransport(input: {
     state: VoiceClientState,
     message: VoiceStreamServerPayload
   ): void => {
-    if (!state.sessionId || !state.serverProtocol || state.terminal) return;
+    if (
+      webSocket.readyState !== WebSocket.OPEN ||
+      !state.sessionId ||
+      !state.serverProtocol ||
+      state.terminal
+    ) {
+      return;
+    }
     const control = {
       ...message,
       version: VOICE_STREAM_PROTOCOL_VERSION,
@@ -560,7 +567,13 @@ export function registerVoiceStreamTransport(input: {
     state: VoiceClientState,
     chunk: StreamingAudioChunk
   ): void => {
-    if (!state.serverProtocol) return;
+    if (
+      webSocket.readyState !== WebSocket.OPEN ||
+      !state.serverProtocol ||
+      state.terminal
+    ) {
+      return;
+    }
     const frame = {
       version: VOICE_STREAM_PROTOCOL_VERSION,
       direction: "output" as const,
