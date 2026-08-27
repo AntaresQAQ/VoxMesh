@@ -250,6 +250,7 @@ export class DefaultBrowserVoiceStreamSession implements BrowserVoiceStreamSessi
     );
     this.playback.cancel();
     this.options.callbacks.onLevel(0);
+    this.options.callbacks.onPressure("normal");
     if (
       this.socket?.readyState === WEB_SOCKET_OPEN_STATE &&
       this.startMessage

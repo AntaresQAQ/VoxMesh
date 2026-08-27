@@ -175,9 +175,7 @@ export class BrowserStreamingAudioPlayback implements StreamingAudioPlayback {
       samples[0]?.length ?? 0,
       chunk.format.sampleRate
     );
-    samples.forEach((channel, index) =>
-      buffer.copyToChannel(new Float32Array(channel), index)
-    );
+    samples.forEach((channel, index) => buffer.copyToChannel(channel, index));
     const source = context.createBufferSource();
     source.buffer = buffer;
     source.connect(context.destination);
@@ -330,12 +328,18 @@ function float32ToPcm16(samples: ArrayLike<number>): Uint8Array {
   return data;
 }
 
-function pcm16ToFloat32(data: Uint8Array, channels: number): Float32Array[] {
+function pcm16ToFloat32(
+  data: Uint8Array,
+  channels: number
+): Array<Float32Array<ArrayBuffer>> {
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
   const frameCount = data.byteLength / (channels * 2);
-  const output = Array.from(
+  const output: Array<Float32Array<ArrayBuffer>> = Array.from(
     { length: channels },
-    () => new Float32Array(frameCount)
+    () =>
+      new Float32Array(
+        new ArrayBuffer(frameCount * Float32Array.BYTES_PER_ELEMENT)
+      )
   );
   for (let frame = 0; frame < frameCount; frame += 1) {
     for (let channel = 0; channel < channels; channel += 1) {

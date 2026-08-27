@@ -532,6 +532,7 @@ describe("DefaultBrowserVoiceStreamSession", () => {
     expect(captureCancel).toHaveBeenCalled();
     expect(playbackCancel).toHaveBeenCalled();
     expect(socket.readyState).toBe(FakeWebSocket.CLOSED);
+    expect(callbacks.onPressure).toHaveBeenLastCalledWith("normal");
     expect(callbacks.onState).toHaveBeenLastCalledWith("cancelled");
   });
 
