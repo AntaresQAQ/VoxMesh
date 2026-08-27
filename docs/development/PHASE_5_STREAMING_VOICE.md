@@ -473,6 +473,21 @@ Acceptance:
 - English/Chinese, Light/Dark, keyboard, narrow viewport, 200% zoom, and axe
   pass
 
+Implementation status:
+
+- implemented as the Phase 5 browser streaming voice work package
+- buffered Voice test and streaming controls remain separate and available
+- AudioWorklet capture resamples arbitrary browser input to exact 20 ms,
+  16 kHz mono PCM16LE frames
+- browser input and Web Audio output use bounded ordered queues and fail closed
+- shared protocol state machines enforce tool-gated early-speech behavior
+- completion waits for playback and survives immediate post-completion socket
+  closure
+- Mock Mode Playwright covers the real authenticated transport with
+  deterministic AudioWorklet and Web Audio fixtures
+- Mock streaming deployment activation remains governed by Runtime Routing
+  verification and is not changed by this work package
+
 ### PR 9 - Azure/OpenAI-Compatible Streaming Chat
 
 Suggested title: `feat: stream compatible Chat completions`

@@ -15,6 +15,8 @@ VoxMesh has an initial Mock Mode vertical slice for development and architecture
 - provider-independent Agent Core contracts
 - deterministic Mock LLM and Mock MCP tool execution
 - browser Mock Voice recording with Mock STT and generated WAV response
+- authenticated browser streaming voice with AudioWorklet capture, partial
+  transcript, tool activity, and bounded Web Audio playback
 - live browser microphone loudness monitoring
 - selectable Composed and Mock Native Multimodal voice pipeline modes
 - system-managed provider connections, model deployments, runtime routes, and capability verification
@@ -51,8 +53,9 @@ blocked rather than silently using buffered transport.
 
 The Logs page combines a persisted HTTP snapshot with authenticated real-time
 log and pipeline-event WebSocket delivery, replay, gap indication, and
-URL-backed filters. Physical audio, wake-word detection, and full-chain voice
-streaming are not implemented yet.
+URL-backed filters. Full-chain browser streaming is available for verified
+Composed Runtime Routes; physical audio and wake-word detection are not
+implemented yet.
 
 The architecture is designed for:
 
@@ -76,7 +79,13 @@ pnpm --filter @voxmesh/server start
 
 Open <http://127.0.0.1:3000>, create the first administrator password, sign in, and use Chat. Enter `Check the light status` to exercise the Mock LLM -> Mock MCP -> Mock LLM flow.
 
-The Chat page also provides **Start recording**, **Stop recording**, and **Play response** controls. In Mock Mode, recorded audio is validated, transcribed to a deterministic test phrase, processed through Agent Core and Mock MCP, and returned with a generated test WAV.
+The Chat page also provides separate buffered and streaming voice controls. In
+Mock Mode, **Start recording**, **Stop recording**, and **Play response**
+exercise the buffered pipeline. **Start streaming**, **Finish input**, and
+**Cancel streaming** use AudioWorklet capture and the authenticated
+`/api/voice-stream` transport when the active Composed Runtime Route has
+verified full-chain streaming capability. Streaming never silently falls back
+to the buffered endpoint.
 
 Use **Settings → AI Providers** to manage Connections, Models, and Routes.
 Connections store write-only credentials and endpoints, Models declare provider

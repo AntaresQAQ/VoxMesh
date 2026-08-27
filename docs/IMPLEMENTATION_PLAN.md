@@ -11,8 +11,8 @@ This document is the project-visible implementation roadmap. It does not authori
 
 Last updated: 2026-08-25 (UTC+08:00)
 
-Implementation baseline: merged `main` through PR #32
-(`feat: coordinate streaming voice runs`).
+Implementation baseline: merged `main` through PR #33
+(`feat: add authenticated voice streaming transport`).
 
 Recent merged milestones:
 
@@ -37,6 +37,7 @@ Recent merged milestones:
 - PR #30: full-chain Runtime Routing controls
 - PR #31: PR review autopilot Skill
 - PR #32: Streaming Voice Run persistence and Coordinator
+- PR #33: authenticated voice WebSocket transport
 
 ### Phase Status
 
@@ -46,7 +47,7 @@ Recent merged milestones:
 | 2     | Agent Core and Mock pipeline     | Complete                             |
 | 3     | Web Console                      | Complete                             |
 | 4     | Buffered real AI providers       | Accepted; deferred gaps tracked      |
-| 5     | Full-chain streaming voice       | PRs 1-6 complete; PR 7 planned       |
+| 5     | Full-chain streaming voice       | PRs 1-7 complete; PR 8 next          |
 | 6     | Cross-platform audio devices     | Planned; requires Phase 5 acceptance |
 | 7     | Offline wake word                | Planned; requires Phase 6 acceptance |
 | 8     | Generic third-party MCP          | Planned; requires Phase 7 acceptance |
@@ -112,12 +113,16 @@ Recent merged milestones:
 
 - Browser voice requests are buffered: recording completes and is normalized
   before `/api/voice` executes the route.
+- Authenticated `/api/voice-stream` transport and all eight server-side Mock
+  role profiles are implemented. Browser AudioWorklet capture and playback are
+  the next work package and are not part of this merged-main baseline.
 - Alibaba speech adapters use WebSockets internally, but VoxMesh does not yet
   expose an application-level streaming voice session.
 - Native Multimodal is implemented with a deterministic Mock provider only.
 - The Logs page loads a durable `GET /api/logs` snapshot and merges
   authenticated real-time log events. Application-level bidirectional voice
-  streaming remains planned separately.
+  streaming is available at the server transport boundary but does not yet
+  have a merged browser client.
 - Conversation Run lifecycle, cancellation, continuity, bounded durable
   history, retry, correlation, duration, and terminal-state inspection are
   implemented for text Chat. Voice requests still use nullable run metadata

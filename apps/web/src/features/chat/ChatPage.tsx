@@ -5,6 +5,7 @@ import { localizedError } from "../../utils/errors.js";
 import { ChatTranscript } from "./ChatTranscript.js";
 import { useChatRunLifecycle } from "./useChatRunLifecycle.js";
 import { VoiceControls } from "./VoiceControls.js";
+import { StreamingVoiceControls } from "./StreamingVoiceControls.js";
 
 export function ChatPage({
   conversationId = null,
@@ -114,6 +115,7 @@ export function ChatPage({
         </section>
       ) : null}
       <VoiceControls />
+      <StreamingVoiceControls />
     </PageHeader>
   );
 }

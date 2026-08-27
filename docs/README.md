@@ -41,6 +41,7 @@ links back to the governing MVP and development rules.
 - [Streaming TTS Segmentation](./architecture/STREAMING_TTS_SEGMENTATION.md)
 - [Streaming Voice Coordinator](./architecture/STREAMING_VOICE_COORDINATOR.md)
 - [Authenticated Voice-Stream Transport](./architecture/VOICE_STREAM_TRANSPORT.md)
+- [Browser Streaming Voice](./architecture/BROWSER_STREAMING_VOICE.md)
 - [Runtime Routing](./architecture/RUNTIME_ROUTING.md)
 - [WebSocket Event Delivery](./architecture/WEBSOCKET.md)
 - [Conversation Run Lifecycle](./architecture/CONVERSATION_LIFECYCLE.md)
@@ -88,9 +89,9 @@ identifiers, raw payloads, prompts, transcripts, or audio.
 
 - [Security Operations](./operations/SECURITY_OPERATIONS.md)
 
-Future deployment, backup, recovery, MCP, physical-audio, wake-word, and
-full-chain voice-streaming runbooks should be added to the relevant section
-when those features enter implementation.
+Future deployment, backup, recovery, MCP, physical-audio, and wake-word
+runbooks should be added to the relevant section when those features enter
+implementation.
 
 ## Documentation Conventions
 
