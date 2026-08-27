@@ -64,6 +64,54 @@ describe("DefaultBrowserVoiceStreamSession", () => {
     expect(socket.sent).toEqual([]);
   });
 
+  it("supports an injected socket without a global WebSocket constructor", async () => {
+    vi.stubGlobal("WebSocket", undefined);
+    const socket = new FakeWebSocket();
+    const callbacks = callbacksMock();
+    const session = new DefaultBrowserVoiceStreamSession({
+      allowTools: false,
+      callbacks,
+      createCapture: () => ({
+        start: vi.fn(async () => undefined),
+        finish: vi.fn(async () => undefined),
+        cancel: vi.fn()
+      }),
+      createPlayback: () => ({
+        enqueue: vi.fn(async () => undefined),
+        finish: vi.fn(async () => undefined),
+        cancel: vi.fn()
+      }),
+      createSocket: () => socket,
+      createId: idSequence(
+        "77777777-7777-4777-8777-777777777777",
+        "88888888-8888-4888-8888-888888888888"
+      )
+    });
+    const started = session.start();
+    socket.open();
+    const start = parseStart(socket.sent[0]);
+    socket.serverControl({
+      version: 1,
+      type: "voice.ready",
+      sessionId: start.sessionId,
+      sequence: 0,
+      runId: start.runId,
+      toolMode: "disabled",
+      inputFormat: start.inputFormat,
+      profile: { stt: "streaming", chat: "streaming", tts: "streaming" }
+    });
+    await started;
+
+    session.cancel();
+
+    expect(parseClient(socket.sent.at(-1))).toMatchObject({
+      type: "voice.cancel",
+      reason: "user"
+    });
+    expect(callbacks.onState).toHaveBeenLastCalledWith("cancelled");
+    expect(socket.readyState).toBe(FakeWebSocket.CLOSED);
+  });
+
   it("propagates the server rejection reason from startup", async () => {
     const socket = installFakeWebSocket();
     const callbacks = callbacksMock();

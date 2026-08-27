@@ -21,6 +21,8 @@ import {
   type StreamingAudioPlayback
 } from "./browser-streaming-audio.js";
 
+const WEB_SOCKET_OPEN_STATE = 1;
+
 export type BrowserVoiceStreamState =
   | "connecting"
   | "capturing"
@@ -239,7 +241,10 @@ export class DefaultBrowserVoiceStreamSession implements BrowserVoiceStreamSessi
     );
     this.playback.cancel();
     this.options.callbacks.onLevel(0);
-    if (this.socket?.readyState === WebSocket.OPEN && this.startMessage) {
+    if (
+      this.socket?.readyState === WEB_SOCKET_OPEN_STATE &&
+      this.startMessage
+    ) {
       try {
         this.sendControl({
           version: VOICE_STREAM_PROTOCOL_VERSION,
@@ -436,7 +441,7 @@ export class DefaultBrowserVoiceStreamSession implements BrowserVoiceStreamSessi
   }
 
   private requireOpenSocket(): BrowserWebSocket {
-    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+    if (!this.socket || this.socket.readyState !== WEB_SOCKET_OPEN_STATE) {
       throw new Error("Voice WebSocket is not open");
     }
     return this.socket;
