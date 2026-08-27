@@ -349,6 +349,40 @@ describe("DefaultBrowserVoiceStreamSession", () => {
     expect(callbacks.onState).toHaveBeenLastCalledWith("cancelled");
   });
 
+  it("settles startup when cancelled before the server is ready", async () => {
+    const socket = installFakeWebSocket();
+    const callbacks = callbacksMock();
+    const session = new DefaultBrowserVoiceStreamSession({
+      allowTools: false,
+      callbacks,
+      createCapture: () => ({
+        start: vi.fn(async () => undefined),
+        finish: vi.fn(async () => undefined),
+        cancel: vi.fn()
+      }),
+      createPlayback: () => ({
+        enqueue: vi.fn(async () => undefined),
+        finish: vi.fn(async () => undefined),
+        cancel: vi.fn()
+      }),
+      createSocket: () => socket,
+      createId: idSequence(
+        "33333333-3333-4333-8333-333333333333",
+        "44444444-4444-4444-8444-444444444444"
+      )
+    });
+    const started = session.start();
+    socket.open();
+
+    session.cancel();
+
+    await expect(started).rejects.toThrow(
+      "Voice WebSocket closed before it was ready"
+    );
+    expect(callbacks.onState).toHaveBeenLastCalledWith("cancelled");
+    expect(socket.readyState).toBe(FakeWebSocket.CLOSED);
+  });
+
   it("closes every resource after server cancellation", async () => {
     const socket = installFakeWebSocket();
     const captureCancel = vi.fn();

@@ -142,6 +142,38 @@ describe("StreamingVoiceControls", () => {
     ).toBeDisabled();
   });
 
+  it("preserves cancellation when startup rejects after connecting", async () => {
+    const user = userEvent.setup();
+    let rejectStart: (error: Error) => void = () => undefined;
+    const cancel = vi.fn();
+    const session: BrowserVoiceStreamSession = {
+      start: vi.fn(
+        () =>
+          new Promise<void>((_resolve, reject) => {
+            rejectStart = reject;
+          })
+      ),
+      finishInput: vi.fn(async () => undefined),
+      cancel
+    };
+    renderWithProviders(
+      <StreamingVoiceControls supported createSession={() => session} />
+    );
+    await user.click(screen.getByRole("button", { name: "Start streaming" }));
+
+    await user.click(screen.getByRole("button", { name: "Cancel streaming" }));
+    await act(async () => {
+      rejectStart(new Error("Socket closed"));
+    });
+
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByText("Streaming voice cancelled.")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Start streaming" })
+    ).toBeEnabled();
+  });
+
   it("renders start failures and unsupported state in Simplified Chinese", async () => {
     localStorage.setItem("voxmesh.locale", "zh-CN");
     const user = userEvent.setup();

@@ -283,6 +283,51 @@ describe("browser streaming audio", () => {
     expect(close).toHaveBeenCalledOnce();
   });
 
+  it("does not advance playback state when the audio context cannot resume", async () => {
+    class FakeSource extends EventTarget {
+      public buffer: unknown;
+      public connect = vi.fn();
+      public disconnect = vi.fn();
+      public start = vi.fn();
+    }
+    const resume = vi
+      .fn<() => Promise<void>>()
+      .mockRejectedValueOnce(new Error("Audio context blocked"))
+      .mockResolvedValue(undefined);
+    const context = {
+      currentTime: 0,
+      state: "running",
+      destination: {},
+      resume,
+      close: vi.fn(async () => undefined),
+      createBuffer: vi.fn(() => ({ copyToChannel: vi.fn() })),
+      createBufferSource: vi.fn(() => new FakeSource())
+    };
+    vi.stubGlobal(
+      "AudioContext",
+      class {
+        public constructor() {
+          return context;
+        }
+      }
+    );
+    const playback = new BrowserStreamingAudioPlayback();
+    const firstFrame = {
+      sequence: 1,
+      format: { encoding: "pcm16le" as const, sampleRate: 16_000, channels: 1 },
+      data: new Uint8Array(640)
+    };
+
+    await expect(playback.enqueue(firstFrame)).rejects.toThrow(
+      "Audio context blocked"
+    );
+    await expect(playback.enqueue(firstFrame)).resolves.toBeUndefined();
+
+    expect(resume).toHaveBeenCalledTimes(2);
+    expect(context.createBufferSource).toHaveBeenCalledOnce();
+    playback.cancel();
+  });
+
   it("rejects output that exceeds the bounded playback queue", async () => {
     vi.stubGlobal("AudioContext", class {});
     const playback = new BrowserStreamingAudioPlayback();

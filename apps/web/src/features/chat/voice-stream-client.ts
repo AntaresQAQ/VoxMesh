@@ -171,6 +171,9 @@ export class DefaultBrowserVoiceStreamSession implements BrowserVoiceStreamSessi
       socket.addEventListener("close", () => {
         this.processing = this.processing.then(() => {
           if (!this.terminal) this.fail("Voice WebSocket disconnected");
+          if (!this.ready) {
+            reject(new Error("Voice WebSocket closed before it was ready"));
+          }
         });
         void this.processing.catch((error: unknown) => {
           this.fail(

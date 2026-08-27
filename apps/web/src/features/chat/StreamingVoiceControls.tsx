@@ -26,6 +26,7 @@ export function StreamingVoiceControls({
   const { t } = useI18n();
   const session = useRef<BrowserVoiceStreamSession | null>(null);
   const starting = useRef(false);
+  const [isStarting, setIsStarting] = useState(false);
   const [allowTools, setAllowTools] = useState(true);
   const [state, setState] = useState<BrowserVoiceStreamState>();
   const [level, setLevel] = useState(0);
@@ -57,6 +58,7 @@ export function StreamingVoiceControls({
   const start = async () => {
     if (!supported || starting.current || active(state)) return;
     starting.current = true;
+    setIsStarting(true);
     reset();
     setState("connecting");
     const callbacks: BrowserVoiceStreamCallbacks = {
@@ -77,12 +79,14 @@ export function StreamingVoiceControls({
     try {
       await next.start();
     } catch (caught) {
+      if (session.current !== next) return;
       next.cancel();
       session.current = null;
       setState("failed");
       setError(localizedError(caught, t, "voice.streaming.startFailed"));
     } finally {
       starting.current = false;
+      setIsStarting(false);
     }
   };
 
@@ -132,7 +136,7 @@ export function StreamingVoiceControls({
       <div className="button-row">
         <button
           type="button"
-          disabled={!supported || isActive || starting.current}
+          disabled={!supported || isActive || isStarting}
           onClick={() => void start()}
         >
           {t("voice.streaming.start")}

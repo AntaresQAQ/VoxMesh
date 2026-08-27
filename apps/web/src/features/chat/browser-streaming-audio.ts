@@ -167,9 +167,6 @@ export class BrowserStreamingAudioPlayback implements StreamingAudioPlayback {
     ) {
       throw new Error("Browser playback queue limit was exceeded");
     }
-    this.expectedSequence += 1;
-    this.queuedBytes += chunk.data.byteLength;
-    this.queuedDurationMs += durationMs;
     const context = (this.context ??= new AudioContext());
     await context.resume();
     const samples = pcm16ToFloat32(chunk.data, chunk.format.channels);
@@ -184,9 +181,8 @@ export class BrowserStreamingAudioPlayback implements StreamingAudioPlayback {
     const source = context.createBufferSource();
     source.buffer = buffer;
     source.connect(context.destination);
-    this.sources.add(source);
     const startAt = Math.max(context.currentTime, this.nextStartTime);
-    this.nextStartTime = startAt + durationMs / 1_000;
+    const nextStartTime = startAt + durationMs / 1_000;
     source.addEventListener(
       "ended",
       () => {
@@ -199,7 +195,17 @@ export class BrowserStreamingAudioPlayback implements StreamingAudioPlayback {
       },
       { once: true }
     );
-    source.start(startAt);
+    try {
+      source.start(startAt);
+    } catch (error) {
+      source.disconnect();
+      throw error;
+    }
+    this.sources.add(source);
+    this.expectedSequence += 1;
+    this.queuedBytes += chunk.data.byteLength;
+    this.queuedDurationMs += durationMs;
+    this.nextStartTime = nextStartTime;
   }
 
   public async finish(): Promise<void> {
@@ -264,7 +270,7 @@ export class StreamingPcm16Resampler {
   }
 
   public push(samples: Float32Array): Uint8Array[] {
-    this.pending.push(...samples);
+    for (const sample of samples) this.pending.push(sample);
     const output: number[] = [];
     while (this.sourcePosition + 1 < this.pending.length) {
       const left = Math.floor(this.sourcePosition);
@@ -282,7 +288,7 @@ export class StreamingPcm16Resampler {
       this.pending = this.pending.slice(consumed);
       this.sourcePosition -= consumed;
     }
-    this.outputPending.push(...output);
+    for (const sample of output) this.outputPending.push(sample);
     const frames: Uint8Array[] = [];
     for (
       let offset = 0;
