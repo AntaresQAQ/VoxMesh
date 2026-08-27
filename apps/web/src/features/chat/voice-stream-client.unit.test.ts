@@ -482,6 +482,81 @@ describe("DefaultBrowserVoiceStreamSession", () => {
     expect(playbackFinish).toHaveBeenCalledOnce();
   });
 
+  it("clears visible assistant text before executing a tool call", async () => {
+    const socket = installFakeWebSocket();
+    const callbacks = callbacksMock();
+    const session = new DefaultBrowserVoiceStreamSession({
+      allowTools: true,
+      callbacks,
+      createCapture: () => ({
+        start: vi.fn(async () => undefined),
+        finish: vi.fn(async () => undefined),
+        cancel: vi.fn()
+      }),
+      createPlayback: () => ({
+        enqueue: vi.fn(async () => undefined),
+        finish: vi.fn(async () => undefined),
+        cancel: vi.fn()
+      }),
+      createSocket: () => socket,
+      createId: idSequence(
+        "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+      )
+    });
+    const started = session.start();
+    socket.open();
+    const start = parseStart(socket.sent[0]);
+    socket.serverControl({
+      version: 1,
+      type: "voice.ready",
+      sessionId: start.sessionId,
+      sequence: 0,
+      runId: start.runId,
+      toolMode: "enabled",
+      inputFormat: start.inputFormat,
+      profile: { stt: "streaming", chat: "streaming", tts: "streaming" }
+    });
+    await started;
+    socket.serverControl(
+      server(start, 1, "voice.final_transcript", {
+        text: "Check the light",
+        language: "en"
+      })
+    );
+    socket.serverControl(
+      server(start, 2, "voice.llm_text_delta", {
+        completionIndex: 0,
+        delta: "Let me check"
+      })
+    );
+    socket.serverControl(
+      server(start, 3, "voice.llm_tool_delta", {
+        completionIndex: 0,
+        toolCallIndex: 0,
+        toolName: "mock.get_device_status",
+        argumentsBytes: 24,
+        complete: true
+      })
+    );
+    socket.serverControl(
+      server(start, 4, "voice.llm_finished", {
+        completionIndex: 0,
+        finishReason: "tool_call",
+        text: "",
+        usage: null
+      })
+    );
+    await socket.flush();
+
+    expect(callbacks.onAssistantText).toHaveBeenNthCalledWith(
+      1,
+      "Let me check"
+    );
+    expect(callbacks.onAssistantText).toHaveBeenLastCalledWith("");
+    session.cancel();
+  });
+
   it("cancels capture, playback, and socket", async () => {
     const socket = installFakeWebSocket();
     const captureCancel = vi.fn();

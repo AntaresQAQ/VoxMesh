@@ -331,7 +331,10 @@ export class DefaultBrowserVoiceStreamSession implements BrowserVoiceStreamSessi
       case "voice.tool_finished":
         return;
       case "voice.llm_finished":
-        if (message.finishReason === "tool_call") this.assistantText = "";
+        if (message.finishReason === "tool_call") {
+          this.assistantText = "";
+          this.options.callbacks.onAssistantText("");
+        }
         if (message.finishReason === "stop") {
           this.assistantText = message.text;
           this.options.callbacks.onAssistantText(message.text);
