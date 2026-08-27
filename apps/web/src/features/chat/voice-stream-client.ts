@@ -208,10 +208,19 @@ export class DefaultBrowserVoiceStreamSession implements BrowserVoiceStreamSessi
         error instanceof Error ? error.message : "Voice input queue failed"
       )
     );
-    await this.capture.start({
-      onChunk: (chunk) => this.enqueueInput(chunk),
-      onLevel: this.options.callbacks.onLevel
-    });
+    try {
+      await this.capture.start({
+        onChunk: (chunk) => this.enqueueInput(chunk),
+        onLevel: this.options.callbacks.onLevel
+      });
+    } catch (error) {
+      const failure =
+        error instanceof Error
+          ? error
+          : new Error("Voice capture initialization failed");
+      this.fail(failure.message);
+      throw failure;
+    }
     this.options.callbacks.onState("capturing");
   }
 

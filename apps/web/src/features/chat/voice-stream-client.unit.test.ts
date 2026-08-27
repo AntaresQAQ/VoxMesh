@@ -160,6 +160,56 @@ describe("DefaultBrowserVoiceStreamSession", () => {
     expect(socket.readyState).toBe(FakeWebSocket.CLOSED);
   });
 
+  it("cleans up an accepted session when capture initialization fails", async () => {
+    const socket = installFakeWebSocket();
+    const captureCancel = vi.fn();
+    const playbackCancel = vi.fn();
+    const callbacks = callbacksMock();
+    const session = new DefaultBrowserVoiceStreamSession({
+      allowTools: false,
+      callbacks,
+      createCapture: () => ({
+        start: vi.fn(async () => {
+          throw new Error("Microphone permission was denied");
+        }),
+        finish: vi.fn(async () => undefined),
+        cancel: captureCancel
+      }),
+      createPlayback: () => ({
+        enqueue: vi.fn(async () => undefined),
+        finish: vi.fn(async () => undefined),
+        cancel: playbackCancel
+      }),
+      createSocket: () => socket,
+      createId: idSequence(
+        "99999999-9999-4999-8999-999999999999",
+        "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+      )
+    });
+    const started = session.start();
+    socket.open();
+    const start = parseStart(socket.sent[0]);
+    socket.serverControl({
+      version: 1,
+      type: "voice.ready",
+      sessionId: start.sessionId,
+      sequence: 0,
+      runId: start.runId,
+      toolMode: "disabled",
+      inputFormat: start.inputFormat,
+      profile: { stt: "streaming", chat: "streaming", tts: "streaming" }
+    });
+
+    await expect(started).rejects.toThrow("Microphone permission was denied");
+    expect(captureCancel).toHaveBeenCalledOnce();
+    expect(playbackCancel).toHaveBeenCalledOnce();
+    expect(callbacks.onError).toHaveBeenLastCalledWith(
+      "Microphone permission was denied"
+    );
+    expect(callbacks.onState).toHaveBeenLastCalledWith("failed");
+    expect(socket.readyState).toBe(FakeWebSocket.CLOSED);
+  });
+
   it("streams capture, protocol state, playback, and final text", async () => {
     const socket = installFakeWebSocket();
     let onChunk: (chunk: StreamingAudioChunk) => void = () => undefined;
