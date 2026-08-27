@@ -56,16 +56,47 @@ test("completes setup, tool-assisted chat, inspection, and logout", async ({
       value: FakeMediaRecorder
     });
     class FakeAudioContext {
+      public readonly sampleRate = 48_000;
+      public readonly destination = {};
+      public readonly audioWorklet = {
+        addModule: async () => undefined
+      };
+      public readonly state = "running";
+      public readonly currentTime = 0;
+
       public async resume(): Promise<void> {
         return undefined;
       }
 
       public createMediaStreamSource(): {
-        connect: () => void;
+        connect: (target?: unknown) => void;
         disconnect: () => void;
       } {
         return {
-          connect: () => undefined,
+          connect: (target) => {
+            const node = target as
+              | {
+                  port?: {
+                    onmessage:
+                      ((event: MessageEvent<Float32Array>) => void) | null;
+                  };
+                }
+              | undefined;
+            if (node?.port) {
+              queueMicrotask(() => {
+                node.port?.onmessage?.(
+                  new MessageEvent("message", {
+                    data: new Float32Array(960).fill(0.1)
+                  })
+                );
+                node.port?.onmessage?.(
+                  new MessageEvent("message", {
+                    data: new Float32Array(960).fill(0.1)
+                  })
+                );
+              });
+            }
+          },
           disconnect: () => undefined
         };
       }
@@ -101,10 +132,60 @@ test("completes setup, tool-assisted chat, inspection, and logout", async ({
       public async close(): Promise<void> {
         return undefined;
       }
+
+      public createBuffer(
+        channels: number,
+        length: number,
+        sampleRate: number
+      ): {
+        numberOfChannels: number;
+        length: number;
+        sampleRate: number;
+        copyToChannel: () => void;
+      } {
+        return {
+          numberOfChannels: channels,
+          length,
+          sampleRate,
+          copyToChannel: () => undefined
+        };
+      }
+
+      public createBufferSource(): {
+        buffer: unknown;
+        connect: () => void;
+        disconnect: () => void;
+        start: () => void;
+        stop: () => void;
+        addEventListener: (type: string, listener: () => void) => void;
+      } {
+        let ended: (() => void) | undefined;
+        return {
+          buffer: null,
+          connect: () => undefined,
+          disconnect: () => undefined,
+          addEventListener: (type, listener) => {
+            if (type === "ended") ended = listener;
+          },
+          start: () => queueMicrotask(() => ended?.()),
+          stop: () => ended?.()
+        };
+      }
     }
     Object.defineProperty(globalThis, "AudioContext", {
       configurable: true,
       value: FakeAudioContext
+    });
+    class FakeAudioWorkletNode {
+      public readonly port = {
+        onmessage: null as ((event: MessageEvent<Float32Array>) => void) | null,
+        postMessage: () => undefined
+      };
+      public disconnect(): void {}
+    }
+    Object.defineProperty(globalThis, "AudioWorkletNode", {
+      configurable: true,
+      value: FakeAudioWorkletNode
     });
   });
   await page.emulateMedia({ colorScheme: "dark" });
@@ -408,7 +489,7 @@ test("completes setup, tool-assisted chat, inspection, and logout", async ({
   await page.getByLabel("Message").fill("Cancel this request");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByText("Conversation run in progress...")).toBeVisible();
-  await page.getByRole("button", { name: "Cancel" }).click();
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(page.getByText("Conversation run cancelled.")).toBeVisible();
   await expectAccessible(page, "English dark cancelled Chat run");
   await page.evaluate(() => {
@@ -553,6 +634,22 @@ test("completes setup, tool-assisted chat, inspection, and logout", async ({
   ).toBeEnabled();
   await expectAccessible(page, "English dark Mock Voice chat");
 
+  await page.getByRole("button", { name: "Start streaming" }).click();
+  await expect(page.getByText("Streaming microphone audio...")).toBeVisible();
+  await page.getByRole("button", { name: "Finish input" }).click();
+  await expect(
+    page
+      .locator(".streaming-voice-controls")
+      .getByText("Check the light status")
+  ).toBeVisible();
+  await expect(
+    page
+      .locator(".streaming-voice-controls")
+      .getByText("Mock tool reports living-room-light is on.")
+  ).toBeVisible();
+  await expect(page.getByText("Streaming voice completed.")).toBeVisible();
+  await expectAccessible(page, "English dark streaming Mock Voice chat");
+
   await page.getByRole("link", { name: "Conversations" }).click();
   await page
     .getByRole("link", { name: /Check the light status/ })
@@ -574,7 +671,7 @@ test("completes setup, tool-assisted chat, inspection, and logout", async ({
     .getByRole("link", { name: /Check the light status/ })
     .first()
     .click();
-  await expect(page.getByText("Text to speech")).toBeVisible();
+  await expect(page.getByText("Text to speech").first()).toBeVisible();
   await page.goBack();
   await expect(page).toHaveURL(/\/conversations$/);
   await page.goForward();
@@ -838,7 +935,9 @@ test("completes setup, tool-assisted chat, inspection, and logout", async ({
   await page.getByRole("link", { name: "Chat" }).click();
   await page.getByRole("button", { name: "Start recording" }).click();
   await expect(
-    page.getByRole("meter", { name: "Microphone level" })
+    page
+      .getByRole("region", { name: "Voice test" })
+      .getByRole("meter", { name: "Microphone level" })
   ).toHaveAttribute("aria-valuenow", "67");
   await page.getByRole("button", { name: "Stop recording" }).click();
   await expect(

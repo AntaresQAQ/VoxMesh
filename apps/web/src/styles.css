@@ -487,6 +487,19 @@ main > header {
   margin-bottom: 0;
 }
 
+.streaming-voice-controls {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.streaming-voice-controls > * {
+  margin-block: 0;
+}
+
+.warning {
+  color: var(--color-warning);
+}
+
 .split {
   display: grid;
   grid-template-columns: minmax(250px, 0.8fr) minmax(320px, 1.2fr);

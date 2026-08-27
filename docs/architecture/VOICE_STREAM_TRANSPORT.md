@@ -6,6 +6,9 @@
 full-chain Composed voice sessions. It maps the versioned voice protocol to
 the provider-independent Streaming Voice Coordinator.
 
+The browser capture, protocol-client, playback, and user-experience boundary is
+documented in [Browser Streaming Voice](./BROWSER_STREAMING_VOICE.md).
+
 ## Security Boundary
 
 The transport shares the administrator session-cookie and same-origin
