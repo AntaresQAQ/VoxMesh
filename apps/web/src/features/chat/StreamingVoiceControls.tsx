@@ -90,6 +90,10 @@ export function StreamingVoiceControls({
     try {
       await session.current?.finishInput();
     } catch (caught) {
+      session.current?.cancel();
+      session.current = null;
+      setLevel(0);
+      setPressure("normal");
       setState("failed");
       setError(localizedError(caught, t, "voice.streaming.finishFailed"));
     }

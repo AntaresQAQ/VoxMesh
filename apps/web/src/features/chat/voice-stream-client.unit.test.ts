@@ -40,7 +40,13 @@ describe("DefaultBrowserVoiceStreamSession", () => {
           input.onLevel(35);
         }
       ),
-      finish: vi.fn(async () => undefined),
+      finish: vi.fn(async () => {
+        onChunk({
+          sequence: 2,
+          format: { encoding: "pcm16le", sampleRate: 16_000, channels: 1 },
+          data: new Uint8Array(640)
+        });
+      }),
       cancel: captureCancel
     };
     const playback: StreamingAudioPlayback = {
@@ -340,6 +346,57 @@ describe("DefaultBrowserVoiceStreamSession", () => {
     expect(captureCancel).toHaveBeenCalled();
     expect(playbackCancel).toHaveBeenCalled();
     expect(socket.readyState).toBe(FakeWebSocket.CLOSED);
+    expect(callbacks.onState).toHaveBeenLastCalledWith("cancelled");
+  });
+
+  it("closes every resource after server cancellation", async () => {
+    const socket = installFakeWebSocket();
+    const captureCancel = vi.fn();
+    const playbackCancel = vi.fn();
+    const callbacks = callbacksMock();
+    const session = new DefaultBrowserVoiceStreamSession({
+      allowTools: false,
+      callbacks,
+      createCapture: () => ({
+        start: vi.fn(async () => undefined),
+        finish: vi.fn(async () => undefined),
+        cancel: captureCancel
+      }),
+      createPlayback: () => ({
+        enqueue: vi.fn(async () => undefined),
+        finish: vi.fn(async () => undefined),
+        cancel: playbackCancel
+      }),
+      createSocket: () => socket,
+      createId: idSequence(
+        "11111111-1111-4111-8111-111111111111",
+        "22222222-2222-4222-8222-222222222222"
+      )
+    });
+    const started = session.start();
+    socket.open();
+    const start = parseStart(socket.sent[0]);
+    socket.serverControl({
+      version: 1,
+      type: "voice.ready",
+      sessionId: start.sessionId,
+      sequence: 0,
+      runId: start.runId,
+      toolMode: "disabled",
+      inputFormat: start.inputFormat,
+      profile: { stt: "streaming", chat: "streaming", tts: "streaming" }
+    });
+    await started;
+
+    socket.serverControl(
+      server(start, 1, "voice.cancelled", { code: "RUN_CANCELLED" })
+    );
+    await socket.flush();
+
+    expect(captureCancel).toHaveBeenCalledOnce();
+    expect(playbackCancel).toHaveBeenCalledOnce();
+    expect(socket.readyState).toBe(FakeWebSocket.CLOSED);
+    expect(callbacks.onPressure).toHaveBeenLastCalledWith("normal");
     expect(callbacks.onState).toHaveBeenLastCalledWith("cancelled");
   });
 });

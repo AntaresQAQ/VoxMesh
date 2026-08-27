@@ -216,7 +216,7 @@ export class DefaultBrowserVoiceStreamSession implements BrowserVoiceStreamSessi
     await this.inputPump;
     this.options.callbacks.onLevel(0);
     this.sendControl({
-      version: 1,
+      version: VOICE_STREAM_PROTOCOL_VERSION,
       type: "voice.input_finished",
       sessionId: this.requireStart().sessionId,
       sequence: this.nextClientControlSequence
@@ -236,7 +236,7 @@ export class DefaultBrowserVoiceStreamSession implements BrowserVoiceStreamSessi
     if (this.socket?.readyState === WebSocket.OPEN && this.startMessage) {
       try {
         this.sendControl({
-          version: 1,
+          version: VOICE_STREAM_PROTOCOL_VERSION,
           type: "voice.cancel",
           sessionId: this.startMessage.sessionId,
           sequence: this.nextClientControlSequence,
@@ -332,9 +332,15 @@ export class DefaultBrowserVoiceStreamSession implements BrowserVoiceStreamSessi
       case "voice.cancelled":
         this.terminal = true;
         this.capture.cancel();
+        this.inputQueue?.fail(
+          new BoundedQueueError("CANCELLED", "Voice session was cancelled")
+        );
         this.playback.cancel();
         this.options.callbacks.onLevel(0);
+        this.options.callbacks.onPressure("normal");
         this.options.callbacks.onState("cancelled");
+        this.socket?.close(1000, "Voice session cancelled");
+        return;
     }
   }
 
@@ -360,7 +366,7 @@ export class DefaultBrowserVoiceStreamSession implements BrowserVoiceStreamSessi
   }
 
   private enqueueInput(chunk: StreamingAudioChunk): void {
-    if (this.terminal) return;
+    if (this.terminal || this.finishRequested) return;
     const queue = this.inputQueue;
     if (!queue) return;
     try {

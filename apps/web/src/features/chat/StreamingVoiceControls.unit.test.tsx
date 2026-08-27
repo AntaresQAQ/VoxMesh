@@ -107,6 +107,41 @@ describe("StreamingVoiceControls", () => {
     expect(cancel).toHaveBeenCalledOnce();
   });
 
+  it("cleans up the session when finishing input fails", async () => {
+    const user = userEvent.setup();
+    let callbacks: BrowserVoiceStreamCallbacks | undefined;
+    const cancel = vi.fn();
+    const session: BrowserVoiceStreamSession = {
+      start: vi.fn(async () => undefined),
+      finishInput: vi.fn(async () => {
+        throw new Error("Input drain failed");
+      }),
+      cancel
+    };
+    renderWithProviders(
+      <StreamingVoiceControls
+        supported
+        createSession={(options) => {
+          callbacks = options.callbacks;
+          return session;
+        }}
+      />
+    );
+    await user.click(screen.getByRole("button", { name: "Start streaming" }));
+    act(() => callbacks?.onState("capturing"));
+
+    await user.click(screen.getByRole("button", { name: "Finish input" }));
+
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(screen.getByRole("alert")).toHaveTextContent("Input drain failed");
+    expect(
+      screen.getByRole("button", { name: "Start streaming" })
+    ).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: "Cancel streaming" })
+    ).toBeDisabled();
+  });
+
   it("renders start failures and unsupported state in Simplified Chinese", async () => {
     localStorage.setItem("voxmesh.locale", "zh-CN");
     const user = userEvent.setup();

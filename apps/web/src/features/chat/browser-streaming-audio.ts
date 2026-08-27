@@ -28,6 +28,7 @@ export interface StreamingAudioPlayback {
 export function supportsBrowserStreamingVoice(): boolean {
   return Boolean(
     typeof navigator.mediaDevices?.getUserMedia === "function" &&
+    typeof globalThis.AudioContext === "function" &&
     typeof globalThis.AudioWorkletNode === "function" &&
     typeof globalThis.WebSocket === "function"
   );
@@ -72,6 +73,9 @@ export class BrowserStreamingAudioCapture implements StreamingAudioCapture {
     try {
       await context.audioWorklet.addModule(moduleUrl);
       await context.resume();
+      if (generation !== this.generation) {
+        throw new Error("Streaming audio capture was cancelled");
+      }
       const source = context.createMediaStreamSource(stream);
       const worklet = new AudioWorkletNode(context, "voxmesh-pcm-capture", {
         numberOfInputs: 1,
@@ -118,8 +122,12 @@ export class BrowserStreamingAudioCapture implements StreamingAudioCapture {
   }
 
   private async release(): Promise<void> {
-    this.worklet?.port.postMessage({ type: "stop" });
-    this.worklet?.disconnect();
+    const worklet = this.worklet;
+    if (worklet) {
+      worklet.port.onmessage = null;
+      worklet.port.postMessage({ type: "stop" });
+      worklet.disconnect();
+    }
     this.source?.disconnect();
     if (this.stream) stopStream(this.stream);
     if (this.moduleUrl) URL.revokeObjectURL(this.moduleUrl);

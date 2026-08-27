@@ -47,6 +47,18 @@ describe("browser streaming audio", () => {
     expect(supportsBrowserStreamingVoice()).toBe(false);
   });
 
+  it("reports unsupported browsers without AudioContext", () => {
+    vi.stubGlobal("AudioContext", undefined);
+    vi.stubGlobal("AudioWorkletNode", class {});
+    vi.stubGlobal("WebSocket", class {});
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: { getUserMedia: vi.fn() }
+    });
+
+    expect(supportsBrowserStreamingVoice()).toBe(false);
+  });
+
   it("releases tracks, graph, context, and module URL on finish", async () => {
     const stop = vi.fn();
     const disconnectSource = vi.fn();
@@ -56,6 +68,10 @@ describe("browser streaming audio", () => {
     const source = {
       connect: vi.fn(),
       disconnect: disconnectSource
+    };
+    const port = {
+      onmessage: null as ((event: MessageEvent<Float32Array>) => void) | null,
+      postMessage: vi.fn()
     };
     const context = {
       sampleRate: 48_000,
@@ -67,10 +83,7 @@ describe("browser streaming audio", () => {
       createMediaStreamSource: vi.fn(() => source)
     };
     class FakeWorklet {
-      public readonly port = {
-        onmessage: null as ((event: MessageEvent<Float32Array>) => void) | null,
-        postMessage: vi.fn()
-      };
+      public readonly port = port;
       public disconnect = disconnectWorklet;
     }
     Object.defineProperty(navigator, "mediaDevices", {
@@ -109,6 +122,7 @@ describe("browser streaming audio", () => {
     expect(disconnectWorklet).toHaveBeenCalledOnce();
     expect(close).toHaveBeenCalledOnce();
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:worklet");
+    expect(port.onmessage).toBeNull();
   });
 
   it("cleans up when the AudioWorklet module cannot start", async () => {
@@ -160,6 +174,68 @@ describe("browser streaming audio", () => {
     expect(stop).toHaveBeenCalledOnce();
     expect(close).toHaveBeenCalledOnce();
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:worklet");
+  });
+
+  it("cleans up when capture is cancelled during worklet startup", async () => {
+    let resolveModule: () => void = () => undefined;
+    const stop = vi.fn();
+    const close = vi.fn(async () => undefined);
+    const revokeObjectURL = vi.fn();
+    const addModule = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveModule = resolve;
+        })
+    );
+    const context = {
+      sampleRate: 48_000,
+      state: "running",
+      destination: {},
+      audioWorklet: { addModule },
+      resume: vi.fn(async () => undefined),
+      close,
+      createMediaStreamSource: vi.fn()
+    };
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: {
+        getUserMedia: vi.fn(async () => ({
+          getTracks: () => [{ stop }]
+        }))
+      }
+    });
+    vi.stubGlobal(
+      "AudioContext",
+      class {
+        public constructor() {
+          return context;
+        }
+      }
+    );
+    vi.stubGlobal("AudioWorkletNode", class {});
+    vi.stubGlobal("WebSocket", class {});
+    vi.stubGlobal("URL", {
+      ...URL,
+      createObjectURL: vi.fn(() => "blob:worklet"),
+      revokeObjectURL
+    });
+    const capture = new BrowserStreamingAudioCapture();
+    const started = capture.start({
+      onChunk: vi.fn(),
+      onLevel: vi.fn()
+    });
+    await vi.waitFor(() => expect(addModule).toHaveBeenCalledOnce());
+
+    capture.cancel();
+    resolveModule();
+
+    await expect(started).rejects.toThrow(
+      "Streaming audio capture was cancelled"
+    );
+    expect(stop).toHaveBeenCalledOnce();
+    expect(close).toHaveBeenCalledOnce();
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:worklet");
+    expect(context.createMediaStreamSource).not.toHaveBeenCalled();
   });
 
   it("schedules ordered playback and closes the context after audio ends", async () => {

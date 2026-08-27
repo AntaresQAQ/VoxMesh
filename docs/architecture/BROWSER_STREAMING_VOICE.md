@@ -79,7 +79,8 @@ with a disconnect failure.
 Binary output frames are decoded and copied into an owned playback queue.
 Playback:
 
-- validates monotonic sequence and one stable output format
+- validates monotonic sequence and each frame's PCM format; the shared
+  protocol state validates frame consistency within its active output segment
 - supports mono and stereo PCM16LE
 - schedules buffers on one AudioContext timeline
 - bounds queued bytes and duration
