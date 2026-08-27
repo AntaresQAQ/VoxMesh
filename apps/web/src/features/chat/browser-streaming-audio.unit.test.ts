@@ -59,6 +59,23 @@ describe("browser streaming audio", () => {
     expect(supportsBrowserStreamingVoice()).toBe(false);
   });
 
+  it("rejects playback when AudioContext is present but not constructible", async () => {
+    vi.stubGlobal("AudioContext", {});
+    const playback = new BrowserStreamingAudioPlayback();
+
+    await expect(
+      playback.enqueue({
+        sequence: 1,
+        format: {
+          encoding: "pcm16le",
+          sampleRate: 16_000,
+          channels: 1
+        },
+        data: new Uint8Array(640)
+      })
+    ).rejects.toThrow("Browser streaming playback is not supported");
+  });
+
   it("releases tracks, graph, context, and module URL on finish", async () => {
     const stop = vi.fn();
     const disconnectSource = vi.fn();

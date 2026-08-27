@@ -35,6 +35,7 @@ microphone audio to the speakers.
 
 - accepts the AudioContext's actual source sample rate
 - preserves source and output remainders across arbitrary worklet boundaries
+- reuses typed-array source and frame accumulators on the main thread
 - linearly resamples to 16 kHz mono
 - emits exact 320-sample, 20 ms PCM16LE frames
 - computes the visible loudness meter from the same sample stream

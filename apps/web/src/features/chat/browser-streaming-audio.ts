@@ -151,7 +151,7 @@ export class BrowserStreamingAudioPlayback implements StreamingAudioPlayback {
   private readonly sources = new Set<AudioBufferSourceNode>();
 
   public async enqueue(chunk: StreamingAudioChunk): Promise<void> {
-    if (!globalThis.AudioContext) {
+    if (typeof globalThis.AudioContext !== "function") {
       throw new Error("Browser streaming playback is not supported");
     }
     validatePlaybackChunk(chunk, this.expectedSequence);
@@ -249,8 +249,10 @@ export class BrowserStreamingAudioPlayback implements StreamingAudioPlayback {
 
 export class StreamingPcm16Resampler {
   private readonly ratio: number;
-  private pending: number[] = [];
-  private outputPending: number[] = [];
+  private sourceBuffer = new Float32Array(4_096);
+  private sourceLength = 0;
+  private readonly outputBuffer: Float32Array;
+  private outputLength = 0;
   private sourcePosition = 0;
 
   public constructor(
@@ -267,52 +269,55 @@ export class StreamingPcm16Resampler {
       throw new Error("Streaming resampler configuration is invalid");
     }
     this.ratio = sourceSampleRate / targetSampleRate;
+    this.outputBuffer = new Float32Array(outputFrameSamples);
   }
 
   public push(samples: Float32Array): Uint8Array[] {
-    for (const sample of samples) this.pending.push(sample);
-    const output: number[] = [];
-    while (this.sourcePosition + 1 < this.pending.length) {
+    this.ensureSourceCapacity(this.sourceLength + samples.length);
+    this.sourceBuffer.set(samples, this.sourceLength);
+    this.sourceLength += samples.length;
+    const frames: Uint8Array[] = [];
+    while (this.sourcePosition + 1 < this.sourceLength) {
       const left = Math.floor(this.sourcePosition);
       const fraction = this.sourcePosition - left;
-      const leftSample = this.pending[left] ?? 0;
-      const rightSample = this.pending[left + 1] ?? leftSample;
-      output.push(leftSample + (rightSample - leftSample) * fraction);
+      const leftSample = this.sourceBuffer[left] ?? 0;
+      const rightSample = this.sourceBuffer[left + 1] ?? leftSample;
+      this.outputBuffer[this.outputLength] =
+        leftSample + (rightSample - leftSample) * fraction;
+      this.outputLength += 1;
+      if (this.outputLength === this.outputFrameSamples) {
+        frames.push(float32ToPcm16(this.outputBuffer));
+        this.outputLength = 0;
+      }
       this.sourcePosition += this.ratio;
     }
     const consumed = Math.min(
       Math.floor(this.sourcePosition),
-      this.pending.length
+      this.sourceLength
     );
     if (consumed > 0) {
-      this.pending = this.pending.slice(consumed);
+      this.sourceBuffer.copyWithin(0, consumed, this.sourceLength);
+      this.sourceLength -= consumed;
       this.sourcePosition -= consumed;
     }
-    for (const sample of output) this.outputPending.push(sample);
-    const frames: Uint8Array[] = [];
-    for (
-      let offset = 0;
-      offset + this.outputFrameSamples <= this.outputPending.length;
-      offset += this.outputFrameSamples
-    ) {
-      frames.push(
-        float32ToPcm16(
-          this.outputPending.slice(offset, offset + this.outputFrameSamples)
-        )
-      );
-    }
-    this.outputPending = this.outputPending.slice(
-      Math.floor(this.outputPending.length / this.outputFrameSamples) *
-        this.outputFrameSamples
-    );
     return frames;
+  }
+
+  private ensureSourceCapacity(required: number): void {
+    if (required <= this.sourceBuffer.length) return;
+    let capacity = this.sourceBuffer.length;
+    while (capacity < required) capacity *= 2;
+    const next = new Float32Array(capacity);
+    next.set(this.sourceBuffer.subarray(0, this.sourceLength));
+    this.sourceBuffer = next;
   }
 }
 
-function float32ToPcm16(samples: readonly number[]): Uint8Array {
+function float32ToPcm16(samples: ArrayLike<number>): Uint8Array {
   const data = new Uint8Array(samples.length * 2);
   const view = new DataView(data.buffer);
-  samples.forEach((sample, index) => {
+  for (let index = 0; index < samples.length; index += 1) {
+    const sample = samples[index] ?? 0;
     const normalized = Math.max(-1, Math.min(1, sample));
     view.setInt16(
       index * 2,
@@ -321,7 +326,7 @@ function float32ToPcm16(samples: readonly number[]): Uint8Array {
         : Math.round(normalized * 32_767),
       true
     );
-  });
+  }
   return data;
 }
 
