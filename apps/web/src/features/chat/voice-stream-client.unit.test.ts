@@ -16,6 +16,7 @@ import type {
 } from "./browser-streaming-audio.js";
 import {
   DefaultBrowserVoiceStreamSession,
+  supportsBrowserVoiceStream,
   type BrowserVoiceStreamCallbacks
 } from "./voice-stream-client.js";
 
@@ -24,6 +25,68 @@ afterEach(() => {
 });
 
 describe("DefaultBrowserVoiceStreamSession", () => {
+  it("reports unsupported browsers when random UUID generation is unavailable", () => {
+    vi.stubGlobal("crypto", {});
+    vi.stubGlobal("AudioContext", class {});
+    vi.stubGlobal("AudioWorkletNode", class {});
+    vi.stubGlobal("WebSocket", class {});
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: { getUserMedia: vi.fn() }
+    });
+
+    expect(() => supportsBrowserVoiceStream()).not.toThrow();
+    expect(supportsBrowserVoiceStream()).toBe(false);
+  });
+
+  it("propagates the server rejection reason from startup", async () => {
+    const socket = installFakeWebSocket();
+    const callbacks = callbacksMock();
+    const captureStart = vi.fn(async () => undefined);
+    const session = new DefaultBrowserVoiceStreamSession({
+      allowTools: false,
+      callbacks,
+      createCapture: () => ({
+        start: captureStart,
+        finish: vi.fn(async () => undefined),
+        cancel: vi.fn()
+      }),
+      createPlayback: () => ({
+        enqueue: vi.fn(async () => undefined),
+        finish: vi.fn(async () => undefined),
+        cancel: vi.fn()
+      }),
+      createSocket: () => socket,
+      createId: idSequence(
+        "55555555-5555-4555-8555-555555555555",
+        "66666666-6666-4666-8666-666666666666"
+      )
+    });
+    const started = session.start();
+    socket.open();
+    const start = parseStart(socket.sent[0]);
+
+    socket.serverControl({
+      version: 1,
+      type: "voice.rejected",
+      sessionId: start.sessionId,
+      sequence: 0,
+      runId: start.runId,
+      stage: "transport",
+      code: "PROVIDER_FAILED",
+      message: "Streaming route verification is required"
+    });
+
+    await expect(started).rejects.toThrow(
+      "Streaming route verification is required"
+    );
+    expect(callbacks.onError).toHaveBeenLastCalledWith(
+      "Streaming route verification is required"
+    );
+    expect(captureStart).not.toHaveBeenCalled();
+    expect(socket.readyState).toBe(FakeWebSocket.CLOSED);
+  });
+
   it("streams capture, protocol state, playback, and final text", async () => {
     const socket = installFakeWebSocket();
     let onChunk: (chunk: StreamingAudioChunk) => void = () => undefined;

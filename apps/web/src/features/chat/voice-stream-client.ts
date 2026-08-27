@@ -67,7 +67,7 @@ export interface BrowserWebSocket extends EventTarget {
 export function supportsBrowserVoiceStream(): boolean {
   return (
     supportsBrowserStreamingVoice() &&
-    Boolean(globalThis.crypto?.randomUUID.bind(globalThis.crypto))
+    typeof globalThis.crypto?.randomUUID === "function"
   );
 }
 
@@ -291,8 +291,7 @@ export class DefaultBrowserVoiceStreamSession implements BrowserVoiceStreamSessi
         return;
       case "voice.rejected":
       case "voice.failed":
-        this.fail(message.message);
-        return;
+        throw new Error(message.message);
       case "voice.partial_transcript":
         this.options.callbacks.onPartialTranscript(message.text);
         return;
