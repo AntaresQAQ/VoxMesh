@@ -12,6 +12,7 @@ import {
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe("browser streaming audio", () => {
@@ -144,7 +145,13 @@ describe("browser streaming audio", () => {
 
   it("cleans up when the AudioWorklet module cannot start", async () => {
     const stop = vi.fn();
-    const close = vi.fn(async () => undefined);
+    const closeError = new Error("Context close failed");
+    const close = vi.fn(async () => {
+      throw closeError;
+    });
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {
+      // Expected cleanup diagnostic.
+    });
     const revokeObjectURL = vi.fn();
     const context = {
       sampleRate: 48_000,
@@ -191,6 +198,10 @@ describe("browser streaming audio", () => {
     expect(stop).toHaveBeenCalledOnce();
     expect(close).toHaveBeenCalledOnce();
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:worklet");
+    expect(consoleError).toHaveBeenCalledWith(
+      "Failed to close streaming audio context after startup failure",
+      closeError
+    );
   });
 
   it("cleans up when capture is cancelled during worklet startup", async () => {

@@ -105,7 +105,14 @@ export class BrowserStreamingAudioCapture implements StreamingAudioCapture {
     } catch (error) {
       stopStream(stream);
       URL.revokeObjectURL(moduleUrl);
-      await context.close();
+      try {
+        await context.close();
+      } catch (closeError) {
+        console.error(
+          "Failed to close streaming audio context after startup failure",
+          closeError
+        );
+      }
       throw error;
     }
   }
