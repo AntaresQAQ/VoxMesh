@@ -39,6 +39,31 @@ describe("DefaultBrowserVoiceStreamSession", () => {
     expect(supportsBrowserVoiceStream()).toBe(false);
   });
 
+  it("requires an ID factory when a socket bypasses unsupported browser APIs", async () => {
+    vi.stubGlobal("crypto", {});
+    const socket = installFakeWebSocket();
+    const session = new DefaultBrowserVoiceStreamSession({
+      allowTools: false,
+      callbacks: callbacksMock(),
+      createCapture: () => ({
+        start: vi.fn(async () => undefined),
+        finish: vi.fn(async () => undefined),
+        cancel: vi.fn()
+      }),
+      createPlayback: () => ({
+        enqueue: vi.fn(async () => undefined),
+        finish: vi.fn(async () => undefined),
+        cancel: vi.fn()
+      }),
+      createSocket: () => socket
+    });
+
+    await expect(session.start()).rejects.toThrow(
+      "Browser streaming voice is not supported"
+    );
+    expect(socket.sent).toEqual([]);
+  });
+
   it("propagates the server rejection reason from startup", async () => {
     const socket = installFakeWebSocket();
     const callbacks = callbacksMock();

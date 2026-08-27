@@ -104,7 +104,10 @@ export class DefaultBrowserVoiceStreamSession implements BrowserVoiceStreamSessi
   }
 
   public async start(): Promise<void> {
-    if (!supportsBrowserVoiceStream() && !this.options.createSocket) {
+    if (
+      !supportsBrowserVoiceStream() &&
+      (!this.options.createSocket || !this.options.createId)
+    ) {
       throw new Error("Browser streaming voice is not supported");
     }
     this.options.callbacks.onState("connecting");
@@ -412,7 +415,7 @@ export class DefaultBrowserVoiceStreamSession implements BrowserVoiceStreamSessi
     this.terminal = true;
     this.capture.cancel();
     this.inputQueue?.fail(
-      new BoundedQueueError("CANCELLED", "Voice input queue failed")
+      new BoundedQueueError("QUEUE_FAILED", "Voice input queue failed")
     );
     this.playback.cancel();
     this.options.callbacks.onLevel(0);

@@ -9,10 +9,10 @@ This document is the project-visible implementation roadmap. It does not authori
 
 ## Implementation Progress
 
-Last updated: 2026-08-25 (UTC+08:00)
+Last updated: 2026-08-27 (UTC+08:00)
 
-Implementation baseline: merged `main` through PR #33
-(`feat: add authenticated voice streaming transport`).
+Implementation baseline: merged `main` through PR #34
+(`feat: add browser streaming voice experience`).
 
 Recent merged milestones:
 
@@ -38,6 +38,7 @@ Recent merged milestones:
 - PR #31: PR review autopilot Skill
 - PR #32: Streaming Voice Run persistence and Coordinator
 - PR #33: authenticated voice WebSocket transport
+- PR #34: browser AudioWorklet streaming voice experience
 
 ### Phase Status
 
@@ -47,7 +48,7 @@ Recent merged milestones:
 | 2     | Agent Core and Mock pipeline     | Complete                             |
 | 3     | Web Console                      | Complete                             |
 | 4     | Buffered real AI providers       | Accepted; deferred gaps tracked      |
-| 5     | Full-chain streaming voice       | PRs 1-7 complete; PR 8 next          |
+| 5     | Full-chain streaming voice       | PRs 1-8 complete; PR 9 next          |
 | 6     | Cross-platform audio devices     | Planned; requires Phase 5 acceptance |
 | 7     | Offline wake word                | Planned; requires Phase 6 acceptance |
 | 8     | Generic third-party MCP          | Planned; requires Phase 7 acceptance |
@@ -111,22 +112,22 @@ Recent merged milestones:
 
 ### Current implementation boundaries
 
-- Browser voice requests are buffered: recording completes and is normalized
-  before `/api/voice` executes the route.
-- Authenticated `/api/voice-stream` transport and all eight server-side Mock
-  role profiles are implemented. Browser AudioWorklet capture and playback are
-  the next work package and are not part of this merged-main baseline.
-- Alibaba speech adapters use WebSockets internally, but VoxMesh does not yet
-  expose an application-level streaming voice session.
+- Buffered browser voice remains available: recording completes and is
+  normalized before `/api/voice` executes the route.
+- Browser full-chain voice streaming uses AudioWorklet capture, bounded
+  16 kHz PCM input, authenticated `/api/voice-stream`, partial transcript and
+  tool state, and bounded ordered Web Audio playback. All eight Mock role
+  profiles are covered by deterministic transport integration tests.
+- Real streaming Chat and Alibaba streaming speech adapters remain future work;
+  unsupported Runtime Routes cannot activate full-chain streaming.
 - Native Multimodal is implemented with a deterministic Mock provider only.
 - The Logs page loads a durable `GET /api/logs` snapshot and merges
-  authenticated real-time log events. Application-level bidirectional voice
-  streaming is available at the server transport boundary but does not yet
-  have a merged browser client.
+  authenticated real-time log events.
 - Conversation Run lifecycle, cancellation, continuity, bounded durable
   history, retry, correlation, duration, and terminal-state inspection are
-  implemented for text Chat. Voice requests still use nullable run metadata
-  and do not yet expose cancellable or streaming voice sessions.
+  implemented for text Chat. Composed streaming voice persists terminal runs,
+  final transcript, and final assistant text while transient deltas and audio
+  remain in memory.
 - Device and physical-audio status contracts are implemented. The default
   adapter intentionally reports unavailable; discovery, selection, capture,
   playback, and macOS/Windows/Linux integration remain Phase 6 work.
