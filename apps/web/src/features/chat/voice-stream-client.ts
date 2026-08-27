@@ -87,6 +87,7 @@ export class DefaultBrowserVoiceStreamSession implements BrowserVoiceStreamSessi
   private nextClientControlSequence = 1;
   private assistantText = "";
   private processing: Promise<void> = Promise.resolve();
+  private started = false;
   private inputQueue: BoundedAsyncQueue<StreamingAudioChunk> | null = null;
   private inputPump: Promise<void> = Promise.resolve();
   private readonly pendingInputEnqueues = new Set<Promise<void>>();
@@ -106,6 +107,10 @@ export class DefaultBrowserVoiceStreamSession implements BrowserVoiceStreamSessi
   }
 
   public async start(): Promise<void> {
+    if (this.started) {
+      throw new Error("Voice streaming sessions cannot be restarted");
+    }
+    this.started = true;
     if (
       !supportsBrowserVoiceStream() &&
       (!this.options.createSocket || !this.options.createId)

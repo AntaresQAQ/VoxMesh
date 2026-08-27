@@ -160,6 +160,48 @@ describe("DefaultBrowserVoiceStreamSession", () => {
     expect(socket.readyState).toBe(FakeWebSocket.CLOSED);
   });
 
+  it("rejects attempts to restart a non-resumable session", async () => {
+    const socket = installFakeWebSocket();
+    const session = new DefaultBrowserVoiceStreamSession({
+      allowTools: false,
+      callbacks: callbacksMock(),
+      createCapture: () => ({
+        start: vi.fn(async () => undefined),
+        finish: vi.fn(async () => undefined),
+        cancel: vi.fn()
+      }),
+      createPlayback: () => ({
+        enqueue: vi.fn(async () => undefined),
+        finish: vi.fn(async () => undefined),
+        cancel: vi.fn()
+      }),
+      createSocket: () => socket,
+      createId: idSequence(
+        "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+        "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+      )
+    });
+    const started = session.start();
+    socket.open();
+    const start = parseStart(socket.sent[0]);
+    socket.serverControl({
+      version: 1,
+      type: "voice.ready",
+      sessionId: start.sessionId,
+      sequence: 0,
+      runId: start.runId,
+      toolMode: "disabled",
+      inputFormat: start.inputFormat,
+      profile: { stt: "streaming", chat: "streaming", tts: "streaming" }
+    });
+    await started;
+
+    await expect(session.start()).rejects.toThrow(
+      "Voice streaming sessions cannot be restarted"
+    );
+    session.cancel();
+  });
+
   it("cleans up an accepted session when capture initialization fails", async () => {
     const socket = installFakeWebSocket();
     const captureCancel = vi.fn();

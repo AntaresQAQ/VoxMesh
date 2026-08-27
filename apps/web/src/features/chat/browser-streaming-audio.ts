@@ -27,7 +27,8 @@ export interface StreamingAudioPlayback {
 /** Returns whether the browser exposes every API required for PCM streaming. */
 export function supportsBrowserStreamingVoice(): boolean {
   return Boolean(
-    typeof navigator.mediaDevices?.getUserMedia === "function" &&
+    typeof globalThis.navigator !== "undefined" &&
+    typeof globalThis.navigator.mediaDevices?.getUserMedia === "function" &&
     typeof globalThis.AudioContext === "function" &&
     typeof globalThis.AudioWorkletNode === "function" &&
     typeof globalThis.WebSocket === "function"
@@ -178,7 +179,17 @@ export class BrowserStreamingAudioPlayback implements StreamingAudioPlayback {
     ) {
       throw new Error("Browser playback queue limit was exceeded");
     }
-    const context = (this.context ??= new AudioContext());
+    let context = this.context;
+    if (!context) {
+      try {
+        context = new globalThis.AudioContext();
+      } catch (error) {
+        throw new Error("Browser streaming playback is not supported", {
+          cause: error
+        });
+      }
+      this.context = context;
+    }
     await context.resume();
     const samples = pcm16ToFloat32(chunk.data, chunk.format.channels);
     const buffer = context.createBuffer(

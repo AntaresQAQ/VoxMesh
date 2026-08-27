@@ -48,6 +48,13 @@ describe("browser streaming audio", () => {
     expect(supportsBrowserStreamingVoice()).toBe(false);
   });
 
+  it("reports unsupported environments without a navigator global", () => {
+    vi.stubGlobal("navigator", undefined);
+
+    expect(() => supportsBrowserStreamingVoice()).not.toThrow();
+    expect(supportsBrowserStreamingVoice()).toBe(false);
+  });
+
   it("reports unsupported browsers without AudioContext", () => {
     vi.stubGlobal("AudioContext", undefined);
     vi.stubGlobal("AudioWorkletNode", class {});
@@ -62,6 +69,30 @@ describe("browser streaming audio", () => {
 
   it("rejects playback when AudioContext is present but not constructible", async () => {
     vi.stubGlobal("AudioContext", {});
+    const playback = new BrowserStreamingAudioPlayback();
+
+    await expect(
+      playback.enqueue({
+        sequence: 1,
+        format: {
+          encoding: "pcm16le",
+          sampleRate: 16_000,
+          channels: 1
+        },
+        data: new Uint8Array(640)
+      })
+    ).rejects.toThrow("Browser streaming playback is not supported");
+  });
+
+  it("normalizes AudioContext constructor failures during playback", async () => {
+    vi.stubGlobal(
+      "AudioContext",
+      class {
+        public constructor() {
+          throw new Error("Audio device initialization failed");
+        }
+      }
+    );
     const playback = new BrowserStreamingAudioPlayback();
 
     await expect(
