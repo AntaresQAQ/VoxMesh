@@ -204,6 +204,77 @@ describe("browser streaming audio", () => {
     );
   });
 
+  it("stops the microphone when AudioContext construction fails", async () => {
+    const stop = vi.fn();
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: {
+        getUserMedia: vi.fn(async () => ({
+          getTracks: () => [{ stop }]
+        }))
+      }
+    });
+    vi.stubGlobal(
+      "AudioContext",
+      class {
+        public constructor() {
+          throw new Error("Audio context construction failed");
+        }
+      }
+    );
+    vi.stubGlobal("AudioWorkletNode", class {});
+    vi.stubGlobal("WebSocket", class {});
+    const capture = new BrowserStreamingAudioCapture();
+
+    await expect(
+      capture.start({ onChunk: vi.fn(), onLevel: vi.fn() })
+    ).rejects.toThrow("Audio context construction failed");
+
+    expect(stop).toHaveBeenCalledOnce();
+  });
+
+  it("closes the context and microphone when module URL creation fails", async () => {
+    const stop = vi.fn();
+    const close = vi.fn(async () => undefined);
+    const context = {
+      state: "running",
+      close
+    };
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: {
+        getUserMedia: vi.fn(async () => ({
+          getTracks: () => [{ stop }]
+        }))
+      }
+    });
+    vi.stubGlobal(
+      "AudioContext",
+      class {
+        public constructor() {
+          return context;
+        }
+      }
+    );
+    vi.stubGlobal("AudioWorkletNode", class {});
+    vi.stubGlobal("WebSocket", class {});
+    vi.stubGlobal("URL", {
+      ...URL,
+      createObjectURL: vi.fn(() => {
+        throw new Error("Module URL creation failed");
+      }),
+      revokeObjectURL: vi.fn()
+    });
+    const capture = new BrowserStreamingAudioCapture();
+
+    await expect(
+      capture.start({ onChunk: vi.fn(), onLevel: vi.fn() })
+    ).rejects.toThrow("Module URL creation failed");
+
+    expect(stop).toHaveBeenCalledOnce();
+    expect(close).toHaveBeenCalledOnce();
+  });
+
   it("cleans up when capture is cancelled during worklet startup", async () => {
     let resolveModule: () => void = () => undefined;
     const stop = vi.fn();

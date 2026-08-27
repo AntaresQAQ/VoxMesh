@@ -66,11 +66,13 @@ export class BrowserStreamingAudioCapture implements StreamingAudioCapture {
       stopStream(stream);
       throw new Error("Streaming audio capture was cancelled");
     }
-    const context = new AudioContext();
-    const moduleUrl = URL.createObjectURL(
-      new Blob([workletSource()], { type: "text/javascript" })
-    );
+    let context: AudioContext | null = null;
+    let moduleUrl: string | null = null;
     try {
+      context = new AudioContext();
+      moduleUrl = URL.createObjectURL(
+        new Blob([workletSource()], { type: "text/javascript" })
+      );
       await context.audioWorklet.addModule(moduleUrl);
       await context.resume();
       if (generation !== this.generation) {
@@ -104,14 +106,16 @@ export class BrowserStreamingAudioCapture implements StreamingAudioCapture {
       this.moduleUrl = moduleUrl;
     } catch (error) {
       stopStream(stream);
-      URL.revokeObjectURL(moduleUrl);
-      try {
-        await context.close();
-      } catch (closeError) {
-        console.error(
-          "Failed to close streaming audio context after startup failure",
-          closeError
-        );
+      if (moduleUrl) URL.revokeObjectURL(moduleUrl);
+      if (context && context.state !== "closed") {
+        try {
+          await context.close();
+        } catch (closeError) {
+          console.error(
+            "Failed to close streaming audio context after startup failure",
+            closeError
+          );
+        }
       }
       throw error;
     }
