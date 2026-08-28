@@ -19,9 +19,10 @@ This document defines the Phase 5 PR 3 Streaming Agent Core:
 - cancellation, event, text, tool-argument, and tool-count bounds
 - one exact final assistant result
 
-No TTS segmenter, voice coordinator, WebSocket endpoint, Runtime Routing
-change, browser streaming UI, or real Streaming LLM adapter is implemented by
-this work.
+Azure OpenAI and OpenAI-compatible provider mappings are documented in
+[Streaming Chat Adapters](./STREAMING_CHAT_ADAPTERS.md). TTS segmentation,
+voice coordination, Runtime Routing, transport, and browser behavior remain
+separate layers.
 
 ## 2. Runtime Interface
 

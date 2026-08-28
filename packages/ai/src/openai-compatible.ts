@@ -1,4 +1,9 @@
-import type { LlmProvider, LlmResponse } from "@voxmesh/agent-core";
+import type {
+  LlmProvider,
+  LlmResponse,
+  StreamingLlmEvent,
+  StreamingLlmProvider
+} from "@voxmesh/agent-core";
 import type { AgentMessage, ToolDefinition } from "@voxmesh/shared";
 
 import {
@@ -6,6 +11,10 @@ import {
   parseOpenAiChatResponse,
   providerErrorDetail
 } from "./openai-chat.js";
+import {
+  streamOpenAiChatCompletion,
+  type Fetcher
+} from "./openai-streaming-chat.js";
 
 export interface OpenAiCompatibleConfig {
   baseUrl: string;
@@ -14,11 +23,6 @@ export interface OpenAiCompatibleConfig {
   timeoutMs?: number;
   maxOutputTokens?: number;
 }
-
-type Fetcher = (
-  input: string | URL | Request,
-  init?: RequestInit
-) => Promise<Response>;
 
 /** Generic Chat Completions adapter for OpenAI-compatible providers. */
 export class OpenAiCompatibleProvider implements LlmProvider {
@@ -55,6 +59,7 @@ export class OpenAiCompatibleProvider implements LlmProvider {
         )}`
       );
     }
+
     return parseOpenAiChatResponse(
       (await response.json()) as unknown,
       "OpenAI-compatible provider"
@@ -62,6 +67,42 @@ export class OpenAiCompatibleProvider implements LlmProvider {
   }
 
   private url(): string {
-    return `${this.config.baseUrl.replace(/\/+$/, "")}/chat/completions`;
+    return compatibleUrl(this.config);
   }
+}
+
+/** Streaming Chat Completions adapter for OpenAI-compatible providers. */
+export class OpenAiCompatibleStreamingProvider implements StreamingLlmProvider {
+  public constructor(
+    private readonly config: OpenAiCompatibleConfig,
+    private readonly fetcher: Fetcher = globalThis.fetch
+  ) {}
+
+  public stream(input: {
+    messages: AgentMessage[];
+    tools: ToolDefinition[];
+    signal: AbortSignal;
+  }): AsyncIterable<StreamingLlmEvent> {
+    return streamOpenAiChatCompletion({
+      url: compatibleUrl(this.config),
+      headers: {
+        authorization: ["Bearer", this.config.apiKey].join(" "),
+        "content-type": "application/json"
+      },
+      providerName: "OpenAI-compatible provider",
+      model: this.config.model,
+      ...(this.config.timeoutMs === undefined
+        ? {}
+        : { timeoutMs: this.config.timeoutMs }),
+      ...(this.config.maxOutputTokens === undefined
+        ? {}
+        : { maxOutputTokens: this.config.maxOutputTokens }),
+      ...input,
+      fetcher: this.fetcher
+    });
+  }
+}
+
+function compatibleUrl(config: OpenAiCompatibleConfig): string {
+  return `${config.baseUrl.replace(/\/+$/, "")}/chat/completions`;
 }
