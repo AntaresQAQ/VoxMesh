@@ -164,7 +164,23 @@ The TTS adapter:
 The current composed voice API remains request/response based. Browser
 recording is normalized to mono 16 kHz PCM16 WAV after recording, then the
 buffered audio is submitted through the WebSocket adapter. True microphone
-streaming while the user is speaking is a separate future enhancement.
+streaming uses separate provider-independent Streaming STT/TTS contracts.
+
+### Application-level streaming speech
+
+The Fun-ASR Streaming STT adapter accepts ordered mono 16 kHz PCM16LE frames
+while capture is active. It emits bounded partial sentence text and one final
+transcript after `task-finished`.
+
+The Qwen-Audio-TTS/CosyVoice Streaming TTS adapter sends one stable text
+segment and emits ordered mono 24 kHz PCM16LE frames plus exact aggregate
+metadata. Both sessions fail closed on malformed ordering, provider timeout,
+caller cancellation, backpressure, or premature socket closure.
+
+The adapters are implemented but not registered in runtime composition.
+Role-specific verification and route activation must qualify the exact model
+and configuration before use. Unsupported routes do not fall back to buffered
+speech.
 
 ## 5. Security
 
