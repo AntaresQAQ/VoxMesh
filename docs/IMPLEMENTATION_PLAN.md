@@ -11,8 +11,8 @@ This document is the project-visible implementation roadmap. It does not authori
 
 Last updated: 2026-08-28 (UTC+08:00)
 
-Implementation baseline: merged `main` through PR #36
-(`feat: stream Alibaba speech`).
+Implementation baseline: merged `main` through PR #35
+(`feat: stream compatible Chat completions`).
 
 Recent merged milestones:
 
@@ -40,7 +40,6 @@ Recent merged milestones:
 - PR #33: authenticated voice WebSocket transport
 - PR #34: browser AudioWorklet streaming voice experience
 - PR #35: Azure/OpenAI-compatible Streaming Chat adapters
-- PR #36: Alibaba Streaming Speech adapters
 
 ### Phase Status
 
@@ -50,7 +49,7 @@ Recent merged milestones:
 | 2     | Agent Core and Mock pipeline     | Complete                             |
 | 3     | Web Console                      | Complete                             |
 | 4     | Buffered real AI providers       | Accepted; deferred gaps tracked      |
-| 5     | Full-chain streaming voice       | PRs 1-10 complete; PR 11 next        |
+| 5     | Full-chain streaming voice       | PRs 1-9 complete; PR 10 next         |
 | 6     | Cross-platform audio devices     | Planned; requires Phase 5 acceptance |
 | 7     | Offline wake word                | Planned; requires Phase 6 acceptance |
 | 8     | Generic third-party MCP          | Planned; requires Phase 7 acceptance |
@@ -120,9 +119,10 @@ Recent merged milestones:
   16 kHz PCM input, authenticated `/api/voice-stream`, partial transcript and
   tool state, and bounded ordered Web Audio playback. All eight Mock role
   profiles are covered by deterministic transport integration tests.
-- Azure/OpenAI-compatible Streaming Chat and Alibaba Streaming Speech adapters
-  are implemented but remain unregistered until capability verification;
-  unsupported Runtime Routes cannot activate full-chain streaming.
+- Azure/OpenAI-compatible Streaming Chat adapters are implemented but remain
+  unregistered until capability verification. Alibaba streaming speech
+  adapters are the next work package; unsupported Runtime Routes cannot
+  activate full-chain streaming.
 - Native Multimodal is implemented with a deterministic Mock provider only.
 - The Logs page loads a durable `GET /api/logs` snapshot and merges
   authenticated real-time log events.
