@@ -589,9 +589,11 @@ class AlibabaStreamingTaskConnection {
     this.terminal = true;
     this.cleanup();
     const error =
-      cause instanceof DOMException && cause.name === "AbortError"
+      cause instanceof BoundedQueueError && cause.code === "CANCELLED"
         ? cause
-        : new Error("Alibaba Model Studio streaming task failed");
+        : cause instanceof DOMException && cause.name === "AbortError"
+          ? cause
+          : new Error("Alibaba Model Studio streaming task failed");
     this.rejectReady(error);
     try {
       this.options.onFailure(error);

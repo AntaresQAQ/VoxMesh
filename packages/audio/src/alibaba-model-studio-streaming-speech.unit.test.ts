@@ -314,6 +314,26 @@ describe("Alibaba Model Studio streaming speech adapters", () => {
     expect(socket.closeCount).toBe(1);
   });
 
+  it("preserves explicit session-close cancellation semantics", async () => {
+    const socket = new StreamingAlibabaSocket("stt");
+    const session = await new AlibabaModelStudioStreamingSpeechToTextProvider(
+      sttConfig,
+      createFactory(socket).create
+    ).startSession({
+      format: { encoding: "pcm16le", sampleRate: 16_000, channels: 1 },
+      signal: new AbortController().signal
+    });
+    const next = session[Symbol.asyncIterator]().next();
+    const cancelled = expect(next).rejects.toMatchObject({
+      code: "CANCELLED"
+    });
+
+    await session.close();
+
+    await cancelled;
+    expect(socket.closeCount).toBe(1);
+  });
+
   it("times out setup and rejects malformed TTS audio", async () => {
     vi.useFakeTimers();
     const waiting = new StreamingAlibabaSocket("waiting");
