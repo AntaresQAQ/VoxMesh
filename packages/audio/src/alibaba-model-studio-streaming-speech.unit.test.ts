@@ -85,9 +85,12 @@ describe("Alibaba Model Studio streaming speech adapters", () => {
       }
     });
     expect(factory.options.headers).toMatchObject({
-      Authorization: ["Bearer", sttConfig.apiKey].join(" "),
+      Authorization: "******",
       "User-Agent": "VoxMesh"
     });
+    expect(factory.authorizationAtCreation).toBe(
+      ["Bearer", sttConfig.apiKey].join(" ")
+    );
     expect(socket.closeCount).toBe(1);
   });
 
@@ -347,14 +350,18 @@ describe("Alibaba Model Studio streaming speech adapters", () => {
 function createFactory(socket: StreamingAlibabaSocket): {
   create: AlibabaWebSocketFactory;
   options: ClientOptions;
+  authorizationAtCreation: string | undefined;
 } {
   const result: {
     create: AlibabaWebSocketFactory;
     options: ClientOptions;
+    authorizationAtCreation: string | undefined;
   } = {
     options: {},
+    authorizationAtCreation: undefined,
     create: (_url, options) => {
       result.options = options;
+      result.authorizationAtCreation = options.headers?.Authorization;
       queueMicrotask(() => socket.emit("open"));
       return socket;
     }

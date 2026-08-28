@@ -37,12 +37,19 @@ export function createAlibabaWebSocket(
   endpoint: string,
   apiKey: string
 ): AlibabaWebSocket {
-  return createSocket(endpoint, {
+  const options: ClientOptions = {
     headers: {
       Authorization: ["Bearer", apiKey].join(" "),
       "User-Agent": "VoxMesh"
     }
-  });
+  };
+  try {
+    return createSocket(endpoint, options);
+  } finally {
+    // The factory needs the credential synchronously, but retained options
+    // must not keep a readable copy after socket construction returns.
+    if (options.headers) options.headers.Authorization = "******";
+  }
 }
 
 export function alibabaTaskHeader(action: string, taskId: string) {

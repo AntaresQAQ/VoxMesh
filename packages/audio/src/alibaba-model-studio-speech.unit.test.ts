@@ -92,9 +92,10 @@ describe("Alibaba Model Studio speech adapters", () => {
     ).resolves.toEqual({ text: "你好 世界", language: "zh" });
 
     expect(factory.options.headers).toMatchObject({
-      Authorization: "Bearer secret",
+      Authorization: "******",
       "User-Agent": "VoxMesh"
     });
+    expect(factory.authorizationAtCreation).toBe("Bearer secret");
     expect(socket.runTask).toMatchObject({
       payload: {
         task_group: "audio",
@@ -192,14 +193,18 @@ describe("Alibaba Model Studio speech adapters", () => {
 function createFactory(socket: FakeAlibabaSocket): {
   create: AlibabaWebSocketFactory;
   options: ClientOptions;
+  authorizationAtCreation: string | undefined;
 } {
   const result: {
     create: AlibabaWebSocketFactory;
     options: ClientOptions;
+    authorizationAtCreation: string | undefined;
   } = {
     options: {},
+    authorizationAtCreation: undefined,
     create: (_url, options) => {
       result.options = options;
+      result.authorizationAtCreation = options.headers?.Authorization;
       queueMicrotask(() => socket.emit("open"));
       return socket;
     }
