@@ -43,18 +43,18 @@ Recent merged milestones:
 
 ### Phase Status
 
-| Phase | Scope                            | Status                               |
-| ----- | -------------------------------- | ------------------------------------ |
-| 1     | Project skeleton and secure base | Complete                             |
-| 2     | Agent Core and Mock pipeline     | Complete                             |
-| 3     | Web Console                      | Complete                             |
-| 4     | Buffered real AI providers       | Accepted; deferred gaps tracked      |
-| 5     | Full-chain streaming voice       | PRs 1-9 complete; PR 10 next         |
-| 6     | Cross-platform audio devices     | Planned; requires Phase 5 acceptance |
-| 7     | Offline wake word                | Planned; requires Phase 6 acceptance |
-| 8     | Generic third-party MCP          | Planned; requires Phase 7 acceptance |
-| 9     | Scripted deployment and NanoPi   | Planned; requires Phase 8 acceptance |
-| Gate  | Final MVP acceptance and release | Pending                              |
+| Phase | Scope                            | Status                                        |
+| ----- | -------------------------------- | --------------------------------------------- |
+| 1     | Project skeleton and secure base | Complete                                      |
+| 2     | Agent Core and Mock pipeline     | Complete                                      |
+| 3     | Web Console                      | Complete                                      |
+| 4     | Buffered real AI providers       | Accepted; deferred gaps tracked               |
+| 5     | Full-chain streaming voice       | PRs 1-9 merged; PR 10 implemented; PR 11 next |
+| 6     | Cross-platform audio devices     | Planned; requires Phase 5 acceptance          |
+| 7     | Offline wake word                | Planned; requires Phase 6 acceptance          |
+| 8     | Generic third-party MCP          | Planned; requires Phase 7 acceptance          |
+| 9     | Scripted deployment and NanoPi   | Planned; requires Phase 8 acceptance          |
+| Gate  | Final MVP acceptance and release | Pending                                       |
 
 ### Completed foundation and vertical slices
 
@@ -119,10 +119,10 @@ Recent merged milestones:
   16 kHz PCM input, authenticated `/api/voice-stream`, partial transcript and
   tool state, and bounded ordered Web Audio playback. All eight Mock role
   profiles are covered by deterministic transport integration tests.
-- Azure/OpenAI-compatible Streaming Chat adapters are implemented but remain
-  unregistered until capability verification. Alibaba streaming speech
-  adapters are the next work package; unsupported Runtime Routes cannot
-  activate full-chain streaming.
+- Azure/OpenAI-compatible Streaming Chat and Alibaba Streaming Speech adapter
+  implementations are complete but remain unregistered until capability
+  verification; unsupported Runtime Routes cannot activate full-chain
+  streaming.
 - Native Multimodal is implemented with a deterministic Mock provider only.
 - The Logs page loads a durable `GET /api/logs` snapshot and merges
   authenticated real-time log events.
