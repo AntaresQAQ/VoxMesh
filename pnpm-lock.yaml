@@ -154,6 +154,9 @@ importers:
       '@voxmesh/shared':
         specifier: workspace:*
         version: link:../shared
+      eventsource-parser:
+        specifier: 4.0.0
+        version: 4.0.0
 
   packages/audio:
     dependencies:
@@ -1579,6 +1582,10 @@ packages:
   esutils@2.0.3:
     resolution: {integrity: sha1-dNLrTeC42hKTcRkQ1Qd1ubcQ72Q=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/esutils/-/esutils-2.0.3.tgz}
     engines: {node: '>=0.10.0'}
+
+  eventsource-parser@4.0.0:
+    resolution: {integrity: sha1-oBiEe9LaPhM65R0fCAiipRj/o6w=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/eventsource-parser/-/eventsource-parser-4.0.0.tgz}
+    engines: {node: '>=22.12'}
 
   expand-template@2.0.3:
     resolution: {integrity: sha1-bhSz/O4POmNA7LV9LokYaSBSpHw=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/expand-template/-/expand-template-2.0.3.tgz}
@@ -4228,6 +4235,8 @@ snapshots:
       '@types/estree': 1.0.9
 
   esutils@2.0.3: {}
+
+  eventsource-parser@4.0.0: {}
 
   expand-template@2.0.3: {}
 

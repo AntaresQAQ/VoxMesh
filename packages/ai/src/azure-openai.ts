@@ -1,4 +1,9 @@
-import type { LlmProvider, LlmResponse } from "@voxmesh/agent-core";
+import type {
+  LlmProvider,
+  LlmResponse,
+  StreamingLlmEvent,
+  StreamingLlmProvider
+} from "@voxmesh/agent-core";
 import type { AgentMessage, ToolDefinition } from "@voxmesh/shared";
 
 import {
@@ -6,18 +11,19 @@ import {
   parseOpenAiChatResponse,
   providerErrorDetail
 } from "./openai-chat.js";
+import {
+  streamOpenAiChatCompletion,
+  type Fetcher
+} from "./openai-streaming-chat.js";
 
 export interface AzureOpenAiConfig {
   endpoint: string;
   deployment: string;
   apiVersion: string;
   apiKey: string;
+  timeoutMs?: number;
+  maxOutputTokens?: number;
 }
-
-type Fetcher = (
-  input: string | URL | Request,
-  init?: RequestInit
-) => Promise<Response>;
 
 export class AzureOpenAiProvider implements LlmProvider {
   public constructor(
@@ -48,6 +54,7 @@ export class AzureOpenAiProvider implements LlmProvider {
         )}`
       );
     }
+
     return parseOpenAiChatResponse(
       (await response.json()) as unknown,
       "Azure OpenAI"
@@ -55,11 +62,44 @@ export class AzureOpenAiProvider implements LlmProvider {
   }
 
   private url(): string {
-    const endpoint = this.config.endpoint.replace(/\/+$/, "");
-    return `${endpoint}/openai/deployments/${encodeURIComponent(
-      this.config.deployment
-    )}/chat/completions?api-version=${encodeURIComponent(
-      this.config.apiVersion
-    )}`;
+    return azureUrl(this.config);
   }
+}
+
+/** Streaming Chat Completions adapter for Azure OpenAI deployments. */
+export class AzureOpenAiStreamingProvider implements StreamingLlmProvider {
+  public constructor(
+    private readonly config: AzureOpenAiConfig,
+    private readonly fetcher: Fetcher = globalThis.fetch
+  ) {}
+
+  public stream(input: {
+    messages: AgentMessage[];
+    tools: ToolDefinition[];
+    signal: AbortSignal;
+  }): AsyncIterable<StreamingLlmEvent> {
+    return streamOpenAiChatCompletion({
+      url: azureUrl(this.config),
+      headers: {
+        "api-key": this.config.apiKey,
+        "content-type": "application/json"
+      },
+      providerName: "Azure OpenAI",
+      ...(this.config.timeoutMs === undefined
+        ? {}
+        : { timeoutMs: this.config.timeoutMs }),
+      ...(this.config.maxOutputTokens === undefined
+        ? {}
+        : { maxOutputTokens: this.config.maxOutputTokens }),
+      ...input,
+      fetcher: this.fetcher
+    });
+  }
+}
+
+function azureUrl(config: AzureOpenAiConfig): string {
+  const endpoint = config.endpoint.replace(/\/+$/, "");
+  return `${endpoint}/openai/deployments/${encodeURIComponent(
+    config.deployment
+  )}/chat/completions?api-version=${encodeURIComponent(config.apiVersion)}`;
 }

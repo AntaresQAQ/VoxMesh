@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@voxmesh/agent-core": "workspace:*",
-    "@voxmesh/shared": "workspace:*"
+    "@voxmesh/shared": "workspace:*",
+    "eventsource-parser": "4.0.0"
   }
 }

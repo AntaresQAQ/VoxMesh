@@ -517,6 +517,18 @@ Acceptance:
 - credentials/provider payloads are redacted
 - adapter registration remains disabled until route verification succeeds
 
+Implementation status:
+
+- implemented as the Phase 5 compatible Streaming Chat adapter work package
+- Azure OpenAI and generic OpenAI-compatible Chat Completions use `stream:true`
+- `eventsource-parser` 4.x provides bounded SSE parsing across arbitrary UTF-8
+  and multiline-data boundaries
+- text, fragmented tools, usage, finish reasons, provider failures, timeouts,
+  cancellation, and body cleanup map to the shared Streaming LLM contract
+- Alibaba Model Studio compatible Chat is covered through the generic adapter
+- server registration remains intentionally unavailable until PR 11 verifies
+  and activates the exact route/model capability
+
 ### PR 10 - Alibaba Streaming Speech Adapters
 
 Suggested title: `feat: stream Alibaba speech`

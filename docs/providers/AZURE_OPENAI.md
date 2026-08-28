@@ -4,13 +4,19 @@
 
 ## 1. Supported Integrations
 
-VoxMesh currently supports non-streaming Azure OpenAI deployments for:
+VoxMesh currently supports buffered Azure OpenAI deployments for:
 
 - Chat and tool calling
 - Speech to text with `gpt-4o-mini-transcribe` or a compatible deployment
 - Text to speech with `gpt-4o-mini-tts` or a compatible deployment
 
 Azure model availability varies by region. Deploy the models in Microsoft Foundry before configuring VoxMesh.
+
+A Streaming Chat adapter is implemented for Chat Completions SSE responses,
+including text, fragmented tool calls, usage, finish reasons, cancellation,
+timeouts, and safe errors. Runtime registration remains disabled until
+streaming capability verification and route activation are implemented. The
+adapter does not silently replace buffered Chat.
 
 ## 2. LLM Configuration
 
