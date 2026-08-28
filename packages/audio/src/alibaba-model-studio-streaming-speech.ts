@@ -745,7 +745,8 @@ function validateInputChunk(
     !sameFormat(audio.format, STT_FORMAT) ||
     audio.data.byteLength === 0 ||
     audio.data.byteLength % (STT_FORMAT.channels * 2) !== 0 ||
-    audio.data.byteLength > VOICE_STREAM_LIMITS.maxBinaryMessageBytes
+    audio.data.byteLength + VOICE_STREAM_BINARY_HEADER_BYTES >
+      VOICE_STREAM_LIMITS.maxBinaryMessageBytes
   ) {
     throw new Error("Alibaba Streaming STT received invalid PCM audio");
   }

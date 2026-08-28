@@ -179,6 +179,24 @@ describe("Alibaba Model Studio streaming speech adapters", () => {
       "Alibaba Streaming STT failed"
     );
     expect(socket.closeCount).toBe(1);
+
+    const oversizedSocket = new StreamingAlibabaSocket("stt");
+    const oversized = await new AlibabaModelStudioStreamingSpeechToTextProvider(
+      sttConfig,
+      createFactory(oversizedSocket).create
+    ).startSession({
+      format: { encoding: "pcm16le", sampleRate: 16_000, channels: 1 },
+      signal: new AbortController().signal
+    });
+    await expect(
+      oversized.write(
+        inputChunk(
+          1,
+          Array.from({ length: 64 * 1024 }, () => 0)
+        )
+      )
+    ).rejects.toThrow("invalid PCM audio");
+    expect(oversizedSocket.closeCount).toBe(1);
   });
 
   it("validates timeout and redacts socket construction failures", async () => {
