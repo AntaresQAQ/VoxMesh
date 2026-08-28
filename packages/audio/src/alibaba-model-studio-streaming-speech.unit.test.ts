@@ -6,9 +6,10 @@ import {
   AlibabaModelStudioStreamingSpeechToTextProvider,
   AlibabaModelStudioStreamingTextToSpeechProvider
 } from "./alibaba-model-studio-streaming-speech.js";
-import type {
-  AlibabaWebSocket,
-  AlibabaWebSocketFactory
+import {
+  parseAlibabaEvent,
+  type AlibabaWebSocket,
+  type AlibabaWebSocketFactory
 } from "./alibaba-model-studio-websocket.js";
 import type {
   StreamingSynthesisEvent,
@@ -38,6 +39,12 @@ afterEach(() => {
 });
 
 describe("Alibaba Model Studio streaming speech adapters", () => {
+  it("reports the missing provider event field precisely", () => {
+    expect(() =>
+      parseAlibabaEvent(JSON.stringify({ header: { event: "task-started" } }))
+    ).toThrow("Alibaba response requires payload");
+  });
+
   it("streams ordered Fun-ASR partial and final transcripts", async () => {
     const socket = new StreamingAlibabaSocket("stt");
     const factory = createFactory(socket);

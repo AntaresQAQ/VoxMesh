@@ -68,7 +68,7 @@ export function parseAlibabaEvent(value: string): AlibabaEvent {
       errorMessage:
         typeof header.error_message === "string" ? header.error_message : null
     },
-    payload: readAlibabaObject(root.payload)
+    payload: readAlibabaObject(root, "payload")
   };
 }
 
