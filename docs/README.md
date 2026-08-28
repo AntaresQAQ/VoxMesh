@@ -39,6 +39,7 @@ links back to the governing MVP and development rules.
 - [Bounded Streaming Primitives](./architecture/STREAMING_PRIMITIVES.md)
 - [Streaming Agent Core](./architecture/STREAMING_AGENT.md)
 - [Streaming Chat Adapters](./architecture/STREAMING_CHAT_ADAPTERS.md)
+- [Alibaba Streaming Speech Adapters](./architecture/ALIBABA_STREAMING_SPEECH.md)
 - [Streaming TTS Segmentation](./architecture/STREAMING_TTS_SEGMENTATION.md)
 - [Streaming Voice Coordinator](./architecture/STREAMING_VOICE_COORDINATOR.md)
 - [Authenticated Voice-Stream Transport](./architecture/VOICE_STREAM_TRANSPORT.md)

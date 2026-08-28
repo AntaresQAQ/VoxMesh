@@ -557,6 +557,21 @@ Acceptance:
 - no provider credential or payload reaches logs/evidence
 - buffered Alibaba speech remains unchanged
 
+Implementation status:
+
+- implemented as the Phase 5 Alibaba Streaming Speech adapter work package
+- Fun-ASR accepts ordered mono 16 kHz PCM16LE and emits bounded partials plus
+  exactly one final transcript
+- Qwen-Audio-TTS/CosyVoice emits ordered mono 24 kHz PCM16LE and exact
+  aggregate completion metadata
+- shared task state validates startup, finish, terminal ordering, limits,
+  provider timeout, caller cancellation, queue backpressure, and socket cleanup
+- provider errors remain safe and exclude credentials, payloads, and close
+  reasons
+- buffered Alibaba speech remains unchanged
+- server registration remains intentionally unavailable until PR 11 verifies
+  and activates the exact route/model capability
+
 ### PR 11 - Streaming Verification and Route Activation
 
 Suggested title: `feat: verify streaming route capabilities`

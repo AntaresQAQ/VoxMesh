@@ -28,6 +28,8 @@ VoxMesh has an initial Mock Mode vertical slice for development and architecture
 - generic OpenAI-compatible LLM configuration, including Alibaba Cloud Model Studio
 - Azure OpenAI and OpenAI-compatible Streaming Chat adapters, pending
   capability-verified runtime registration
+- Alibaba Fun-ASR and Qwen/CosyVoice Streaming Speech adapters, pending
+  capability-verified runtime registration
 - English and Simplified Chinese Web Console localization
 - browser-language detection and persisted language selection
 - Light, Dark, and System appearance modes
