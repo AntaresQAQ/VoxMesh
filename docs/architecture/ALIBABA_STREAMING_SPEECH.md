@@ -10,10 +10,11 @@ Streaming STT and Qwen-Audio-TTS/CosyVoice Streaming TTS. Both adapters
 implement provider-independent contracts from `@voxmesh/audio`; no Alibaba
 type or WebSocket event enters Agent Core.
 
-This work package does not register the adapters in the server composition
-root. Runtime use remains unavailable until role-specific capability
-verification and route activation are implemented. Existing buffered Alibaba
-speech adapters remain available and behaviorally unchanged.
+The server registers both adapters as available Streaming STT/TTS surfaces.
+Runtime use still requires explicit model declaration, role-specific successful
+verification for the current configuration fingerprint, and route activation.
+Existing buffered Alibaba speech adapters remain available and behaviorally
+unchanged.
 
 ## Shared WebSocket Boundary
 
@@ -101,11 +102,11 @@ The package exports:
 - `AlibabaModelStudioStreamingSpeechToTextProvider`
 - `AlibabaModelStudioStreamingTextToSpeechProvider`
 
-`apps/server/src/streaming-voice-providers.ts` intentionally continues to
-return unavailable real-provider streaming adapters. Phase 5 route
-verification must open and complete provider setup for the exact model and
-configuration fingerprint before registering either adapter. There is no
-silent fallback to buffered speech.
+`apps/server/src/streaming-voice-providers.ts` registers both real adapters.
+Route testing opens a Fun-ASR task for STT and completes a bounded TTS stream,
+then records only the corresponding role verification while the configuration
+fingerprint remains current. Activation and provider resolution recheck the
+record. There is no silent fallback to buffered speech.
 
 ## Deterministic Testing
 

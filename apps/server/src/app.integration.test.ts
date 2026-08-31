@@ -31,6 +31,45 @@ afterEach(() => {
 });
 
 describe("server API", () => {
+  it("registers production streaming transport, browser, and adapters", async () => {
+    const app = await buildServer({ config });
+    try {
+      const setup = await app.inject({
+        method: "POST",
+        url: "/api/setup",
+        payload: { password: "a secure administrator password" }
+      });
+      expect(setup.statusCode).toBe(201);
+      const login = await app.inject({
+        method: "POST",
+        url: "/api/auth/login",
+        payload: { password: "a secure administrator password" }
+      });
+      const setCookie = login.headers["set-cookie"];
+      const cookie = (
+        Array.isArray(setCookie) ? setCookie[0] : setCookie
+      )?.split(";")[0];
+
+      const routing = await app.inject({
+        method: "GET",
+        url: "/api/runtime-routing",
+        headers: { cookie }
+      });
+
+      expect(
+        routing.json<RuntimeRoutingSummary>().streamingAvailability
+      ).toEqual({
+        transportAvailable: true,
+        browserClientAvailable: true,
+        sttProviderIds: ["mock", "alibaba-model-studio"],
+        chatProviderIds: ["mock", "azure-openai", "openai-compatible"],
+        ttsProviderIds: ["mock", "alibaba-model-studio"]
+      });
+    } finally {
+      await app.close();
+    }
+  });
+
   it("completes setup, login, and a tool-assisted chat", async () => {
     store = new VoxMeshStore(":memory:");
     const app = await buildServer({ config, store });

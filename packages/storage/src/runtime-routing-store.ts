@@ -107,6 +107,12 @@ interface ActiveRuntimeRouteRow {
 }
 
 type RuntimeRouteRole = "stt" | "chat" | "tts" | "native";
+type StreamingRouteRole = Exclude<RuntimeRouteRole, "native">;
+
+interface ModelStreamingVerificationRow {
+  model_deployment_id: string;
+  role: StreamingRouteRole;
+}
 
 export interface RuntimeRouteVerificationSnapshot {
   routeId: string;
@@ -116,6 +122,7 @@ export interface RuntimeRouteVerificationSnapshot {
     modelId: string;
     connectionId: string;
     verificationToken: string;
+    streamingEnabled: boolean;
   }>;
 }
 
@@ -268,7 +275,8 @@ export class RuntimeRoutingStore {
           "text-input",
           "text-output",
           "tool-calling",
-          "non-streaming"
+          "non-streaming",
+          ...(llm.mode === "mock" ? (["streaming"] as const) : [])
         ],
         providerOptions: {
           timeoutMs: llm.timeoutMs,
@@ -296,7 +304,8 @@ export class RuntimeRoutingStore {
           "audio-input",
           "text-output",
           "transcription",
-          "non-streaming"
+          "non-streaming",
+          ...(speech.sttMode === "mock" ? (["streaming"] as const) : [])
         ],
         providerOptions: { language: speech.sttLanguage },
         verifiedByDefault: speech.sttMode === "mock",
@@ -328,7 +337,8 @@ export class RuntimeRoutingStore {
           "text-input",
           "audio-output",
           "speech-synthesis",
-          "non-streaming"
+          "non-streaming",
+          ...(speech.ttsMode === "mock" ? (["streaming"] as const) : [])
         ],
         providerOptions: {
           voice: speech.ttsVoice,
@@ -448,6 +458,17 @@ export class RuntimeRoutingStore {
          ORDER BY display_name, id`
       )
       .all() as ModelDeploymentRow[];
+    const streamingVerifications = this.database
+      .prepare(
+        `SELECT verification.model_deployment_id, verification.role
+         FROM model_streaming_verifications verification
+         JOIN model_deployments model
+           ON model.id = verification.model_deployment_id
+          AND model.configuration_fingerprint =
+              verification.configuration_fingerprint
+         ORDER BY verification.model_deployment_id, verification.role`
+      )
+      .all() as ModelStreamingVerificationRow[];
     const routes = this.database
       .prepare(
         `SELECT id, display_name, mode, stt_model_deployment_id,
@@ -470,7 +491,16 @@ export class RuntimeRoutingStore {
     }
     return {
       connections: connections.map(mapProviderConnection),
-      models: models.map(mapModelDeployment),
+      models: models.map((model) =>
+        mapModelDeployment(
+          model,
+          streamingVerifications
+            .filter(
+              (verification) => verification.model_deployment_id === model.id
+            )
+            .map((verification) => verification.role)
+        )
+      ),
       routes: routes.map(mapRuntimeRoute),
       activeRouteId: active.active_route_id,
       streamingAvailability: {
@@ -946,7 +976,8 @@ export class RuntimeRoutingStore {
       role,
       modelId,
       connectionId: this.getModel(modelId).connection_id,
-      verificationToken: this.modelVerificationToken(modelId)
+      verificationToken: this.modelVerificationToken(modelId),
+      streamingEnabled: routeStreamingEnabled(route, role)
     }));
     return {
       routeId: id,
@@ -1157,13 +1188,35 @@ export class RuntimeRoutingStore {
         const capabilities =
           capabilitiesByModel.get(assignment.modelId) ??
           new Set<ModelCapability>();
-        for (const capability of verifiedCapabilitiesForRole(assignment.role)) {
+        for (const capability of verifiedCapabilitiesForRole(
+          assignment.role,
+          assignment.streamingEnabled
+        )) {
           capabilities.add(capability);
         }
         capabilitiesByModel.set(assignment.modelId, capabilities);
       }
       for (const [modelId, capabilities] of capabilitiesByModel) {
         this.markCapabilitiesVerified(modelId, [...capabilities]);
+      }
+      const now = new Date().toISOString();
+      const markStreamingRole = this.database.prepare(
+        `INSERT INTO model_streaming_verifications (
+           model_deployment_id, role, configuration_fingerprint, verified_at
+         ) VALUES (?, ?, ?, ?)
+         ON CONFLICT(model_deployment_id, role) DO UPDATE SET
+           configuration_fingerprint = excluded.configuration_fingerprint,
+           verified_at = excluded.verified_at`
+      );
+      for (const assignment of snapshot.assignments) {
+        if (assignment.streamingEnabled && assignment.role !== "native") {
+          markStreamingRole.run(
+            assignment.modelId,
+            assignment.role,
+            this.getModel(assignment.modelId).configuration_fingerprint,
+            now
+          );
+        }
       }
     })();
   }
@@ -1302,13 +1355,13 @@ export class RuntimeRoutingStore {
         requireVerified
       );
       if (input.sttStreamingEnabled) {
-        this.requireStreamingCapability(stt, requireVerified);
+        this.requireStreamingCapability("stt", stt, requireVerified);
       }
       if (input.chatStreamingEnabled) {
-        this.requireStreamingCapability(chat, requireVerified);
+        this.requireStreamingCapability("chat", chat, requireVerified);
       }
       if (input.ttsStreamingEnabled) {
-        this.requireStreamingCapability(tts, requireVerified);
+        this.requireStreamingCapability("tts", tts, requireVerified);
       }
       if (requireVerified) {
         this.requireStreamingRuntimeAvailability(input, { stt, chat, tts });
@@ -1450,6 +1503,7 @@ export class RuntimeRoutingStore {
   }
 
   private requireStreamingCapability(
+    role: StreamingRouteRole,
     model: ModelDeploymentRow,
     requireVerified: boolean
   ): void {
@@ -1460,7 +1514,11 @@ export class RuntimeRoutingStore {
         `Model ${model.display_name} requires declared streaming capability`
       );
     }
-    if (requireVerified && !verified.includes("streaming")) {
+    if (
+      requireVerified &&
+      (!verified.includes("streaming") ||
+        !this.isStreamingRoleVerified(model, role))
+    ) {
       throw badRequest(
         `Model ${model.display_name} requires verified streaming capability`
       );
@@ -1590,9 +1648,34 @@ export class RuntimeRoutingStore {
   private resetConnectionVerification(connectionId: string): void {
     this.database
       .prepare(
+        `DELETE FROM model_streaming_verifications
+         WHERE model_deployment_id IN (
+           SELECT id FROM model_deployments WHERE connection_id = ?
+         )`
+      )
+      .run(connectionId);
+    this.database
+      .prepare(
         "UPDATE model_deployments SET verified_capabilities = '[]', updated_at = ? WHERE connection_id = ?"
       )
       .run(new Date().toISOString(), connectionId);
+  }
+
+  private isStreamingRoleVerified(
+    model: ModelDeploymentRow,
+    role: StreamingRouteRole
+  ): boolean {
+    return Boolean(
+      this.database
+        .prepare(
+          `SELECT 1
+           FROM model_streaming_verifications
+           WHERE model_deployment_id = ?
+             AND role = ?
+             AND configuration_fingerprint = ?`
+        )
+        .get(model.id, role, model.configuration_fingerprint)
+    );
   }
 
   private markCapabilitiesVerified(
@@ -1688,15 +1771,20 @@ export class RuntimeRoutingStore {
           "verified_capabilities" | "configuration_fingerprint"
         >
       | undefined;
-    const verified = input.verifiedByDefault
-      ? input.declaredCapabilities.filter(
-          (capability) => capability !== "streaming"
-        )
-      : current &&
-          (input.preserveVerification ||
-            current.configuration_fingerprint === fingerprint)
+    const verified =
+      current && input.preserveVerification
         ? parseCapabilities(current.verified_capabilities)
-        : [];
+        : input.verifiedByDefault
+          ? input.declaredCapabilities.filter(
+              (capability) => capability !== "streaming"
+            )
+          : current && current.configuration_fingerprint === fingerprint
+            ? parseCapabilities(current.verified_capabilities)
+            : [];
+    const persistedFingerprint =
+      input.preserveVerification && current
+        ? current.configuration_fingerprint
+        : fingerprint;
     const now = new Date().toISOString();
     this.database
       .prepare(
@@ -1726,11 +1814,18 @@ export class RuntimeRoutingStore {
         JSON.stringify(input.declaredCapabilities),
         JSON.stringify(verified),
         JSON.stringify(input.providerOptions),
-        fingerprint,
+        persistedFingerprint,
         input.enabled ? 1 : 0,
         now,
         now
       );
+    if (!verified.includes("streaming")) {
+      this.database
+        .prepare(
+          "DELETE FROM model_streaming_verifications WHERE model_deployment_id = ?"
+        )
+        .run(input.id);
+    }
   }
 
   private upsertRoute(
@@ -1854,7 +1949,10 @@ function mapProviderConnection(
   };
 }
 
-function mapModelDeployment(row: ModelDeploymentRow): ModelDeploymentSummary {
+function mapModelDeployment(
+  row: ModelDeploymentRow,
+  verifiedStreamingRoles: StreamingRouteRole[]
+): ModelDeploymentSummary {
   return {
     id: row.id,
     connectionId: row.connection_id,
@@ -1864,6 +1962,7 @@ function mapModelDeployment(row: ModelDeploymentRow): ModelDeploymentSummary {
     providerOptions: parseProviderOptions(row.provider_options),
     declaredCapabilities: parseCapabilities(row.declared_capabilities),
     verifiedCapabilities: parseCapabilities(row.verified_capabilities),
+    verifiedStreamingRoles,
     enabled: row.enabled === 1
   };
 }
@@ -2143,19 +2242,34 @@ function sortedProviderOptions(
 }
 
 function verifiedCapabilitiesForRole(
-  role: RuntimeRouteRole
+  role: RuntimeRouteRole,
+  streamingEnabled: boolean
 ): ModelCapability[] {
+  const streaming: ModelCapability[] = streamingEnabled ? ["streaming"] : [];
   switch (role) {
     case "stt":
-      return ["audio-input", "text-output", "transcription", "non-streaming"];
+      return [
+        "audio-input",
+        "text-output",
+        "transcription",
+        "non-streaming",
+        ...streaming
+      ];
     case "chat":
-      return ["text-input", "text-output", "tool-calling", "non-streaming"];
+      return [
+        "text-input",
+        "text-output",
+        "tool-calling",
+        "non-streaming",
+        ...streaming
+      ];
     case "tts":
       return [
         "text-input",
         "audio-output",
         "speech-synthesis",
-        "non-streaming"
+        "non-streaming",
+        ...streaming
       ];
     case "native":
       return [
@@ -2166,6 +2280,22 @@ function verifiedCapabilitiesForRole(
         "native-multimodal",
         "non-streaming"
       ];
+  }
+}
+
+function routeStreamingEnabled(
+  route: RuntimeRouteRow,
+  role: RuntimeRouteRole
+): boolean {
+  switch (role) {
+    case "stt":
+      return route.stt_streaming_enabled === 1;
+    case "chat":
+      return route.chat_streaming_enabled === 1;
+    case "tts":
+      return route.tts_streaming_enabled === 1;
+    case "native":
+      return false;
   }
 }
 

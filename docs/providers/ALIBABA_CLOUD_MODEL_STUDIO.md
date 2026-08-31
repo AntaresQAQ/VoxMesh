@@ -177,10 +177,9 @@ segment and emits ordered mono 24 kHz PCM16LE frames plus exact aggregate
 metadata. Both sessions fail closed on malformed ordering, provider timeout,
 caller cancellation, backpressure, or premature socket closure.
 
-The adapters are implemented but not registered in runtime composition.
-Role-specific verification and route activation must qualify the exact model
-and configuration before use. Unsupported routes do not fall back to buffered
-speech.
+The adapters are registered in runtime composition. Role-specific verification
+and route activation must still qualify the exact model and configuration
+before use. Unsupported routes do not fall back to buffered speech.
 
 ## 5. Security
 

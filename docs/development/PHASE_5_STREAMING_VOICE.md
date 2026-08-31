@@ -604,6 +604,24 @@ Acceptance:
 - full-chain activation requires all three roles
 - safe last-error status remains bounded and localized
 
+Implementation status:
+
+- production registers server transport, browser client, Mock role adapters,
+  Azure/OpenAI-compatible Streaming Chat, and Alibaba Streaming STT/TTS
+- route testing runs buffered qualification plus each independently enabled
+  Streaming STT setup, Streaming Chat completion, and Streaming TTS completion
+- successful tests atomically commit readiness, generic capabilities, and
+  configuration-bound role verification through generation/fingerprint CAS
+- a separate model/role verification table prevents multi-role models from
+  reusing STT qualification for Chat or TTS
+- model or connection changes invalidate role verification; stale tests cannot
+  overwrite newer configuration
+- activation and active-route resolution require declared, generic verified,
+  role verified, adapter available, transport available, and browser available
+- system Mock models declare but do not pre-verify streaming capability
+- failed verification leaves the route inactive with bounded safe readiness
+  status and never falls back to buffered execution
+
 ### PR 12 - Phase 5 Validation and Acceptance
 
 Suggested title: `test: complete streaming voice acceptance`

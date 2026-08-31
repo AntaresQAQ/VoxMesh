@@ -938,7 +938,7 @@ describe("VoxMeshStore", () => {
     ).toBe(false);
   });
 
-  it("rejects streaming routes until the assigned model is verified", () => {
+  it("verifies enabled streaming roles before runtime availability", () => {
     store = new VoxMeshStore(":memory:");
     const activeStore = store;
     let routing = activeStore.createRuntimeConnection({
@@ -992,8 +992,13 @@ describe("VoxMeshStore", () => {
     activeStore.markRuntimeRouteVerified(
       activeStore.captureRuntimeRouteVerification(route?.id ?? "")
     );
+    expect(
+      activeStore
+        .getRuntimeRoutingSummary()
+        .models.find((entry) => entry.id === model?.id)?.verifiedCapabilities
+    ).toContain("streaming");
     expect(() => activeStore.activateRuntimeRoute(route?.id ?? "")).toThrow(
-      "requires verified streaming capability"
+      "Streaming voice transport is unavailable"
     );
   });
 
@@ -1127,6 +1132,16 @@ describe("VoxMeshStore", () => {
           "UPDATE model_deployments SET verified_capabilities = declared_capabilities WHERE id = ?"
         )
         .run(model?.id ?? "");
+      database
+        .prepare(
+          `INSERT INTO model_streaming_verifications (
+             model_deployment_id, role, configuration_fingerprint, verified_at
+           )
+           SELECT id, 'chat', configuration_fingerprint, ?
+           FROM model_deployments
+           WHERE id = ?`
+        )
+        .run(new Date().toISOString(), model?.id ?? "");
       database.close();
 
       store = new VoxMeshStore(databasePath);
@@ -1379,7 +1394,8 @@ describe("VoxMeshStore", () => {
         "transcription",
         "speech-synthesis",
         "tool-calling",
-        "non-streaming"
+        "non-streaming",
+        "streaming"
       ],
       enabled: true
     });
@@ -1394,7 +1410,7 @@ describe("VoxMeshStore", () => {
       ttsModelDeploymentId: "system-model-tts",
       nativeModelDeploymentId: null,
       fallbackRouteId: null,
-      sttStreamingEnabled: false,
+      sttStreamingEnabled: true,
       chatStreamingEnabled: false,
       ttsStreamingEnabled: false,
       enabled: true
@@ -1411,8 +1427,26 @@ describe("VoxMeshStore", () => {
       "audio-input",
       "text-output",
       "transcription",
-      "non-streaming"
+      "non-streaming",
+      "streaming"
     ]);
+    expect(
+      store
+        .getRuntimeRoutingSummary()
+        .models.find((entry) => entry.id === model?.id)?.verifiedStreamingRoles
+    ).toEqual(["stt"]);
+    expect(
+      store
+        .getRuntimeRoutingSummary()
+        .models.find((entry) => entry.id === "system-model-chat")
+        ?.verifiedCapabilities
+    ).not.toContain("streaming");
+    expect(
+      store
+        .getRuntimeRoutingSummary()
+        .models.find((entry) => entry.id === "system-model-chat")
+        ?.verifiedStreamingRoles
+    ).toEqual([]);
     store.updateRuntimeModel(model?.id ?? "", {
       connectionId: model?.connectionId ?? "",
       displayName: "Renamed Remote STT",
@@ -1484,6 +1518,201 @@ describe("VoxMeshStore", () => {
     });
     expect(() => store?.markRuntimeRouteVerified(snapshot)).toThrow(
       "configuration changed during testing"
+    );
+  });
+
+  it("does not reuse streaming verification across model roles", () => {
+    store = new VoxMeshStore(":memory:", {
+      transportAvailable: true,
+      browserClientAvailable: true,
+      sttProviderIds: ["mock"],
+      chatProviderIds: ["mock"],
+      ttsProviderIds: ["mock"]
+    });
+    let routing = store.createRuntimeConnection({
+      providerId: "mock",
+      displayName: "Multi-role Streaming Mock",
+      endpoint: "",
+      enabled: true
+    });
+    const connection = routing.connections.find(
+      (entry) => entry.displayName === "Multi-role Streaming Mock"
+    );
+    routing = store.createRuntimeModel({
+      connectionId: connection?.id ?? "",
+      displayName: "Multi-role Streaming Model",
+      modelName: "multi-role-streaming",
+      apiVersion: "",
+      providerOptions: {},
+      declaredCapabilities: [
+        "audio-input",
+        "text-input",
+        "text-output",
+        "transcription",
+        "tool-calling",
+        "non-streaming",
+        "streaming"
+      ],
+      enabled: true
+    });
+    const model = routing.models.find(
+      (entry) => entry.displayName === "Multi-role Streaming Model"
+    );
+    routing = store.createRuntimeRoute({
+      displayName: "STT-qualified Route",
+      mode: "composed",
+      sttModelDeploymentId: model?.id ?? null,
+      chatModelDeploymentId: "system-model-chat",
+      ttsModelDeploymentId: "system-model-tts",
+      nativeModelDeploymentId: null,
+      fallbackRouteId: null,
+      sttStreamingEnabled: true,
+      chatStreamingEnabled: false,
+      ttsStreamingEnabled: false,
+      enabled: true
+    });
+    const sttRoute = routing.routes.find(
+      (entry) => entry.displayName === "STT-qualified Route"
+    );
+    store.markRuntimeRouteVerified(
+      store.captureRuntimeRouteVerification(sttRoute?.id ?? "")
+    );
+    routing = store.createRuntimeRoute({
+      displayName: "Unverified Chat Streaming Route",
+      mode: "composed",
+      sttModelDeploymentId: "system-model-stt",
+      chatModelDeploymentId: model?.id ?? null,
+      ttsModelDeploymentId: "system-model-tts",
+      nativeModelDeploymentId: null,
+      fallbackRouteId: null,
+      sttStreamingEnabled: false,
+      chatStreamingEnabled: true,
+      ttsStreamingEnabled: false,
+      enabled: true
+    });
+    const chatRoute = routing.routes.find(
+      (entry) => entry.displayName === "Unverified Chat Streaming Route"
+    );
+
+    expect(
+      store
+        .getRuntimeRoutingSummary()
+        .models.find((entry) => entry.id === model?.id)?.verifiedStreamingRoles
+    ).toEqual(["stt"]);
+    expect(() => store?.activateRuntimeRoute(chatRoute?.id ?? "")).toThrow(
+      "requires verified streaming capability"
+    );
+    store.updateRuntimeModel(model?.id ?? "", {
+      connectionId: model?.connectionId ?? "",
+      displayName: "Renamed Multi-role Streaming Model",
+      modelName: model?.modelName ?? "",
+      apiVersion: model?.apiVersion ?? "",
+      providerOptions: model?.providerOptions ?? {},
+      declaredCapabilities: model?.declaredCapabilities ?? [],
+      enabled: true
+    });
+    expect(
+      store
+        .getRuntimeRoutingSummary()
+        .models.find((entry) => entry.id === model?.id)?.verifiedStreamingRoles
+    ).toEqual(["stt"]);
+    store.updateRuntimeModel(model?.id ?? "", {
+      connectionId: model?.connectionId ?? "",
+      displayName: model?.displayName ?? "",
+      modelName: model?.modelName ?? "",
+      apiVersion: model?.apiVersion ?? "",
+      providerOptions: { revision: 2 },
+      declaredCapabilities: model?.declaredCapabilities ?? [],
+      enabled: true
+    });
+    expect(
+      store
+        .getRuntimeRoutingSummary()
+        .models.find((entry) => entry.id === model?.id)?.verifiedStreamingRoles
+    ).toEqual([]);
+  });
+
+  it("preserves fresh role verification across display-only model edits", () => {
+    store = new VoxMeshStore(":memory:", {
+      transportAvailable: true,
+      browserClientAvailable: true,
+      sttProviderIds: ["mock"],
+      chatProviderIds: ["mock", "openai-compatible"],
+      ttsProviderIds: ["mock"]
+    });
+    let routing = store.createRuntimeConnection({
+      providerId: "openai-compatible",
+      displayName: "Renamable Provider",
+      endpoint: "https://provider.example.com/v1",
+      apiKey: "test-api-key",
+      enabled: true
+    });
+    const connection = routing.connections.find(
+      (entry) => entry.displayName === "Renamable Provider"
+    );
+    routing = store.createRuntimeModel({
+      connectionId: connection?.id ?? "",
+      displayName: "Renamable Chat",
+      modelName: "renamable-chat",
+      apiVersion: "",
+      providerOptions: {},
+      declaredCapabilities: [
+        "text-input",
+        "text-output",
+        "tool-calling",
+        "non-streaming",
+        "streaming"
+      ],
+      enabled: true
+    });
+    const model = routing.models.find(
+      (entry) => entry.displayName === "Renamable Chat"
+    );
+    routing = store.createRuntimeRoute({
+      displayName: "Renamable Chat Route",
+      mode: "composed",
+      sttModelDeploymentId: "system-model-stt",
+      chatModelDeploymentId: model?.id ?? null,
+      ttsModelDeploymentId: "system-model-tts",
+      nativeModelDeploymentId: null,
+      fallbackRouteId: null,
+      sttStreamingEnabled: false,
+      chatStreamingEnabled: true,
+      ttsStreamingEnabled: false,
+      enabled: true
+    });
+    const route = routing.routes.find(
+      (entry) => entry.displayName === "Renamable Chat Route"
+    );
+    store.markRuntimeRouteVerified(
+      store.captureRuntimeRouteVerification(route?.id ?? "")
+    );
+    store.updateRuntimeConnection(connection?.id ?? "", {
+      providerId: "openai-compatible",
+      displayName: "Renamable Provider",
+      endpoint: "https://provider-v2.example.com/v1",
+      enabled: true
+    });
+    store.markRuntimeRouteVerified(
+      store.captureRuntimeRouteVerification(route?.id ?? "")
+    );
+    store.updateRuntimeModel(model?.id ?? "", {
+      connectionId: model?.connectionId ?? "",
+      displayName: "Renamed Chat",
+      modelName: model?.modelName ?? "",
+      apiVersion: model?.apiVersion ?? "",
+      providerOptions: model?.providerOptions ?? {},
+      declaredCapabilities: model?.declaredCapabilities ?? [],
+      enabled: true
+    });
+
+    expect(
+      store
+        .getRuntimeRoutingSummary()
+        .models.find((entry) => entry.id === model?.id)?.verifiedStreamingRoles
+    ).toEqual(["chat"]);
+    expect(store.activateRuntimeRoute(route?.id ?? "").activeRouteId).toBe(
+      route?.id
     );
   });
 
@@ -1888,6 +2117,18 @@ describe("VoxMeshStore", () => {
           '{}', 'legacy-native-fingerprint', 1,
           '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z'
         );
+        INSERT INTO model_deployments (
+          id, connection_id, display_name, model_name, api_version,
+          declared_capabilities, verified_capabilities, provider_options,
+          configuration_fingerprint, enabled, created_at, updated_at
+        ) VALUES (
+          'system-model-chat', 'legacy-streaming-connection',
+          'System Mock Chat', 'mock-chat', '',
+          '["text-input","text-output","tool-calling","non-streaming"]',
+          '["text-input","text-output","tool-calling","non-streaming"]',
+          '{}', 'system-mock-chat-fingerprint', 1,
+          '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z'
+        );
         INSERT INTO runtime_routes (
           id, display_name, mode, stt_model_deployment_id,
           chat_model_deployment_id, tts_model_deployment_id,
@@ -1970,6 +2211,12 @@ describe("VoxMeshStore", () => {
       expect(legacyModel?.declaredCapabilities).toContain("non-streaming");
       expect(legacyModel?.verifiedCapabilities).toContain("non-streaming");
       expect(legacyModel?.verifiedCapabilities).not.toContain("streaming");
+      const systemMockChat = migratedSummary.models.find(
+        (model) => model.id === "system-model-chat"
+      );
+      expect(systemMockChat?.declaredCapabilities).toContain("streaming");
+      expect(systemMockChat?.verifiedCapabilities).not.toContain("streaming");
+      expect(systemMockChat?.verifiedStreamingRoles).toEqual([]);
       const unreferencedModel = migratedSummary.models.find(
         (model) => model.id === "legacy-unreferenced-model"
       );
@@ -2031,11 +2278,35 @@ describe("VoxMeshStore", () => {
           "SELECT id FROM schema_migrations WHERE id = '2026-08-24-full-chain-streaming-routing-v1'"
         )
         .get() as { id: string } | undefined;
+      const roleMigration = migrated
+        .prepare(
+          "SELECT id FROM schema_migrations WHERE id = '2026-08-31-role-streaming-verification-v1'"
+        )
+        .get() as { id: string } | undefined;
+      const streamingVerificationTable = migrated
+        .prepare(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'model_streaming_verifications'"
+        )
+        .get() as { name: string } | undefined;
+      const streamingVerificationCount = (
+        migrated
+          .prepare(
+            "SELECT COUNT(*) AS count FROM model_streaming_verifications"
+          )
+          .get() as { count: number }
+      ).count;
       migrated.close();
       expect(columns.map((column) => column.name)).toContain(
         "chat_streaming_enabled"
       );
       expect(migration?.id).toBe("2026-08-24-full-chain-streaming-routing-v1");
+      expect(roleMigration?.id).toBe(
+        "2026-08-31-role-streaming-verification-v1"
+      );
+      expect(streamingVerificationTable?.name).toBe(
+        "model_streaming_verifications"
+      );
+      expect(streamingVerificationCount).toBe(0);
     } finally {
       store?.close();
       store = undefined;

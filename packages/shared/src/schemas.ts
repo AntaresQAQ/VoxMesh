@@ -381,6 +381,16 @@ export const ModelDeploymentSummarySchema = Type.Object({
   ),
   declaredCapabilities: Type.Array(ModelCapabilitySchema),
   verifiedCapabilities: Type.Array(ModelCapabilitySchema),
+  verifiedStreamingRoles: Type.Optional(
+    Type.Array(
+      Type.Union([
+        Type.Literal("stt"),
+        Type.Literal("chat"),
+        Type.Literal("tts")
+      ]),
+      { maxItems: 3, uniqueItems: true }
+    )
+  ),
   enabled: Type.Boolean()
 });
 

@@ -14,9 +14,9 @@ Azure model availability varies by region. Deploy the models in Microsoft Foundr
 
 A Streaming Chat adapter is implemented for Chat Completions SSE responses,
 including text, fragmented tool calls, usage, finish reasons, cancellation,
-timeouts, and safe errors. Runtime registration remains disabled until
-streaming capability verification and route activation are implemented. The
-adapter does not silently replace buffered Chat.
+timeouts, and safe errors. Runtime registration is available, but the selected
+model and Chat role must pass configuration-bound streaming verification before
+route activation. The adapter does not silently replace buffered Chat.
 
 ## 2. LLM Configuration
 

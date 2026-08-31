@@ -3,12 +3,21 @@ import {
   type StreamingLlmProvider
 } from "@voxmesh/agent-core";
 import {
+  AzureOpenAiStreamingProvider,
+  OpenAiCompatibleStreamingProvider
+} from "@voxmesh/ai";
+import {
+  AlibabaModelStudioStreamingSpeechToTextProvider,
+  AlibabaModelStudioStreamingTextToSpeechProvider,
   MockStreamingSpeechToTextProvider,
   MockStreamingTextToSpeechProvider,
   type StreamingSpeechToTextProvider,
   type StreamingTextToSpeechProvider
 } from "@voxmesh/audio";
+import type { StreamingRuntimeAvailability } from "@voxmesh/shared";
 import type {
+  StoredLlmConfiguration,
+  StoredSpeechConfiguration,
   StoredStreamingVoiceConfiguration,
   VoxMeshStore
 } from "@voxmesh/storage";
@@ -26,8 +35,8 @@ import type {
 /**
  * Captures provider instances for one route before a streaming run starts.
  *
- * PR 6 intentionally registers only deterministic Mock streaming adapters.
- * Later provider PRs extend these factories without changing the coordinator.
+ * Route activation already verified every enabled streaming role against the
+ * same configuration fingerprint before this factory can be reached.
  */
 export function prepareStreamingVoiceRun(
   store: VoxMeshStore,
@@ -46,23 +55,85 @@ function createStreamingVoiceProviders(
 ): StreamingVoiceCoordinatorProviders {
   return {
     bufferedStt: createSpeechToTextProvider(configuration.speech),
-    streamingStt:
-      configuration.speech.sttMode === "mock"
-        ? new MockStreamingSpeechToTextProvider({
-            language: configuration.speech.sttLanguage
-          })
-        : new UnavailableStreamingStt(configuration.speech.sttMode),
+    streamingStt: createStreamingSpeechToTextProvider(configuration.speech),
     bufferedLlm: createLlmProvider(configuration.llm),
-    streamingLlm:
-      configuration.llm.mode === "mock"
-        ? new MockStreamingLlmProvider()
-        : new UnavailableStreamingLlm(configuration.llm.mode),
+    streamingLlm: createStreamingLlmProvider(configuration.llm),
     bufferedTts: createTextToSpeechProvider(configuration.speech),
-    streamingTts:
-      configuration.speech.ttsMode === "mock"
-        ? new MockStreamingTextToSpeechProvider()
-        : new UnavailableStreamingTts(configuration.speech.ttsMode)
+    streamingTts: createStreamingTextToSpeechProvider(configuration.speech)
   };
+}
+
+export const streamingRuntimeAvailability: StreamingRuntimeAvailability = {
+  transportAvailable: true,
+  browserClientAvailable: true,
+  sttProviderIds: ["mock", "alibaba-model-studio"],
+  chatProviderIds: ["mock", "azure-openai", "openai-compatible"],
+  ttsProviderIds: ["mock", "alibaba-model-studio"]
+};
+
+export function createStreamingSpeechToTextProvider(
+  configuration: StoredSpeechConfiguration
+): StreamingSpeechToTextProvider {
+  switch (configuration.sttMode) {
+    case "mock":
+      return new MockStreamingSpeechToTextProvider({
+        language: configuration.sttLanguage
+      });
+    case "alibaba-model-studio":
+      return new AlibabaModelStudioStreamingSpeechToTextProvider({
+        endpoint: configuration.sttEndpoint,
+        model: configuration.sttDeployment,
+        apiKey: configuration.sttApiKey ?? "",
+        language: configuration.sttLanguage
+      });
+    default:
+      return new UnavailableStreamingStt(configuration.sttMode);
+  }
+}
+
+export function createStreamingLlmProvider(
+  configuration: StoredLlmConfiguration
+): StreamingLlmProvider {
+  switch (configuration.mode) {
+    case "mock":
+      return new MockStreamingLlmProvider();
+    case "azure-openai":
+      return new AzureOpenAiStreamingProvider({
+        endpoint: configuration.endpoint,
+        deployment: configuration.deployment,
+        apiVersion: configuration.apiVersion,
+        apiKey: configuration.apiKey ?? "",
+        timeoutMs: configuration.timeoutMs,
+        maxOutputTokens: configuration.maxOutputTokens
+      });
+    case "openai-compatible":
+      return new OpenAiCompatibleStreamingProvider({
+        baseUrl: configuration.baseUrl,
+        model: configuration.model,
+        apiKey: configuration.apiKey ?? "",
+        timeoutMs: configuration.timeoutMs,
+        maxOutputTokens: configuration.maxOutputTokens
+      });
+  }
+}
+
+export function createStreamingTextToSpeechProvider(
+  configuration: StoredSpeechConfiguration
+): StreamingTextToSpeechProvider {
+  switch (configuration.ttsMode) {
+    case "mock":
+      return new MockStreamingTextToSpeechProvider();
+    case "alibaba-model-studio":
+      return new AlibabaModelStudioStreamingTextToSpeechProvider({
+        endpoint: configuration.ttsEndpoint,
+        model: configuration.ttsDeployment,
+        apiKey: configuration.ttsApiKey ?? "",
+        voice: configuration.ttsVoice,
+        instructions: configuration.ttsInstructions
+      });
+    default:
+      return new UnavailableStreamingTts(configuration.ttsMode);
+  }
 }
 
 class UnavailableStreamingStt implements StreamingSpeechToTextProvider {
@@ -70,21 +141,6 @@ class UnavailableStreamingStt implements StreamingSpeechToTextProvider {
 
   public async startSession(): Promise<never> {
     throw unavailable("STT", this.providerId);
-  }
-}
-
-class UnavailableStreamingLlm implements StreamingLlmProvider {
-  public constructor(private readonly providerId: string) {}
-
-  public stream(): AsyncIterable<never> {
-    const error = unavailable("Chat", this.providerId);
-    return {
-      [Symbol.asyncIterator](): AsyncIterator<never> {
-        return {
-          next: async () => Promise.reject(error)
-        };
-      }
-    };
   }
 }
 

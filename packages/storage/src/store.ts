@@ -1652,6 +1652,46 @@ export class VoxMeshStore {
         );
       }
     });
+    this.applyMigration("2026-08-31-role-streaming-verification-v1", () => {
+      this.database.exec(`
+        CREATE TABLE model_streaming_verifications (
+          model_deployment_id TEXT NOT NULL
+            REFERENCES model_deployments(id) ON DELETE CASCADE,
+          role TEXT NOT NULL CHECK (role IN ('stt', 'chat', 'tts')),
+          configuration_fingerprint TEXT NOT NULL,
+          verified_at TEXT NOT NULL,
+          PRIMARY KEY (model_deployment_id, role)
+        );
+      `);
+      const mockSystemModels = this.database
+        .prepare(
+          `SELECT models.id, models.declared_capabilities
+           FROM model_deployments models
+           JOIN provider_connections connections
+             ON connections.id = models.connection_id
+           WHERE models.id IN (
+             'system-model-stt',
+             'system-model-chat',
+             'system-model-tts'
+           )
+             AND connections.provider_id = 'mock'`
+        )
+        .all() as Array<{ id: string; declared_capabilities: string }>;
+      const update = this.database.prepare(
+        `UPDATE model_deployments
+         SET declared_capabilities = ?, updated_at = ?
+         WHERE id = ?`
+      );
+      const now = new Date().toISOString();
+      for (const model of mockSystemModels) {
+        const declared = parseStoredCapabilityStrings(
+          model.declared_capabilities
+        );
+        if (!declared.includes("streaming")) {
+          update.run(JSON.stringify([...declared, "streaming"]), now, model.id);
+        }
+      }
+    });
     this.ensureColumn(
       "runtime_routes",
       "enabled",

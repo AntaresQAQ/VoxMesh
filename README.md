@@ -24,6 +24,8 @@ VoxMesh has an initial Mock Mode vertical slice for development and architecture
 - Dashboard, Chat, Conversations, and live Logs pages
 - Settings page for password rotation and Runtime Routing configuration
 - write-only provider credentials and route-bound capability verification
+- configuration-bound role-specific streaming verification and fail-closed
+  adapter/runtime availability gates
 - persisted, configuration-bound provider and route readiness diagnostics
 - generic OpenAI-compatible LLM configuration, including Alibaba Cloud Model Studio
 - Azure OpenAI and OpenAI-compatible Streaming Chat adapters, pending
@@ -51,9 +53,10 @@ Azure AI Speech Service, generic external MCP transports, physical audio, and
 deployment packaging remain planned work. Azure OpenAI Audio STT/TTS is already
 implemented. The physical-audio phase also plans local offline wake-word
 detection through sherpa-onnx after explicit input-device selection.
-Capability-gated full-chain Streaming STT/Chat LLM/TTS is also planned after
-the buffered live-provider acceptance gate; unsupported routes continue to be
-blocked rather than silently using buffered transport.
+Capability-gated full-chain Streaming STT/Chat LLM/TTS is implemented for Mock,
+Azure/OpenAI-compatible Chat, and Alibaba speech. Each enabled role must pass
+explicit configuration-bound verification before activation; unsupported
+routes remain blocked rather than silently using buffered transport.
 
 The Logs page combines a persisted HTTP snapshot with authenticated real-time
 log and pipeline-event WebSocket delivery, replay, gap indication, and
