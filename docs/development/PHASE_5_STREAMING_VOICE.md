@@ -610,6 +610,8 @@ Implementation status:
   Azure/OpenAI-compatible Streaming Chat, and Alibaba Streaming STT/TTS
 - route testing runs buffered qualification plus each independently enabled
   Streaming STT setup, Streaming Chat completion, and Streaming TTS completion
+- every streaming qualification has a verifier-owned bounded deadline that
+  aborts the provider operation on expiry
 - successful tests atomically commit readiness, generic capabilities, and
   configuration-bound role verification through generation/fingerprint CAS
 - a separate model/role verification table prevents multi-role models from

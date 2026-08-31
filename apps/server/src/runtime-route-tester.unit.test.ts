@@ -138,18 +138,52 @@ describe("RuntimeRouteTester streaming verification", () => {
       "requires verified streaming capability"
     );
   });
+
+  it("bounds a stalled streaming provider verification", async () => {
+    store = new VoxMeshStore(":memory:", streamingRuntimeAvailability);
+    const routeId = createStreamingRoute(store, {
+      stt: false,
+      chat: true,
+      tts: false
+    });
+    const stalledProvider: StreamingLlmProvider = {
+      async *stream() {
+        await new Promise<void>(() => undefined);
+        yield { type: "completed", finishReason: "stop" };
+      }
+    };
+    const tester = createTester(
+      store,
+      {
+        createChat: () => stalledProvider,
+        createStt: createStreamingSpeechToTextProvider,
+        createTts: createStreamingTextToSpeechProvider
+      },
+      10
+    );
+
+    await expect(tester.test(routeId)).rejects.toThrow();
+
+    expect(
+      store
+        .getRuntimeRoutingSummary()
+        .routes.find((route) => route.id === routeId)?.readiness.state
+    ).toBe("failed");
+  });
 });
 
 function createTester(
   targetStore: VoxMeshStore,
-  factories?: StreamingProviderFactories
+  factories?: StreamingProviderFactories,
+  timeoutMs?: number
 ): RuntimeRouteTester {
   return new RuntimeRouteTester(
     targetStore,
     new MockMcpServer(),
     (routeId) =>
       createLlmProvider(targetStore.getRuntimeLlmConfiguration(routeId)),
-    factories
+    factories,
+    timeoutMs
   );
 }
 

@@ -469,6 +469,13 @@ export class RuntimeRoutingStore {
          ORDER BY verification.model_deployment_id, verification.role`
       )
       .all() as ModelStreamingVerificationRow[];
+    const streamingRolesByModel = new Map<string, StreamingRouteRole[]>();
+    for (const verification of streamingVerifications) {
+      const roles =
+        streamingRolesByModel.get(verification.model_deployment_id) ?? [];
+      roles.push(verification.role);
+      streamingRolesByModel.set(verification.model_deployment_id, roles);
+    }
     const routes = this.database
       .prepare(
         `SELECT id, display_name, mode, stt_model_deployment_id,
@@ -492,14 +499,7 @@ export class RuntimeRoutingStore {
     return {
       connections: connections.map(mapProviderConnection),
       models: models.map((model) =>
-        mapModelDeployment(
-          model,
-          streamingVerifications
-            .filter(
-              (verification) => verification.model_deployment_id === model.id
-            )
-            .map((verification) => verification.role)
-        )
+        mapModelDeployment(model, streamingRolesByModel.get(model.id) ?? [])
       ),
       routes: routes.map(mapRuntimeRoute),
       activeRouteId: active.active_route_id,
@@ -1514,13 +1514,14 @@ export class RuntimeRoutingStore {
         `Model ${model.display_name} requires declared streaming capability`
       );
     }
-    if (
-      requireVerified &&
-      (!verified.includes("streaming") ||
-        !this.isStreamingRoleVerified(model, role))
-    ) {
+    if (requireVerified && !verified.includes("streaming")) {
       throw badRequest(
         `Model ${model.display_name} requires verified streaming capability`
+      );
+    }
+    if (requireVerified && !this.isStreamingRoleVerified(model, role)) {
+      throw badRequest(
+        `Model ${model.display_name} requires verified streaming capability for ${streamingRoleLabel(role)}`
       );
     }
   }
@@ -2296,6 +2297,17 @@ function routeStreamingEnabled(
       return route.tts_streaming_enabled === 1;
     case "native":
       return false;
+  }
+}
+
+function streamingRoleLabel(role: StreamingRouteRole): "STT" | "Chat" | "TTS" {
+  switch (role) {
+    case "stt":
+      return "STT";
+    case "chat":
+      return "Chat";
+    case "tts":
+      return "TTS";
   }
 }
 

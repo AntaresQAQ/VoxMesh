@@ -259,9 +259,12 @@ An inactive route uses **Test & activate**. VoxMesh runs the buffered provider
 test plus setup/completion qualification for each enabled streaming role, then
 atomically updates readiness, generic capabilities, and role-specific
 verification if the route/model/connection fingerprint is still current.
-Separate activation checks then require runtime availability. A provider or
-configuration failure is shown directly and never activates the route. The
-active route retains a separate **Test route** action for health revalidation.
+Each streaming probe has an independent 45-second verifier deadline that
+aborts the provider and fails readiness even if the provider ignores
+cancellation. Separate activation checks then require runtime availability. A
+provider or configuration failure is shown directly and never activates the
+route. The active route retains a separate **Test route** action for health
+revalidation.
 
 ## Failure Behavior
 

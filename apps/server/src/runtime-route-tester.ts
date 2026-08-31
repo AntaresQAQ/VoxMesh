@@ -10,6 +10,7 @@ import type {
   StreamingTextToSpeechProvider
 } from "@voxmesh/audio";
 import type { RuntimeRoutingSummary } from "@voxmesh/shared";
+import { VOICE_STREAM_LIMITS } from "@voxmesh/shared/voice-stream";
 import type {
   StoredLlmConfiguration,
   StoredSpeechConfiguration,
@@ -53,8 +54,16 @@ export class RuntimeRouteTester {
     private readonly store: VoxMeshStore,
     private readonly mcp: McpServer,
     private readonly createLlm: (routeId?: string) => LlmProvider,
-    private readonly streamingFactories: StreamingProviderFactories = defaultStreamingFactories
-  ) {}
+    private readonly streamingFactories: StreamingProviderFactories = defaultStreamingFactories,
+    private readonly streamingVerificationTimeoutMs: number = VOICE_STREAM_LIMITS.providerStageTimeoutMs
+  ) {
+    if (
+      !Number.isFinite(streamingVerificationTimeoutMs) ||
+      streamingVerificationTimeoutMs <= 0
+    ) {
+      throw new Error("Streaming verification timeout must be positive");
+    }
+  }
 
   public async test(routeId: string): Promise<RuntimeRoutingSummary> {
     const route = this.store.getRuntimeRoute(routeId);
@@ -171,9 +180,12 @@ export class RuntimeRouteTester {
           sampleText
         );
       if (streamingEnabled(test, "tts")) {
-        await testStreamingTts(
-          this.streamingFactories.createTts(speechConfiguration),
-          sampleText
+        await this.verifyStreaming((signal) =>
+          testStreamingTts(
+            this.streamingFactories.createTts(speechConfiguration),
+            sampleText,
+            signal
+          )
         );
       }
       return result;
@@ -181,34 +193,62 @@ export class RuntimeRouteTester {
     await this.testConnection(test, "stt", async () => {
       await createSpeechToTextProvider(speechConfiguration).transcribe(audio);
       if (streamingEnabled(test, "stt")) {
-        await testStreamingStt(
-          this.streamingFactories.createStt(speechConfiguration)
+        await this.verifyStreaming((signal) =>
+          testStreamingStt(
+            this.streamingFactories.createStt(speechConfiguration),
+            signal
+          )
         );
       }
     });
   }
 
   private async testStreamingChat(routeId: string): Promise<void> {
-    const runtime = new StreamingAgentRuntime(
-      this.streamingFactories.createChat(
-        this.store.getRuntimeLlmConfiguration(routeId)
-      ),
-      this.mcp
-    );
-    const run = runtime.run(
-      "Reply with a short confirmation that streaming works.",
-      {
-        toolMode: "disabled",
-        signal: new AbortController().signal
+    await this.verifyStreaming(async (signal) => {
+      const runtime = new StreamingAgentRuntime(
+        this.streamingFactories.createChat(
+          this.store.getRuntimeLlmConfiguration(routeId)
+        ),
+        this.mcp
+      );
+      const run = runtime.run(
+        "Reply with a short confirmation that streaming works.",
+        {
+          toolMode: "disabled",
+          signal
+        }
+      );
+      while (true) {
+        const next = await run.next();
+        if (!next.done) continue;
+        if (!next.value.response.trim()) {
+          throw requestError("Streaming Chat returned empty text", 400);
+        }
+        return;
       }
+    });
+  }
+
+  private async verifyStreaming<T>(
+    operation: (signal: AbortSignal) => Promise<T>
+  ): Promise<T> {
+    const controller = new AbortController();
+    const timeoutError = new DOMException(
+      "Streaming verification timed out",
+      "TimeoutError"
     );
-    while (true) {
-      const next = await run.next();
-      if (!next.done) continue;
-      if (!next.value.response.trim()) {
-        throw requestError("Streaming Chat returned empty text", 400);
-      }
-      return;
+    let rejectTimeout: (error: Error) => void = () => undefined;
+    const timeoutFailure = new Promise<never>((_resolve, reject) => {
+      rejectTimeout = reject;
+    });
+    const timeout = setTimeout(() => {
+      controller.abort(timeoutError);
+      rejectTimeout(timeoutError);
+    }, this.streamingVerificationTimeoutMs);
+    try {
+      return await Promise.race([operation(controller.signal), timeoutFailure]);
+    } finally {
+      clearTimeout(timeout);
     }
   }
 
@@ -234,22 +274,24 @@ export class RuntimeRouteTester {
 }
 
 async function testStreamingStt(
-  provider: StreamingSpeechToTextProvider
+  provider: StreamingSpeechToTextProvider,
+  signal: AbortSignal
 ): Promise<void> {
   const session = await provider.startSession({
     format: { encoding: "pcm16le", sampleRate: 16_000, channels: 1 },
-    signal: new AbortController().signal
+    signal
   });
   await session.close();
 }
 
 async function testStreamingTts(
   provider: StreamingTextToSpeechProvider,
-  text: string
+  text: string,
+  signal: AbortSignal
 ): Promise<void> {
   const session = await provider.startSynthesis({
     text,
-    signal: new AbortController().signal
+    signal
   });
   let audioSeen = false;
   let completed = false;

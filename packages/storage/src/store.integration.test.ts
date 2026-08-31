@@ -1600,7 +1600,7 @@ describe("VoxMeshStore", () => {
         .models.find((entry) => entry.id === model?.id)?.verifiedStreamingRoles
     ).toEqual(["stt"]);
     expect(() => store?.activateRuntimeRoute(chatRoute?.id ?? "")).toThrow(
-      "requires verified streaming capability"
+      "requires verified streaming capability for Chat"
     );
     store.updateRuntimeModel(model?.id ?? "", {
       connectionId: model?.connectionId ?? "",
