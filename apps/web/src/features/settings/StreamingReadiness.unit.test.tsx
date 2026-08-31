@@ -34,6 +34,7 @@ const model: ModelDeploymentSummary = {
     "non-streaming",
     "streaming"
   ],
+  verifiedStreamingRoles: ["chat"],
   enabled: true
 };
 
@@ -76,7 +77,7 @@ describe("StreamingReadiness", () => {
   it("keeps runtime gates independent", () => {
     renderReadiness({
       modelId: model.id,
-      models: [{ ...model, verifiedCapabilities: [] }],
+      models: [{ ...model, verifiedStreamingRoles: [] }],
       connections: [connection],
       availability: {
         ...availableRuntime(),
@@ -105,6 +106,19 @@ describe("StreamingReadiness", () => {
         name: /Chat streaming readiness.*adapter: unavailable/
       })
     ).toBeVisible();
+  });
+
+  it("does not reuse verification from a different streaming role", () => {
+    renderReadiness({
+      modelId: model.id,
+      models: [{ ...model, verifiedStreamingRoles: ["stt"] }],
+      connections: [connection],
+      availability: availableRuntime()
+    });
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "verified: unavailable"
+    );
   });
 
   it("localizes the readiness contract", () => {

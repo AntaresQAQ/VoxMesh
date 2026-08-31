@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import Database from "better-sqlite3";
 
@@ -1650,6 +1650,66 @@ export class VoxMeshStore {
           now,
           model.id
         );
+      }
+    });
+    this.applyMigration("2026-08-31-role-streaming-verification-v1", () => {
+      this.database.exec(`
+        CREATE TABLE model_streaming_verifications (
+          model_deployment_id TEXT NOT NULL
+            REFERENCES model_deployments(id) ON DELETE CASCADE,
+          role TEXT NOT NULL CHECK (role IN ('stt', 'chat', 'tts')),
+          configuration_fingerprint TEXT NOT NULL,
+          verified_at TEXT NOT NULL,
+          PRIMARY KEY (model_deployment_id, role)
+        );
+      `);
+      const mockSystemModels = this.database
+        .prepare(
+          `SELECT models.id, models.declared_capabilities,
+                  models.configuration_fingerprint
+           FROM model_deployments models
+           JOIN provider_connections connections
+             ON connections.id = models.connection_id
+           WHERE models.id IN (
+             'system-model-stt',
+             'system-model-chat',
+             'system-model-tts'
+           )
+             AND connections.provider_id = 'mock'`
+        )
+        .all() as Array<{
+        id: string;
+        declared_capabilities: string;
+        configuration_fingerprint: string;
+      }>;
+      const update = this.database.prepare(
+        `UPDATE model_deployments
+         SET declared_capabilities = ?,
+             configuration_fingerprint = ?,
+             updated_at = ?
+         WHERE id = ?`
+      );
+      const now = new Date().toISOString();
+      for (const model of mockSystemModels) {
+        const declared = parseStoredCapabilityStrings(
+          model.declared_capabilities
+        );
+        if (!declared.includes("streaming")) {
+          const fingerprint = createHash("sha256")
+            .update(
+              JSON.stringify([
+                model.configuration_fingerprint,
+                "declared-streaming"
+              ])
+            )
+            .digest("hex");
+          update.run(
+            JSON.stringify([...declared, "streaming"]),
+            fingerprint,
+            now,
+            model.id
+          );
+        }
       }
     });
     this.ensureColumn(

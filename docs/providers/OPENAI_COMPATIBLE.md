@@ -24,8 +24,9 @@ must not be configured as OpenAI-compatible Audio.
 The generic Chat adapter supports both buffered responses and `stream:true`
 SSE responses. Streaming text, fragmented tool calls, usage, finish reasons,
 cancellation, timeouts, and safe failures map to Agent Core contracts.
-Runtime registration remains disabled until the selected model's streaming
-capability is verified; VoxMesh never silently falls back to buffered Chat.
+Runtime registration is available, but the selected model and Chat role must
+pass configuration-bound streaming verification before route activation;
+VoxMesh never silently falls back to buffered Chat.
 
 ## 2. Independent Role Configuration
 

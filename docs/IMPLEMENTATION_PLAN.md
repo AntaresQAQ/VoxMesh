@@ -11,8 +11,8 @@ This document is the project-visible implementation roadmap. It does not authori
 
 Last updated: 2026-08-28 (UTC+08:00)
 
-Implementation baseline: merged `main` through PR #35
-(`feat: stream compatible Chat completions`).
+Implementation baseline: merged `main` through PR #36
+(`feat: stream Alibaba speech`).
 
 Recent merged milestones:
 
@@ -40,21 +40,22 @@ Recent merged milestones:
 - PR #33: authenticated voice WebSocket transport
 - PR #34: browser AudioWorklet streaming voice experience
 - PR #35: Azure/OpenAI-compatible Streaming Chat adapters
+- PR #36: Alibaba Streaming Speech adapters
 
 ### Phase Status
 
-| Phase | Scope                            | Status                                        |
-| ----- | -------------------------------- | --------------------------------------------- |
-| 1     | Project skeleton and secure base | Complete                                      |
-| 2     | Agent Core and Mock pipeline     | Complete                                      |
-| 3     | Web Console                      | Complete                                      |
-| 4     | Buffered real AI providers       | Accepted; deferred gaps tracked               |
-| 5     | Full-chain streaming voice       | PRs 1-9 merged; PR 10 implemented; PR 11 next |
-| 6     | Cross-platform audio devices     | Planned; requires Phase 5 acceptance          |
-| 7     | Offline wake word                | Planned; requires Phase 6 acceptance          |
-| 8     | Generic third-party MCP          | Planned; requires Phase 7 acceptance          |
-| 9     | Scripted deployment and NanoPi   | Planned; requires Phase 8 acceptance          |
-| Gate  | Final MVP acceptance and release | Pending                                       |
+| Phase | Scope                            | Status                                         |
+| ----- | -------------------------------- | ---------------------------------------------- |
+| 1     | Project skeleton and secure base | Complete                                       |
+| 2     | Agent Core and Mock pipeline     | Complete                                       |
+| 3     | Web Console                      | Complete                                       |
+| 4     | Buffered real AI providers       | Accepted; deferred gaps tracked                |
+| 5     | Full-chain streaming voice       | PRs 1-10 merged; PR 11 implemented; PR 12 next |
+| 6     | Cross-platform audio devices     | Planned; requires Phase 5 acceptance           |
+| 7     | Offline wake word                | Planned; requires Phase 6 acceptance           |
+| 8     | Generic third-party MCP          | Planned; requires Phase 7 acceptance           |
+| 9     | Scripted deployment and NanoPi   | Planned; requires Phase 8 acceptance           |
+| Gate  | Final MVP acceptance and release | Pending                                        |
 
 ### Completed foundation and vertical slices
 
@@ -120,9 +121,9 @@ Recent merged milestones:
   tool state, and bounded ordered Web Audio playback. All eight Mock role
   profiles are covered by deterministic transport integration tests.
 - Azure/OpenAI-compatible Streaming Chat and Alibaba Streaming Speech adapter
-  implementations are complete but remain unregistered until capability
-  verification; unsupported Runtime Routes cannot activate full-chain
-  streaming.
+  implementations are registered. Runtime use requires configuration-bound
+  verification for the exact STT, Chat, or TTS role; unsupported Runtime Routes
+  cannot activate full-chain streaming.
 - Native Multimodal is implemented with a deterministic Mock provider only.
 - The Logs page loads a durable `GET /api/logs` snapshot and merges
   authenticated real-time log events.

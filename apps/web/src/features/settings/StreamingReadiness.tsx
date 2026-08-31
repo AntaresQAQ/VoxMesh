@@ -30,7 +30,9 @@ export function StreamingReadiness(props: {
     value ? t("settings.available") : t("settings.unavailable");
   const readinessText = t("settings.streamingReadiness", {
     declared: state(model?.declaredCapabilities.includes("streaming") ?? false),
-    verified: state(model?.verifiedCapabilities.includes("streaming") ?? false),
+    verified: state(
+      model?.verifiedStreamingRoles?.includes(props.streamingRole) ?? false
+    ),
     adapter: state(
       Boolean(model?.enabled) &&
         Boolean(connection?.enabled) &&

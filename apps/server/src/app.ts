@@ -68,6 +68,7 @@ import {
   createSpeechToTextProvider,
   createTextToSpeechProvider
 } from "./speech-providers.js";
+import { streamingRuntimeAvailability } from "./streaming-voice-providers.js";
 import type { StreamingVoiceRunPreparation } from "./streaming-voice-coordinator.js";
 import { registerVoiceStreamTransport } from "./voice-stream-transport.js";
 import { registerWebSocketUpgradeFallback } from "./websocket-security.js";
@@ -103,7 +104,11 @@ export async function buildServer(
     }
   }).withTypeProvider<TypeBoxTypeProvider>();
   const store =
-    dependencies.store ?? new VoxMeshStore(dependencies.config.databasePath);
+    dependencies.store ??
+    new VoxMeshStore(
+      dependencies.config.databasePath,
+      streamingRuntimeAvailability
+    );
   const mcp = dependencies.mcp ?? new MockMcpServer();
   const deviceStatusProvider =
     dependencies.deviceStatusProvider ?? new UnavailableDeviceStatusProvider();

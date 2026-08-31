@@ -10,9 +10,10 @@ OpenAI-compatible Chat Completions streaming. The adapters translate
 provider-specific HTTP and SSE data into the provider-independent
 `StreamingLlmProvider` contract.
 
-This work package does not register either adapter in the server composition
-root. Real-provider streaming remains unavailable until route verification and
-activation are implemented. Buffered Chat adapters are unchanged.
+The server registers both adapters as available Streaming Chat surfaces.
+Runtime use still requires explicit model declaration, role-specific successful
+verification for the current configuration fingerprint, and route activation.
+Buffered Chat adapters are unchanged.
 
 ## Request Boundary
 
@@ -110,11 +111,11 @@ never copied into `safeMessage`.
 `AzureOpenAiStreamingProvider` and
 `OpenAiCompatibleStreamingProvider` are exported from `@voxmesh/ai`.
 
-`apps/server/src/streaming-voice-providers.ts` intentionally continues to
-return `UnavailableStreamingLlm` for real providers. A later Phase 5 work
-package must verify the exact model's streaming capability and configuration
-fingerprint before registering these adapters. There is no silent fallback to
-buffered Chat.
+`apps/server/src/streaming-voice-providers.ts` registers both real adapters.
+Route testing completes a streaming Agent response and records Chat-role
+verification only when the route, model, and connection remain unchanged.
+Activation and every provider resolution recheck that record. There is no
+silent fallback to buffered Chat.
 
 ## Testing
 

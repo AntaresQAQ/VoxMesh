@@ -918,16 +918,38 @@ test("completes setup, tool-assisted chat, inspection, and logout", async ({
   );
   await customRoute.getByRole("button", { name: "Test & activate" }).click();
   expect((await routeTestResponse).status()).toBe(200);
-  await expect(page.getByRole("alert")).toContainText(
-    "requires verified streaming capability"
+  await expect(routeManager.getByRole("status")).toContainText(
+    "Route test succeeded and the route is active."
   );
+  await expect(customRoute.getByText("Active route")).toBeVisible();
   await expect(customRoute.getByText("Readiness: Ready")).toBeVisible();
   await expectAccessible(page, "English dark provider settings");
-  const nativeRoute = routeManager
+  await page.getByRole("link", { name: "Chat" }).click();
+  await page.getByRole("button", { name: "Start streaming" }).click();
+  await expect(page.getByText("Streaming microphone audio...")).toBeVisible();
+  await page.getByRole("button", { name: "Finish input" }).click();
+  await expect(
+    page
+      .locator(".streaming-voice-controls")
+      .getByText("Check the light status")
+  ).toBeVisible();
+  await expect(
+    page
+      .locator(".streaming-voice-controls")
+      .getByText("Mock tool reports living-room-light is on.")
+  ).toBeVisible();
+  await expect(page.getByText("Streaming voice completed.")).toBeVisible();
+  await page.getByRole("link", { name: "Settings" }).click();
+  await page.getByRole("link", { name: "AI Providers" }).click();
+  const reloadedRouteManager = page
+    .locator("details.routing-management")
+    .nth(2);
+  await reloadedRouteManager.locator("summary").click();
+  const nativeRoute = reloadedRouteManager
     .getByText("Default Native Voice")
     .locator("..");
   await nativeRoute.getByRole("button", { name: "Test & activate" }).click();
-  await expect(routeManager.getByRole("status")).toContainText(
+  await expect(reloadedRouteManager.getByRole("status")).toContainText(
     "Route test succeeded and the route is active."
   );
   await expect(nativeRoute.getByText("Active route")).toBeVisible();
