@@ -114,6 +114,8 @@ export function createStreamingLlmProvider(
         timeoutMs: configuration.timeoutMs,
         maxOutputTokens: configuration.maxOutputTokens
       });
+    default:
+      return new UnavailableStreamingLlm(String(configuration.mode));
   }
 }
 
@@ -141,6 +143,21 @@ class UnavailableStreamingStt implements StreamingSpeechToTextProvider {
 
   public async startSession(): Promise<never> {
     throw unavailable("STT", this.providerId);
+  }
+}
+
+class UnavailableStreamingLlm implements StreamingLlmProvider {
+  public constructor(private readonly providerId: string) {}
+
+  public stream(): AsyncIterable<never> {
+    const error = unavailable("Chat", this.providerId);
+    return {
+      [Symbol.asyncIterator](): AsyncIterator<never> {
+        return {
+          next: async () => Promise.reject(error)
+        };
+      }
+    };
   }
 }
 

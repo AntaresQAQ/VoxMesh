@@ -2295,6 +2295,13 @@ describe("VoxMeshStore", () => {
           )
           .get() as { count: number }
       ).count;
+      const migratedSystemFingerprint = (
+        migrated
+          .prepare(
+            "SELECT configuration_fingerprint FROM model_deployments WHERE id = 'system-model-chat'"
+          )
+          .get() as { configuration_fingerprint: string }
+      ).configuration_fingerprint;
       migrated.close();
       expect(columns.map((column) => column.name)).toContain(
         "chat_streaming_enabled"
@@ -2307,6 +2314,10 @@ describe("VoxMeshStore", () => {
         "model_streaming_verifications"
       );
       expect(streamingVerificationCount).toBe(0);
+      expect(migratedSystemFingerprint).toMatch(/^[a-f0-9]{64}$/u);
+      expect(migratedSystemFingerprint).not.toBe(
+        "system-mock-chat-fingerprint"
+      );
     } finally {
       store?.close();
       store = undefined;
