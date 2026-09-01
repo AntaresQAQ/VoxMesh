@@ -228,7 +228,7 @@ OpenAI-compatible Chat:
 | `streaming-composed-voice` | Streaming STT, compatible Streaming Chat/MCP, and Streaming TTS | 4        |
 | all selectors              | all scenarios above                                             | 12       |
 
-Example full execution:
+Example full streaming execution:
 
 ```bash
 VOXMESH_LIVE_TESTS=true \
