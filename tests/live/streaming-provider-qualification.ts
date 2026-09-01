@@ -135,7 +135,7 @@ export class StreamingProviderQualification {
           !consumed.result.response.trim() ||
           !consumed.result.usedTools.includes("mock.get_device_status")
         ) {
-          throw new LiveTestConfigurationError(
+          throw new Error(
             `${this.providerLabel} tool-assisted Streaming Chat did not complete the expected tool flow`
           );
         }
@@ -254,7 +254,7 @@ export class StreamingProviderQualification {
       pcm.byteLength > maximumPcmBytes ||
       pcm.byteLength % INPUT_FRAME_BYTES !== 0
     ) {
-      throw new Error(
+      throw new LiveTestConfigurationError(
         `${this.providerLabel} Streaming STT fixture must contain complete 20 ms frames within the 60-second limit`
       );
     }
