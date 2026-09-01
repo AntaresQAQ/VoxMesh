@@ -1,5 +1,11 @@
-import type { LlmProvider } from "../../packages/agent-core/src/index.js";
-import { OpenAiCompatibleProvider } from "../../packages/ai/src/index.js";
+import type {
+  LlmProvider,
+  StreamingLlmProvider
+} from "../../packages/agent-core/src/index.js";
+import {
+  OpenAiCompatibleProvider,
+  OpenAiCompatibleStreamingProvider
+} from "../../packages/ai/src/index.js";
 import {
   OpenAiCompatibleSpeechToTextProvider,
   OpenAiCompatibleTextToSpeechProvider,
@@ -20,18 +26,32 @@ import type {
   LiveSpeechToTextConfiguration,
   LiveTextToSpeechConfiguration
 } from "./provider-test-harness.js";
+import { LiveTestConfigurationError } from "./provider-test-harness.js";
+import {
+  StreamingProviderQualification,
+  streamingMinimumRequestCount,
+  type StreamingQualificationDependencies
+} from "./streaming-provider-qualification.js";
 
 const dependencies: BufferedQualificationDependencies = {
   createChat,
   createStt,
   createTts
 };
+const streamingDependencies: StreamingQualificationDependencies = {
+  createChat: createStreamingChat,
+  createStt: unsupportedStreamingSpeech,
+  createTts: unsupportedStreamingSpeech
+};
 
 export class OpenAiCompatibleQualification extends BufferedProviderQualification {
+  private readonly streaming: StreamingProviderQualification;
+
   public constructor(
     config: LiveProviderConfiguration,
     budget: LiveRequestBudget,
-    customDependencies: BufferedQualificationDependencies = dependencies
+    customDependencies: BufferedQualificationDependencies = dependencies,
+    customStreamingDependencies: StreamingQualificationDependencies = streamingDependencies
   ) {
     super(
       "openai-compatible",
@@ -40,13 +60,31 @@ export class OpenAiCompatibleQualification extends BufferedProviderQualification
       budget,
       customDependencies
     );
+    this.streaming = new StreamingProviderQualification(
+      "openai-compatible",
+      "OpenAI-compatible",
+      config,
+      budget,
+      customStreamingDependencies
+    );
+  }
+
+  public streamingChatDirect(): Promise<string> {
+    return this.streaming.chatDirect();
+  }
+
+  public streamingChatWithTools(): Promise<string> {
+    return this.streaming.chatWithTools();
   }
 }
 
 export function compatibleMinimumRequestCount(
   capabilities: readonly LiveCapabilityId[]
 ): number {
-  return bufferedMinimumRequestCount(capabilities);
+  return (
+    bufferedMinimumRequestCount(capabilities) +
+    streamingMinimumRequestCount(capabilities)
+  );
 }
 
 function createChat(config: LiveChatConfiguration): LlmProvider {
@@ -57,6 +95,24 @@ function createChat(config: LiveChatConfiguration): LlmProvider {
     timeoutMs: config.timeoutMs,
     maxOutputTokens: config.maxOutputTokens
   });
+}
+
+function createStreamingChat(
+  config: LiveChatConfiguration
+): StreamingLlmProvider {
+  return new OpenAiCompatibleStreamingProvider({
+    baseUrl: config.endpoint.href,
+    model: config.model,
+    apiKey: config.apiKey.reveal(),
+    timeoutMs: config.timeoutMs,
+    maxOutputTokens: config.maxOutputTokens
+  });
+}
+
+function unsupportedStreamingSpeech(): never {
+  throw new LiveTestConfigurationError(
+    "OpenAI-compatible streaming speech is outside the Phase 5 qualification scope"
+  );
 }
 
 function createStt(

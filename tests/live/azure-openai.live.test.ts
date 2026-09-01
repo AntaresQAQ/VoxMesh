@@ -38,6 +38,24 @@ describe.skipIf(!selected)("Azure OpenAI live qualification", () => {
     }
   );
 
+  test.runIf(shouldRunLiveScenario(plan, "azure-openai", "streaming-chat"))(
+    "qualifies direct Streaming Chat",
+    async () => {
+      await expect(
+        requiredQualification().streamingChatDirect()
+      ).resolves.toBeTruthy();
+    }
+  );
+
+  test.runIf(shouldRunLiveScenario(plan, "azure-openai", "streaming-chat"))(
+    "qualifies MCP-assisted Streaming Chat",
+    async () => {
+      await expect(
+        requiredQualification().streamingChatWithTools()
+      ).resolves.toBeTruthy();
+    }
+  );
+
   test.runIf(shouldRunLiveScenario(plan, "azure-openai", "chat"))(
     "qualifies MCP-assisted Chat",
     async () => {

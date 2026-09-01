@@ -198,13 +198,14 @@ default CI. Configure only dedicated, non-production resources and follow the
 
 Each capability selector has a fixed maximum provider request count:
 
-| Selector         | Scenarios                         | Requests |
-| ---------------- | --------------------------------- | -------- |
-| `chat`           | direct Chat and MCP-assisted Chat | 3        |
-| `stt`            | one buffered transcription        | 1        |
-| `tts`            | one buffered synthesis            | 1        |
-| `composed-voice` | STT, MCP-assisted Chat, and TTS   | 4        |
-| all selectors    | all scenarios above               | 9        |
+| Selector         | Scenarios                              | Requests |
+| ---------------- | -------------------------------------- | -------- |
+| `chat`           | direct Chat and MCP-assisted Chat      | 3        |
+| `stt`            | one buffered transcription             | 1        |
+| `tts`            | one buffered synthesis                 | 1        |
+| `composed-voice` | STT, MCP-assisted Chat, and TTS        | 4        |
+| `streaming-chat` | direct and MCP-assisted Streaming Chat | 3        |
+| all selectors    | all scenarios above                    | 12       |
 
 The tool-assisted scenarios permit one tool call followed by one final Chat
 completion. The harness does not retry a timed-out scenario. Set
@@ -226,8 +227,8 @@ Example full Azure execution:
 ```bash
 VOXMESH_LIVE_TESTS=true \
 VOXMESH_LIVE_PROVIDERS=azure-openai \
-VOXMESH_LIVE_CAPABILITIES=chat,stt,tts,composed-voice \
-VOXMESH_LIVE_MAX_REQUESTS=9 \
+VOXMESH_LIVE_CAPABILITIES=chat,stt,tts,composed-voice,streaming-chat \
+VOXMESH_LIVE_MAX_REQUESTS=12 \
 pnpm test:live
 ```
 

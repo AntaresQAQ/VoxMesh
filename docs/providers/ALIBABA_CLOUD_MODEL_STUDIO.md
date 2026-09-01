@@ -218,19 +218,22 @@ The default CI suite must remain offline and deterministic.
 The Alibaba suite qualifies dedicated speech protocols separately from
 OpenAI-compatible Chat:
 
-| Selector         | Scenarios                                         | Requests |
-| ---------------- | ------------------------------------------------- | -------- |
-| `stt`            | one dedicated Fun-ASR transcription               | 1        |
-| `tts`            | one dedicated Qwen/CosyVoice synthesis            | 1        |
-| `composed-voice` | dedicated STT, compatible Chat/MCP, dedicated TTS | 4        |
-| all selectors    | all scenarios above                               | 6        |
+| Selector                   | Scenarios                                                       | Requests |
+| -------------------------- | --------------------------------------------------------------- | -------- |
+| `stt`                      | one dedicated Fun-ASR transcription                             | 1        |
+| `tts`                      | one dedicated Qwen/CosyVoice synthesis                          | 1        |
+| `composed-voice`           | dedicated STT, compatible Chat/MCP, dedicated TTS               | 4        |
+| `streaming-stt`            | one incremental Fun-ASR session                                 | 1        |
+| `streaming-tts`            | one ordered Qwen/CosyVoice PCM session                          | 1        |
+| `streaming-composed-voice` | Streaming STT, compatible Streaming Chat/MCP, and Streaming TTS | 4        |
+| all selectors              | all scenarios above                                             | 12       |
 
 Example full execution:
 
 ```bash
 VOXMESH_LIVE_TESTS=true \
 VOXMESH_LIVE_PROVIDERS=alibaba-model-studio \
-VOXMESH_LIVE_CAPABILITIES=stt,tts,composed-voice \
+VOXMESH_LIVE_CAPABILITIES=streaming-stt,streaming-tts,streaming-composed-voice \
 VOXMESH_LIVE_MAX_REQUESTS=6 \
 pnpm test:live
 ```
@@ -264,7 +267,9 @@ Dedicated STT, dedicated TTS, and buffered composed voice passed on 2026-08-23
 (UTC+08:00); see the
 [sanitized evidence](../qualification/ALIBABA_MODEL_STUDIO_2026-08-23.md).
 This evidence does not qualify application-level streaming or standard
-OpenAI-compatible Audio endpoints.
+OpenAI-compatible Audio endpoints. Streaming selectors are available, but
+their result remains unqualified until an explicitly authorized run publishes
+separate sanitized evidence.
 
 ## 7. Migration
 
