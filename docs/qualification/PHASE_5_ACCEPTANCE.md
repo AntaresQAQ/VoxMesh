@@ -110,7 +110,7 @@ through `/api/voice`; application streaming uses `/api/voice-stream`.
 
 ## 7. Acceptance Gate
 
-The closeout branch passed `pnpm validate` with 375 unit tests, 78 integration
+The closeout branch passed `pnpm validate` with 376 unit tests, 78 integration
 tests, the production builds, and the complete Playwright Mock Mode scenario.
 The default `pnpm test:live` run passed its harness test and skipped all 21
 credentialed scenarios without making provider requests.
