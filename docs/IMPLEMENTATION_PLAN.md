@@ -9,10 +9,10 @@ This document is the project-visible implementation roadmap. It does not authori
 
 ## Implementation Progress
 
-Last updated: 2026-08-28 (UTC+08:00)
+Last updated: 2026-09-01 (UTC+08:00)
 
-Implementation baseline: merged `main` through PR #37
-(`feat: activate verified streaming routes`).
+Implementation baseline: merged `main` through PR #38
+(`test: complete streaming voice acceptance`).
 
 Recent merged milestones:
 
@@ -42,21 +42,22 @@ Recent merged milestones:
 - PR #35: Azure/OpenAI-compatible Streaming Chat adapters
 - PR #36: Alibaba Streaming Speech adapters
 - PR #37: Streaming route verification and activation
+- PR #38: Phase 5 validation and acceptance report
 
 ### Phase Status
 
-| Phase | Scope                            | Status                                 |
-| ----- | -------------------------------- | -------------------------------------- |
-| 1     | Project skeleton and secure base | Complete                               |
-| 2     | Agent Core and Mock pipeline     | Complete                               |
-| 3     | Web Console                      | Complete                               |
-| 4     | Buffered real AI providers       | Accepted; deferred gaps tracked        |
-| 5     | Full-chain streaming voice       | PRs 1-11 merged; PR 12 acceptance next |
-| 6     | Cross-platform audio devices     | Planned; requires Phase 5 acceptance   |
-| 7     | Offline wake word                | Planned; requires Phase 6 acceptance   |
-| 8     | Generic third-party MCP          | Planned; requires Phase 7 acceptance   |
-| 9     | Scripted deployment and NanoPi   | Planned; requires Phase 8 acceptance   |
-| Gate  | Final MVP acceptance and release | Pending                                |
+| Phase | Scope                            | Status                                           |
+| ----- | -------------------------------- | ------------------------------------------------ |
+| 1     | Project skeleton and secure base | Complete                                         |
+| 2     | Agent Core and Mock pipeline     | Complete                                         |
+| 3     | Web Console                      | Complete                                         |
+| 4     | Buffered real AI providers       | Accepted; deferred gaps tracked                  |
+| 5     | Full-chain streaming voice       | Implementation complete; user acceptance pending |
+| 6     | Cross-platform audio devices     | Planned; requires Phase 5 acceptance             |
+| 7     | Offline wake word                | Planned; requires Phase 6 acceptance             |
+| 8     | Generic third-party MCP          | Planned; requires Phase 7 acceptance             |
+| 9     | Scripted deployment and NanoPi   | Planned; requires Phase 8 acceptance             |
+| Gate  | Final MVP acceptance and release | Pending                                          |
 
 ### Completed foundation and vertical slices
 
@@ -195,9 +196,9 @@ The consolidated evidence and limitations are recorded in the
 [Phase 4 Acceptance Report](./qualification/PHASE_4_ACCEPTANCE.md). The user
 accepted the report and authorized Phase 5 planning on 2026-08-24.
 
-### Planned streaming voice work
+### Streaming voice implementation
 
-- [ ] authenticated, versioned bidirectional browser voice WebSocket transport
+- [x] authenticated, versioned bidirectional browser voice WebSocket transport
 - [x] browser PCM capture without waiting for `MediaRecorder.stop()`
 - [x] capability-gated streaming STT sessions with partial and final
       transcription events
@@ -210,14 +211,16 @@ accepted the report and authorized Phase 5 planning on 2026-08-24.
       cleanup, and explicit non-resumable reconnect behavior
 - [x] Alibaba Fun-ASR and Qwen-Audio-TTS/CosyVoice streaming adapters using
       their existing incremental WebSocket protocols
-- [ ] complete final offline acceptance and explicitly authorized
-      live-provider qualification
+- [x] deterministic Mock streaming adapters and complete unit, integration,
+      Playwright, accessibility, and offline acceptance coverage
+- [x] opt-in bounded live-provider qualification suites with credentialed
+      profiles explicitly unqualified until an authorized run
 
 The accepted protocol, limits, provider scope, 12-PR sequence, dependency
 graph, risks, and operation gates are defined in
 [Phase 5 Streaming Voice Plan](./development/PHASE_5_STREAMING_VOICE.md). The
-user accepted the plan on 2026-08-24; PRs 1-11 are merged and PR 12 is the
-remaining acceptance closeout.
+user accepted the plan on 2026-08-24; PRs 1-12 are merged and only explicit
+acceptance of the Phase 5 report remains.
 
 Phase 5 PR 1 implementation is documented in
 [Voice Stream Protocol and Provider Contracts](./architecture/VOICE_STREAM_PROTOCOL.md).
@@ -285,8 +288,8 @@ server transport, and browser client availability.
 
 ### Next execution order
 
-1. Complete Phase 5 acceptance and any explicitly authorized live
-   qualification.
+1. Obtain explicit user acceptance of the Phase 5 report; run credentialed
+   live qualification only when separately authorized.
 2. Implement Phase 6 cross-platform audio devices.
 3. Implement Phase 7 offline wake-word detection.
 4. Implement Phase 8 generic third-party MCP and the full MCP Console.
@@ -301,15 +304,15 @@ vertical slices, accepted buffered real-provider qualification with explicit
 deferred Audio gaps, protected Runtime Routing, real-time observability,
 durable Chat lifecycle and continuity, platform-independent device-status
 foundations, and a bilingual Web Console with representative accessibility
-automation. The implementation is intentionally incomplete: Phase 5
-acceptance, physical audio, Wake Word, third-party MCP, scripted deployment,
-and final hardware qualification remain.
+automation. Phase 5 implementation and offline acceptance are complete, while
+explicit user acceptance, physical audio, Wake Word, third-party MCP, scripted
+deployment, and final hardware qualification remain.
 
 The implementation follows the nine phases defined in the MVP specification
 while preserving a platform-independent Agent Core. Some provider work was
 delivered before all Phase 3 acceptance items. Phase 3 is closed, and the user
-accepted the Phase 4 report on 2026-08-24. The current gate is Phase 5
-validation and explicit acceptance.
+accepted the Phase 4 report on 2026-08-24. The current gate is explicit
+acceptance of the Phase 5 report.
 Every behavior-changing work package remains gated by explicit user
 confirmation.
 

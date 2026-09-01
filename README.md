@@ -28,9 +28,9 @@ VoxMesh has an initial Mock Mode vertical slice for development and architecture
   adapter/runtime availability gates
 - persisted, configuration-bound provider and route readiness diagnostics
 - generic OpenAI-compatible LLM configuration, including Alibaba Cloud Model Studio
-- Azure OpenAI and OpenAI-compatible Streaming Chat adapters, pending
+- Azure OpenAI and OpenAI-compatible Streaming Chat adapters with
   capability-verified runtime registration
-- Alibaba Fun-ASR and Qwen/CosyVoice Streaming Speech adapters, pending
+- Alibaba Fun-ASR and Qwen/CosyVoice Streaming Speech adapters with
   capability-verified runtime registration
 - English and Simplified Chinese Web Console localization
 - browser-language detection and persisted language selection
@@ -43,7 +43,7 @@ VoxMesh has an initial Mock Mode vertical slice for development and architecture
 - TanStack Form for complex Settings workflows
 - unit, integration, and Playwright end-to-end tests
 
-Buffered real-provider Phase 4 is ready for explicit acceptance. Azure and
+Buffered real-provider Phase 4 was accepted on 2026-08-24. Azure and
 OpenAI-compatible direct/tool-assisted Chat and Alibaba dedicated
 STT/TTS/composed voice are live-qualified. Azure Speech and standard compatible
 Audio remain explicitly unqualified and tracked as non-blocking follow-up work;
@@ -57,6 +57,10 @@ Capability-gated full-chain Streaming STT/Chat LLM/TTS is implemented for Mock,
 Azure/OpenAI-compatible Chat, and Alibaba speech. Each enabled role must pass
 explicit configuration-bound verification before activation; unsupported
 routes remain blocked rather than silently using buffered transport.
+Phase 5 deterministic offline acceptance is complete. Credentialed streaming
+provider profiles remain explicitly unqualified, and Phase 5 awaits explicit
+user acceptance of the
+[Phase 5 Acceptance Report](docs/qualification/PHASE_5_ACCEPTANCE.md).
 
 The Logs page combines a persisted HTTP snapshot with authenticated real-time
 log and pipeline-event WebSocket delivery, replay, gap indication, and
