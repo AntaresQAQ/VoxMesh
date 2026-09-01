@@ -190,4 +190,49 @@ describe("StreamingProviderQualification", () => {
       "Streaming TTS returned an invalid response"
     );
   });
+
+  it("rejects transcription events emitted after the final result", async () => {
+    const qualification = new StreamingProviderQualification(
+      "test-provider",
+      "Test provider",
+      { stt: config.stt },
+      new LiveRequestBudget(1),
+      {
+        createChat: () => new MockStreamingLlmProvider(),
+        createStt: () => ({
+          startSession: async () => ({
+            write: async () => undefined,
+            finishInput: async () => undefined,
+            close: async () => undefined,
+            async *[Symbol.asyncIterator]() {
+              yield {
+                type: "final" as const,
+                sequence: 1,
+                result: {
+                  text: "Check the light status",
+                  language: "en"
+                }
+              };
+              yield {
+                type: "partial" as const,
+                sequence: 2,
+                text: "late partial"
+              };
+            }
+          })
+        }),
+        createTts: () => new MockStreamingTextToSpeechProvider(),
+        readAudioFixture: async () => ({
+          data: createSyntheticPcm16Wav(100, 440, 16_000),
+          mimeType: "audio/wav"
+        }),
+        recordEvidence: async (_provider, _capability, operation) =>
+          await operation()
+      }
+    );
+
+    await expect(qualification.transcribe()).rejects.toThrow(
+      "Streaming STT returned an invalid response"
+    );
+  });
 });

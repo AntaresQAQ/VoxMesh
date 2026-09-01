@@ -374,7 +374,11 @@ function validateTranscription(
 ): string {
   assertOrderedEvents(events, providerLabel, "Streaming STT");
   const finals = events.filter((event) => event.type === "final");
-  if (finals.length !== 1 || !finals[0]?.result.text.trim()) {
+  if (
+    finals.length !== 1 ||
+    events.at(-1)?.type !== "final" ||
+    !finals[0]?.result.text.trim()
+  ) {
     throw new Error(
       `${providerLabel} Streaming STT returned an invalid response`
     );
