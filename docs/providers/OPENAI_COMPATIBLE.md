@@ -62,13 +62,14 @@ pnpm test:live
 
 Request bounds:
 
-| Selector         | Scenarios                         | Requests |
-| ---------------- | --------------------------------- | -------- |
-| `chat`           | direct Chat and MCP-assisted Chat | 3        |
-| `stt`            | one buffered transcription        | 1        |
-| `tts`            | one buffered synthesis            | 1        |
-| `composed-voice` | STT, MCP-assisted Chat, and TTS   | 4        |
-| all selectors    | all scenarios above               | 9        |
+| Selector         | Scenarios                              | Requests |
+| ---------------- | -------------------------------------- | -------- |
+| `chat`           | direct Chat and MCP-assisted Chat      | 3        |
+| `stt`            | one buffered transcription             | 1        |
+| `tts`            | one buffered synthesis                 | 1        |
+| `composed-voice` | STT, MCP-assisted Chat, and TTS        | 4        |
+| `streaming-chat` | direct and MCP-assisted Streaming Chat | 3        |
+| all selectors    | all scenarios above                    | 12       |
 
 Selecting an unsupported capability is a test failure, not a skip or fallback.
 Unselected capabilities do not require configuration and are skipped.
@@ -105,7 +106,7 @@ configuration at the recorded time. It does not prove:
 
 - other OpenAI-compatible providers
 - unselected endpoints or models
-- streaming compatibility
+- unselected streaming capabilities or configurations
 - production availability, latency, cost, quota, or retention suitability
 
 Provider-specific WebSocket, asynchronous task, file-transcription, or native

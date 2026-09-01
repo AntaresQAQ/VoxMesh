@@ -1,13 +1,23 @@
-import type { LlmProvider } from "../../packages/agent-core/src/index.js";
-import { OpenAiCompatibleProvider } from "../../packages/ai/src/index.js";
+import type {
+  LlmProvider,
+  StreamingLlmProvider
+} from "../../packages/agent-core/src/index.js";
+import {
+  OpenAiCompatibleProvider,
+  OpenAiCompatibleStreamingProvider
+} from "../../packages/ai/src/index.js";
 import {
   AlibabaModelStudioConfigurationError,
   AlibabaModelStudioSpeechToTextProvider,
+  AlibabaModelStudioStreamingSpeechToTextProvider,
+  AlibabaModelStudioStreamingTextToSpeechProvider,
   AlibabaModelStudioTextToSpeechProvider,
   validateAlibabaModelStudioCompatibleEndpoint,
   validateAlibabaModelStudioSttConfiguration,
   validateAlibabaModelStudioTtsConfiguration,
   type SpeechToTextProvider,
+  type StreamingSpeechToTextProvider,
+  type StreamingTextToSpeechProvider,
   type TextToSpeechProvider
 } from "../../packages/audio/src/index.js";
 
@@ -25,6 +35,13 @@ import type {
   LiveTextToSpeechConfiguration
 } from "./provider-test-harness.js";
 import { LiveTestConfigurationError } from "./provider-test-harness.js";
+import {
+  StreamingProviderQualification,
+  streamingMinimumRequestCount,
+  type StreamingAudioQualificationResult,
+  type StreamingComposedQualificationResult,
+  type StreamingQualificationDependencies
+} from "./streaming-provider-qualification.js";
 
 const dependencies: BufferedQualificationDependencies = {
   validateConfiguration,
@@ -32,12 +49,20 @@ const dependencies: BufferedQualificationDependencies = {
   createStt,
   createTts
 };
+const streamingDependencies: StreamingQualificationDependencies = {
+  createChat: createStreamingChat,
+  createStt: createStreamingStt,
+  createTts: createStreamingTts
+};
 
 export class AlibabaModelStudioQualification extends BufferedProviderQualification {
+  private readonly streaming: StreamingProviderQualification;
+
   public constructor(
     config: LiveProviderConfiguration,
     budget: LiveRequestBudget,
-    customDependencies: BufferedQualificationDependencies = dependencies
+    customDependencies: BufferedQualificationDependencies = dependencies,
+    customStreamingDependencies: StreamingQualificationDependencies = streamingDependencies
   ) {
     super(
       "alibaba-model-studio",
@@ -46,13 +71,35 @@ export class AlibabaModelStudioQualification extends BufferedProviderQualificati
       budget,
       customDependencies
     );
+    this.streaming = new StreamingProviderQualification(
+      "alibaba-model-studio",
+      "Alibaba Model Studio",
+      config,
+      budget,
+      customStreamingDependencies
+    );
+  }
+
+  public streamingTranscribe(): Promise<string> {
+    return this.streaming.transcribe();
+  }
+
+  public streamingSynthesize(): Promise<StreamingAudioQualificationResult> {
+    return this.streaming.synthesize();
+  }
+
+  public streamingComposedVoice(): Promise<StreamingComposedQualificationResult> {
+    return this.streaming.composedVoice();
   }
 }
 
 export function alibabaMinimumRequestCount(
   capabilities: readonly LiveCapabilityId[]
 ): number {
-  return bufferedMinimumRequestCount(capabilities);
+  return (
+    bufferedMinimumRequestCount(capabilities) +
+    streamingMinimumRequestCount(capabilities)
+  );
 }
 
 function validateConfiguration(config: LiveProviderConfiguration): void {
@@ -90,6 +137,43 @@ function createChat(config: LiveChatConfiguration): LlmProvider {
     apiKey: config.apiKey.reveal(),
     timeoutMs: config.timeoutMs,
     maxOutputTokens: config.maxOutputTokens
+  });
+}
+
+function createStreamingChat(
+  config: LiveChatConfiguration
+): StreamingLlmProvider {
+  return new OpenAiCompatibleStreamingProvider({
+    baseUrl: config.endpoint.href,
+    model: config.model,
+    apiKey: config.apiKey.reveal(),
+    timeoutMs: config.timeoutMs,
+    maxOutputTokens: config.maxOutputTokens
+  });
+}
+
+function createStreamingStt(
+  config: LiveSpeechToTextConfiguration
+): StreamingSpeechToTextProvider {
+  return new AlibabaModelStudioStreamingSpeechToTextProvider({
+    endpoint: config.endpoint.href,
+    model: config.model,
+    apiKey: config.apiKey.reveal(),
+    language: config.language ?? "",
+    timeoutMs: config.timeoutMs
+  });
+}
+
+function createStreamingTts(
+  config: LiveTextToSpeechConfiguration
+): StreamingTextToSpeechProvider {
+  return new AlibabaModelStudioStreamingTextToSpeechProvider({
+    endpoint: config.endpoint.href,
+    model: config.model,
+    apiKey: config.apiKey.reveal(),
+    voice: config.voice,
+    instructions: config.instructions ?? "",
+    timeoutMs: config.timeoutMs
   });
 }
 

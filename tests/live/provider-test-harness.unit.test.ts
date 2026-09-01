@@ -97,11 +97,33 @@ describe("live provider test harness", () => {
       timeoutMs: 30_000,
       maxOutputTokens: 128
     });
+
     expect(plan.azureOpenAi?.chat?.apiKey.reveal()).toBe("azure-secret");
     expect(plan.azureOpenAi?.stt).toBeUndefined();
     expect(plan.openAiCompatible).toBeUndefined();
     expect(shouldRunLiveScenario(plan, "azure-openai", "chat")).toBe(true);
     expect(shouldRunLiveScenario(plan, "azure-openai", "stt")).toBe(false);
+  });
+
+  it("loads only Streaming Chat configuration for Azure", () => {
+    const plan = loadLiveTestPlan({
+      VOXMESH_LIVE_TESTS: "true",
+      VOXMESH_LIVE_PROVIDERS: "azure-openai",
+      VOXMESH_LIVE_CAPABILITIES: "streaming-chat",
+      VOXMESH_LIVE_MAX_REQUESTS: "3",
+      VOXMESH_LIVE_AZURE_CHAT_ENDPOINT: "https://example.test",
+      VOXMESH_LIVE_AZURE_CHAT_API_KEY: "azure-secret",
+      VOXMESH_LIVE_AZURE_CHAT_MODEL: "chat-deployment",
+      VOXMESH_LIVE_AZURE_CHAT_API_VERSION: "2024-10-21"
+    });
+
+    expect(plan.azureOpenAi?.chat).toBeDefined();
+    expect(plan.azureOpenAi?.stt).toBeUndefined();
+    expect(plan.azureOpenAi?.tts).toBeUndefined();
+    expect(shouldRunLiveScenario(plan, "azure-openai", "streaming-chat")).toBe(
+      true
+    );
+    expect(shouldRunLiveScenario(plan, "azure-openai", "chat")).toBe(false);
   });
 
   it("loads Alibaba composed voice roles without inferring shared values", () => {
@@ -131,6 +153,38 @@ describe("live provider test harness", () => {
     );
     expect(
       shouldRunLiveScenario(plan, "alibaba-model-studio", "composed-voice")
+    ).toBe(true);
+  });
+
+  it("loads all Alibaba roles for streaming composed voice", () => {
+    const plan = loadLiveTestPlan({
+      VOXMESH_LIVE_TESTS: "true",
+      VOXMESH_LIVE_PROVIDERS: "alibaba-model-studio",
+      VOXMESH_LIVE_CAPABILITIES: "streaming-composed-voice",
+      VOXMESH_LIVE_MAX_REQUESTS: "4",
+      VOXMESH_LIVE_OPENAI_CHAT_ENDPOINT: "https://chat.example.test/v1",
+      VOXMESH_LIVE_OPENAI_CHAT_API_KEY: "chat-secret",
+      VOXMESH_LIVE_OPENAI_CHAT_MODEL: "qwen-test",
+      VOXMESH_LIVE_ALIBABA_STT_ENDPOINT:
+        "wss://stt.example.test/api-ws/v1/inference",
+      VOXMESH_LIVE_ALIBABA_STT_API_KEY: "stt-secret",
+      VOXMESH_LIVE_ALIBABA_STT_MODEL: "asr-test",
+      VOXMESH_LIVE_ALIBABA_TTS_ENDPOINT:
+        "wss://tts.example.test/api-ws/v1/inference",
+      VOXMESH_LIVE_ALIBABA_TTS_API_KEY: "tts-secret",
+      VOXMESH_LIVE_ALIBABA_TTS_MODEL: "tts-test",
+      VOXMESH_LIVE_ALIBABA_TTS_VOICE: "voice-test"
+    });
+
+    expect(plan.alibabaModelStudio?.chat).toBeDefined();
+    expect(plan.alibabaModelStudio?.stt).toBeDefined();
+    expect(plan.alibabaModelStudio?.tts).toBeDefined();
+    expect(
+      shouldRunLiveScenario(
+        plan,
+        "alibaba-model-studio",
+        "streaming-composed-voice"
+      )
     ).toBe(true);
   });
 

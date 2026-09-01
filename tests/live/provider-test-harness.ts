@@ -18,7 +18,11 @@ export const liveCapabilityIds = [
   "chat",
   "stt",
   "tts",
-  "composed-voice"
+  "composed-voice",
+  "streaming-chat",
+  "streaming-stt",
+  "streaming-tts",
+  "streaming-composed-voice"
 ] as const;
 
 export type LiveProviderId = (typeof liveProviderIds)[number];
@@ -93,9 +97,28 @@ const REDACTED = "[REDACTED]";
 const supportedCapabilities: Readonly<
   Record<LiveProviderId, ReadonlySet<LiveCapabilityId>>
 > = {
-  "azure-openai": new Set(liveCapabilityIds),
-  "openai-compatible": new Set(liveCapabilityIds),
-  "alibaba-model-studio": new Set(["stt", "tts", "composed-voice"])
+  "azure-openai": new Set([
+    "chat",
+    "stt",
+    "tts",
+    "composed-voice",
+    "streaming-chat"
+  ]),
+  "openai-compatible": new Set([
+    "chat",
+    "stt",
+    "tts",
+    "composed-voice",
+    "streaming-chat"
+  ]),
+  "alibaba-model-studio": new Set([
+    "stt",
+    "tts",
+    "composed-voice",
+    "streaming-stt",
+    "streaming-tts",
+    "streaming-composed-voice"
+  ])
 };
 
 /**
@@ -419,8 +442,9 @@ function loadAzureConfiguration(
   capabilities: readonly LiveCapabilityId[]
 ): LiveProviderConfiguration {
   const composed = capabilities.includes("composed-voice");
+  const streamingChat = capabilities.includes("streaming-chat");
   return {
-    ...(capabilities.includes("chat") || composed
+    ...(capabilities.includes("chat") || composed || streamingChat
       ? {
           chat: loadChatConfiguration(environment, {
             prefix: "VOXMESH_LIVE_AZURE_CHAT",
@@ -452,8 +476,9 @@ function loadOpenAiCompatibleConfiguration(
   capabilities: readonly LiveCapabilityId[]
 ): LiveProviderConfiguration {
   const composed = capabilities.includes("composed-voice");
+  const streamingChat = capabilities.includes("streaming-chat");
   return {
-    ...(capabilities.includes("chat") || composed
+    ...(capabilities.includes("chat") || composed || streamingChat
       ? {
           chat: loadChatConfiguration(environment, {
             prefix: "VOXMESH_LIVE_OPENAI_CHAT"
@@ -482,15 +507,19 @@ function loadAlibabaConfiguration(
   capabilities: readonly LiveCapabilityId[]
 ): LiveProviderConfiguration {
   const composed = capabilities.includes("composed-voice");
+  const streamingComposed = capabilities.includes("streaming-composed-voice");
   return {
-    ...(composed
+    ...(composed || streamingComposed
       ? {
           chat: loadChatConfiguration(environment, {
             prefix: "VOXMESH_LIVE_OPENAI_CHAT"
           })
         }
       : {}),
-    ...(capabilities.includes("stt") || composed
+    ...(capabilities.includes("stt") ||
+    capabilities.includes("streaming-stt") ||
+    composed ||
+    streamingComposed
       ? {
           stt: loadSttConfiguration(environment, {
             prefix: "VOXMESH_LIVE_ALIBABA_STT",
@@ -498,7 +527,10 @@ function loadAlibabaConfiguration(
           })
         }
       : {}),
-    ...(capabilities.includes("tts") || composed
+    ...(capabilities.includes("tts") ||
+    capabilities.includes("streaming-tts") ||
+    composed ||
+    streamingComposed
       ? {
           tts: loadTtsConfiguration(environment, {
             prefix: "VOXMESH_LIVE_ALIBABA_TTS",

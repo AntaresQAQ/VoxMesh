@@ -59,6 +59,37 @@ describe.skipIf(!selected)("Alibaba Model Studio live qualification", () => {
     expect(result.audioMimeType).toContain("wav");
     expect(result.audioByteLength).toBeGreaterThan(44);
   });
+
+  test.runIf(
+    shouldRunLiveScenario(plan, "alibaba-model-studio", "streaming-stt")
+  )("qualifies Streaming Fun-ASR STT", async () => {
+    await expect(
+      requiredQualification().streamingTranscribe()
+    ).resolves.toBeTruthy();
+  });
+
+  test.runIf(
+    shouldRunLiveScenario(plan, "alibaba-model-studio", "streaming-tts")
+  )("qualifies Streaming Qwen/CosyVoice TTS", async () => {
+    const audio = await requiredQualification().streamingSynthesize();
+    expect(audio.audioByteLength).toBeGreaterThan(0);
+    expect(audio.durationMs).toBeGreaterThan(0);
+    expect(audio.chunkCount).toBeGreaterThan(0);
+  });
+
+  test.runIf(
+    shouldRunLiveScenario(
+      plan,
+      "alibaba-model-studio",
+      "streaming-composed-voice"
+    )
+  )("qualifies full-chain Streaming composed voice", async () => {
+    const result = await requiredQualification().streamingComposedVoice();
+    expect(result.transcript.length).toBeGreaterThan(0);
+    expect(result.response.length).toBeGreaterThan(0);
+    expect(result.usedTools).toEqual(["mock.get_device_status"]);
+    expect(result.audioByteLength).toBeGreaterThan(0);
+  });
 });
 
 function requiredQualification(): AlibabaModelStudioQualification {

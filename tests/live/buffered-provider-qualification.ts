@@ -57,7 +57,8 @@ export class BufferedProviderQualification {
     private readonly dependencies: BufferedQualificationDependencies
   ) {
     dependencies.validateConfiguration?.(config);
-    this.#readAudioFixture = dependencies.readAudioFixture ?? readAudioFixture;
+    this.#readAudioFixture =
+      dependencies.readAudioFixture ?? readQualificationAudioFixture;
     this.#recordEvidence =
       dependencies.recordEvidence ?? recordQualificationEvidence;
   }
@@ -107,14 +108,18 @@ export class BufferedProviderQualification {
 
   public transcribe(): Promise<string> {
     return this.#recordEvidence(this.providerFamily, "stt", async () => {
-      const config = required(
+      const config = requiredLiveConfiguration(
         this.config.stt,
         `${this.providerLabel} STT configuration`
       );
       const audio = await this.inputAudio(config);
       const provider = this.dependencies.createStt(config);
       const result = await executeLiveProviderRequest(
-        requestOptions(`${this.providerLabel} STT`, config, this.budget),
+        qualificationRequestOptions(
+          `${this.providerLabel} STT`,
+          config,
+          this.budget
+        ),
         () => provider.transcribe(audio)
       );
       if (!result.text.trim()) {
@@ -128,7 +133,7 @@ export class BufferedProviderQualification {
 
   public synthesize(): Promise<AudioData> {
     return this.#recordEvidence(this.providerFamily, "tts", async () => {
-      const config = required(
+      const config = requiredLiveConfiguration(
         this.config.tts,
         `${this.providerLabel} TTS configuration`
       );
@@ -144,13 +149,13 @@ export class BufferedProviderQualification {
       this.providerFamily,
       "composed-voice",
       async () => {
-        const sttConfig = required(
+        const sttConfig = requiredLiveConfiguration(
           this.config.stt,
           `${this.providerLabel} STT configuration`
         );
         const input = await this.inputAudio(sttConfig);
         const transcription = await executeLiveProviderRequest(
-          requestOptions(
+          qualificationRequestOptions(
             `${this.providerLabel} composed STT`,
             sttConfig,
             this.budget
@@ -175,7 +180,7 @@ export class BufferedProviderQualification {
             `${this.providerLabel} composed Chat did not complete the expected tool flow`
           );
         }
-        const ttsConfig = required(
+        const ttsConfig = requiredLiveConfiguration(
           this.config.tts,
           `${this.providerLabel} TTS configuration`
         );
@@ -192,7 +197,7 @@ export class BufferedProviderQualification {
   }
 
   private chatProvider(operation: string): LlmProvider {
-    const config = required(
+    const config = requiredLiveConfiguration(
       this.config.chat,
       `${this.providerLabel} Chat configuration`
     );
@@ -200,7 +205,7 @@ export class BufferedProviderQualification {
     return {
       complete: (input) =>
         executeLiveProviderRequest(
-          requestOptions(
+          qualificationRequestOptions(
             `${this.providerLabel} ${operation}`,
             config,
             this.budget
@@ -227,22 +232,30 @@ export class BufferedProviderQualification {
     }
     const provider = this.dependencies.createTts(config);
     const audio = await executeLiveProviderRequest(
-      requestOptions(`${this.providerLabel} TTS`, config, this.budget),
+      qualificationRequestOptions(
+        `${this.providerLabel} TTS`,
+        config,
+        this.budget
+      ),
       () => provider.synthesize(text)
     );
-    validatePcmWav(audio, `${this.providerLabel} TTS`);
+    validateQualificationPcmWav(audio, `${this.providerLabel} TTS`);
     return audio;
   }
 
   private async inputAudio(
     config: LiveSpeechToTextConfiguration
   ): Promise<AudioData> {
-    const fixturePath = required(
+    const fixturePath = requiredLiveConfiguration(
       config.fixturePath,
       `${this.providerLabel} STT fixture path`
     );
     const audio = await this.#readAudioFixture(fixturePath);
-    validatePcmWav(audio, `${this.providerLabel} STT fixture`, 16_000);
+    validateQualificationPcmWav(
+      audio,
+      `${this.providerLabel} STT fixture`,
+      16_000
+    );
     return audio;
   }
 }
@@ -258,7 +271,9 @@ export function bufferedMinimumRequestCount(
   );
 }
 
-async function readAudioFixture(path: string): Promise<AudioData> {
+export async function readQualificationAudioFixture(
+  path: string
+): Promise<AudioData> {
   if (!isAbsolute(path)) {
     throw new LiveTestConfigurationError("STT fixture path must be absolute");
   }
@@ -271,7 +286,7 @@ async function readAudioFixture(path: string): Promise<AudioData> {
   return { data, mimeType: "audio/wav" };
 }
 
-function validatePcmWav(
+export function validateQualificationPcmWav(
   audio: AudioData,
   label: string,
   expectedSampleRate?: number
@@ -296,7 +311,7 @@ function validatePcmWav(
   }
 }
 
-function requestOptions(
+export function qualificationRequestOptions(
   label: string,
   config:
     | LiveChatConfiguration
@@ -312,7 +327,10 @@ function requestOptions(
   };
 }
 
-function required<T>(value: T | undefined, label: string): T {
+export function requiredLiveConfiguration<T>(
+  value: T | undefined,
+  label: string
+): T {
   if (value === undefined) {
     throw new LiveTestConfigurationError(`${label} is required`);
   }

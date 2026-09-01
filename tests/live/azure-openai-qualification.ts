@@ -1,5 +1,11 @@
-import type { LlmProvider } from "../../packages/agent-core/src/index.js";
-import { AzureOpenAiProvider } from "../../packages/ai/src/index.js";
+import type {
+  LlmProvider,
+  StreamingLlmProvider
+} from "../../packages/agent-core/src/index.js";
+import {
+  AzureOpenAiProvider,
+  AzureOpenAiStreamingProvider
+} from "../../packages/ai/src/index.js";
 import {
   AzureOpenAiSpeechToTextProvider,
   AzureOpenAiTextToSpeechProvider,
@@ -21,27 +27,58 @@ import {
   type LiveSpeechToTextConfiguration,
   type LiveTextToSpeechConfiguration
 } from "./provider-test-harness.js";
+import {
+  StreamingProviderQualification,
+  streamingMinimumRequestCount,
+  type StreamingQualificationDependencies
+} from "./streaming-provider-qualification.js";
 
 const dependencies: BufferedQualificationDependencies = {
   createChat,
   createStt,
   createTts
 };
+const streamingDependencies: StreamingQualificationDependencies = {
+  createChat: createStreamingChat,
+  createStt: unsupportedStreamingSpeech,
+  createTts: unsupportedStreamingSpeech
+};
 
 export class AzureOpenAiQualification extends BufferedProviderQualification {
+  private readonly streaming: StreamingProviderQualification;
+
   public constructor(
     config: LiveProviderConfiguration,
     budget: LiveRequestBudget,
-    customDependencies: BufferedQualificationDependencies = dependencies
+    customDependencies: BufferedQualificationDependencies = dependencies,
+    customStreamingDependencies: StreamingQualificationDependencies = streamingDependencies
   ) {
     super("azure-openai", "Azure", config, budget, customDependencies);
+    this.streaming = new StreamingProviderQualification(
+      "azure-openai",
+      "Azure",
+      config,
+      budget,
+      customStreamingDependencies
+    );
+  }
+
+  public streamingChatDirect(): Promise<string> {
+    return this.streaming.chatDirect();
+  }
+
+  public streamingChatWithTools(): Promise<string> {
+    return this.streaming.chatWithTools();
   }
 }
 
 export function azureMinimumRequestCount(
   capabilities: readonly LiveCapabilityId[]
 ): number {
-  return bufferedMinimumRequestCount(capabilities);
+  return (
+    bufferedMinimumRequestCount(capabilities) +
+    streamingMinimumRequestCount(capabilities)
+  );
 }
 
 function createChat(config: LiveChatConfiguration): LlmProvider {
@@ -51,6 +88,25 @@ function createChat(config: LiveChatConfiguration): LlmProvider {
     apiVersion: required(config.apiVersion, "Azure Chat API version"),
     apiKey: config.apiKey.reveal()
   });
+}
+
+function createStreamingChat(
+  config: LiveChatConfiguration
+): StreamingLlmProvider {
+  return new AzureOpenAiStreamingProvider({
+    endpoint: config.endpoint.href,
+    deployment: config.model,
+    apiVersion: required(config.apiVersion, "Azure Chat API version"),
+    apiKey: config.apiKey.reveal(),
+    timeoutMs: config.timeoutMs,
+    maxOutputTokens: config.maxOutputTokens
+  });
+}
+
+function unsupportedStreamingSpeech(): never {
+  throw new LiveTestConfigurationError(
+    "Azure streaming speech is outside the Phase 5 qualification scope"
+  );
 }
 
 function createStt(

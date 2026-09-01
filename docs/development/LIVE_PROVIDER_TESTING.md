@@ -63,11 +63,17 @@ Allowed capability selectors:
 - `stt`
 - `tts`
 - `composed-voice`
+- `streaming-chat`
+- `streaming-stt`
+- `streaming-tts`
+- `streaming-composed-voice`
 
 Selectors are comma-separated. `alibaba-model-studio` owns dedicated STT and
-TTS scenarios. Its composed voice scenario uses the independently configured
-OpenAI-compatible Chat role. Alibaba Chat by itself therefore uses the
-`openai-compatible` provider selector.
+TTS scenarios, including streaming speech. Its composed voice scenarios use
+the independently configured OpenAI-compatible Chat role. Alibaba Chat by
+itself therefore uses the `openai-compatible` provider selector. Azure and
+OpenAI-compatible provider families support `streaming-chat`; streaming speech
+selectors are intentionally limited to Alibaba Model Studio.
 
 Select exactly one provider family per command. This keeps
 `VOXMESH_LIVE_MAX_REQUESTS` a hard bound for the complete process. Run separate
@@ -77,6 +83,19 @@ commands when qualifying multiple provider families.
 Provider-specific qualification suites consume this shared budget before each
 billable request. Do not raise it merely to hide an unexpected retry loop.
 The live runner disables retries and stops after the first failed scenario.
+
+Streaming request counts are exact:
+
+| Provider family         | Selector                   | Requests or sessions |
+| ----------------------- | -------------------------- | -------------------- |
+| Azure/OpenAI-compatible | `streaming-chat`           | 3                    |
+| Alibaba Model Studio    | `streaming-stt`            | 1                    |
+| Alibaba Model Studio    | `streaming-tts`            | 1                    |
+| Alibaba Model Studio    | `streaming-composed-voice` | 4                    |
+
+`streaming-chat` executes one direct completion and a two-completion Mock MCP
+flow. `streaming-composed-voice` executes one STT session, two Chat
+completions, and one TTS session.
 
 ## 4. Configuration Groups
 
@@ -111,6 +130,11 @@ The Azure STT and composed-voice scenarios require a local mono 16 kHz PCM16
 WAV fixture no larger than 5 MB. Use synthetic speech with no personal or
 production content. For composed voice, the recording must ask the agent to
 check the light status so the deterministic Mock MCP tool path is exercised.
+
+The same fixture constraints apply to Alibaba `streaming-stt` and
+`streaming-composed-voice`. The streaming runner decodes the WAV locally and
+sends ordered mono 16 kHz PCM16LE frames; it never uploads the WAV container as
+a buffered fallback.
 
 ### Azure OpenAI TTS
 

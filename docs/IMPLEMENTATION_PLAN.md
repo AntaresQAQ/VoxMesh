@@ -11,8 +11,8 @@ This document is the project-visible implementation roadmap. It does not authori
 
 Last updated: 2026-08-28 (UTC+08:00)
 
-Implementation baseline: merged `main` through PR #36
-(`feat: stream Alibaba speech`).
+Implementation baseline: merged `main` through PR #37
+(`feat: activate verified streaming routes`).
 
 Recent merged milestones:
 
@@ -41,21 +41,22 @@ Recent merged milestones:
 - PR #34: browser AudioWorklet streaming voice experience
 - PR #35: Azure/OpenAI-compatible Streaming Chat adapters
 - PR #36: Alibaba Streaming Speech adapters
+- PR #37: Streaming route verification and activation
 
 ### Phase Status
 
-| Phase | Scope                            | Status                                         |
-| ----- | -------------------------------- | ---------------------------------------------- |
-| 1     | Project skeleton and secure base | Complete                                       |
-| 2     | Agent Core and Mock pipeline     | Complete                                       |
-| 3     | Web Console                      | Complete                                       |
-| 4     | Buffered real AI providers       | Accepted; deferred gaps tracked                |
-| 5     | Full-chain streaming voice       | PRs 1-10 merged; PR 11 implemented; PR 12 next |
-| 6     | Cross-platform audio devices     | Planned; requires Phase 5 acceptance           |
-| 7     | Offline wake word                | Planned; requires Phase 6 acceptance           |
-| 8     | Generic third-party MCP          | Planned; requires Phase 7 acceptance           |
-| 9     | Scripted deployment and NanoPi   | Planned; requires Phase 8 acceptance           |
-| Gate  | Final MVP acceptance and release | Pending                                        |
+| Phase | Scope                            | Status                                 |
+| ----- | -------------------------------- | -------------------------------------- |
+| 1     | Project skeleton and secure base | Complete                               |
+| 2     | Agent Core and Mock pipeline     | Complete                               |
+| 3     | Web Console                      | Complete                               |
+| 4     | Buffered real AI providers       | Accepted; deferred gaps tracked        |
+| 5     | Full-chain streaming voice       | PRs 1-11 merged; PR 12 acceptance next |
+| 6     | Cross-platform audio devices     | Planned; requires Phase 5 acceptance   |
+| 7     | Offline wake word                | Planned; requires Phase 6 acceptance   |
+| 8     | Generic third-party MCP          | Planned; requires Phase 7 acceptance   |
+| 9     | Scripted deployment and NanoPi   | Planned; requires Phase 8 acceptance   |
+| Gate  | Final MVP acceptance and release | Pending                                |
 
 ### Completed foundation and vertical slices
 
@@ -197,26 +198,26 @@ accepted the report and authorized Phase 5 planning on 2026-08-24.
 ### Planned streaming voice work
 
 - [ ] authenticated, versioned bidirectional browser voice WebSocket transport
-- [ ] browser PCM capture without waiting for `MediaRecorder.stop()`
-- [ ] capability-gated streaming STT sessions with partial and final
+- [x] browser PCM capture without waiting for `MediaRecorder.stop()`
+- [x] capability-gated streaming STT sessions with partial and final
       transcription events
-- [ ] provider-independent Streaming Chat LLM and Agent Core event flow with
+- [x] provider-independent Streaming Chat LLM and Agent Core event flow with
       text deltas, tool-call deltas, MCP execution, and follow-up streaming
-- [ ] independent capability-gated streaming TTS with chunked browser playback
-- [ ] ordered semantic text segmentation so TTS begins before the final LLM
+- [x] independent capability-gated streaming TTS with chunked browser playback
+- [x] ordered semantic text segmentation so TTS begins before the final LLM
       response without speaking incomplete tool calls or unstable text
-- [ ] bounded queues, backpressure, cancellation, timeouts, interruption
+- [x] bounded queues, backpressure, cancellation, timeouts, interruption
       cleanup, and explicit non-resumable reconnect behavior
-- [ ] Alibaba Fun-ASR and Qwen-Audio-TTS/CosyVoice streaming adapters using
+- [x] Alibaba Fun-ASR and Qwen-Audio-TTS/CosyVoice streaming adapters using
       their existing incremental WebSocket protocols
-- [ ] deterministic Mock streaming adapters and complete unit, integration,
-      Playwright, accessibility, and live-provider qualification
+- [ ] complete final offline acceptance and explicitly authorized
+      live-provider qualification
 
 The accepted protocol, limits, provider scope, 12-PR sequence, dependency
 graph, risks, and operation gates are defined in
 [Phase 5 Streaming Voice Plan](./development/PHASE_5_STREAMING_VOICE.md). The
-user accepted the plan on 2026-08-24; PR 1 still requires separate
-implementation authorization.
+user accepted the plan on 2026-08-24; PRs 1-11 are merged and PR 12 is the
+remaining acceptance closeout.
 
 Phase 5 PR 1 implementation is documented in
 [Voice Stream Protocol and Provider Contracts](./architecture/VOICE_STREAM_PROTOCOL.md).
@@ -235,6 +236,24 @@ Phase 5 PR 5 implementation is documented in
 
 Phase 5 PR 6 implementation is documented in
 [Streaming Voice Coordinator](./architecture/STREAMING_VOICE_COORDINATOR.md).
+
+Phase 5 PR 7 implementation is documented in
+[Authenticated Voice-Stream Transport](./architecture/VOICE_STREAM_TRANSPORT.md).
+
+Phase 5 PR 8 implementation is documented in
+[Browser Streaming Voice](./architecture/BROWSER_STREAMING_VOICE.md).
+
+Phase 5 PR 9 implementation is documented in
+[Streaming Chat Adapters](./architecture/STREAMING_CHAT_ADAPTERS.md).
+
+Phase 5 PR 10 implementation is documented in
+[Alibaba Streaming Speech](./architecture/ALIBABA_STREAMING_SPEECH.md).
+
+Phase 5 PR 11 implementation is documented in
+[Runtime Routing](./architecture/RUNTIME_ROUTING.md).
+
+Phase 5 PR 12 acceptance evidence is documented in
+[Phase 5 Streaming Voice Acceptance Report](./qualification/PHASE_5_ACCEPTANCE.md).
 
 ### Later confirmed phases
 
@@ -260,14 +279,14 @@ Phase 5 PR 6 implementation is documented in
 - local/offline AI and mobile applications
 
 Streaming intent is represented independently for STT, Chat, and TTS in
-Runtime Routing, with a full-chain profile for all three. Until the transport,
-browser client, and assigned adapters are implemented and verified, activation
-must continue to reject routes that request streaming.
+Runtime Routing, with a full-chain profile for all three. Activation requires
+declared and verified model-role capability plus registered provider adapter,
+server transport, and browser client availability.
 
 ### Next execution order
 
-1. Continue Phase 5 with the WebSocket transport, browser AudioWorklet,
-   provider adapters, qualification, and acceptance.
+1. Complete Phase 5 acceptance and any explicitly authorized live
+   qualification.
 2. Implement Phase 6 cross-platform audio devices.
 3. Implement Phase 7 offline wake-word detection.
 4. Implement Phase 8 generic third-party MCP and the full MCP Console.
@@ -277,20 +296,20 @@ must continue to reject routes that request streaming.
 
 ## 1. Current State and Approach
 
-The repository contains validated Mock buffered voice vertical slices,
-accepted buffered real-provider qualification with explicit deferred Audio
-gaps, protected Runtime Routing, real-time observability, durable Chat
-lifecycle and continuity, platform-independent device-status foundations, and
-a bilingual Web Console with representative accessibility automation. The
-implementation is intentionally incomplete: application-level voice streaming,
-physical audio, Wake Word, third-party MCP, scripted deployment, and final
-hardware qualification remain.
+The repository contains validated buffered and full-chain Mock streaming voice
+vertical slices, accepted buffered real-provider qualification with explicit
+deferred Audio gaps, protected Runtime Routing, real-time observability,
+durable Chat lifecycle and continuity, platform-independent device-status
+foundations, and a bilingual Web Console with representative accessibility
+automation. The implementation is intentionally incomplete: Phase 5
+acceptance, physical audio, Wake Word, third-party MCP, scripted deployment,
+and final hardware qualification remain.
 
 The implementation follows the nine phases defined in the MVP specification
 while preserving a platform-independent Agent Core. Some provider work was
 delivered before all Phase 3 acceptance items. Phase 3 is closed, and the user
-accepted the Phase 4 report on 2026-08-24. The current gate is review and
-acceptance of the Phase 5 PR-by-PR streaming plan.
+accepted the Phase 4 report on 2026-08-24. The current gate is Phase 5
+validation and explicit acceptance.
 Every behavior-changing work package remains gated by explicit user
 confirmation.
 

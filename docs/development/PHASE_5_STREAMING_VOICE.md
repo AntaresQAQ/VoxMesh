@@ -753,7 +753,7 @@ Accepted by the user on 2026-08-24:
 9. the per-session Allow tools control defaults to enabled; disabling it is
    required for early TTS and does not change persisted MCP permissions
 
-PR 1 still requires separate implementation authorization. Implementation
-authorization does not authorize later PRs, commits, pushes, pull requests,
-merges, live tests, or releases. Every behavior-changing PR requires separate
-implementation confirmation.
+PRs 1-11 are merged. PR 12 is the final acceptance closeout and still does not
+authorize credentialed live tests, commits, pushes, pull requests, merges, or
+releases. Phase 6 remains blocked until the user explicitly accepts the Phase
+5 acceptance report.
