@@ -753,7 +753,8 @@ Accepted by the user on 2026-08-24:
 9. the per-session Allow tools control defaults to enabled; disabling it is
    required for early TTS and does not change persisted MCP permissions
 
-PRs 1-11 are merged. PR 12 is the final acceptance closeout and still does not
-authorize credentialed live tests, commits, pushes, pull requests, merges, or
-releases. Phase 6 remains blocked until the user explicitly accepts the Phase
-5 acceptance report.
+PRs 1-12 are merged. Deterministic offline acceptance is complete, while
+credentialed streaming-provider profiles remain explicitly unqualified.
+Phase 6 remains blocked until the user explicitly accepts the Phase 5
+acceptance report. That acceptance does not authorize credentialed live tests,
+commits, pushes, pull requests, merges, or releases.
